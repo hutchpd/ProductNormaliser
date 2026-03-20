@@ -131,6 +131,10 @@ public sealed class AdminQueryService(
             Reason = conflict.Reason,
             Severity = conflict.Severity,
             Status = conflict.Status,
+            SuggestedValue = conflict.SuggestedValue,
+            SuggestedSourceName = conflict.SuggestedSourceName,
+            SuggestedConfidence = conflict.SuggestedConfidence,
+            HighestConfidenceValue = conflict.HighestConfidenceValue,
             CreatedUtc = conflict.CreatedUtc,
             ResolvedUtc = conflict.ResolvedUtc
         }).ToArray();

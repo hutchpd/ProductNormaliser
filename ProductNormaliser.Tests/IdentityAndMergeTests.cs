@@ -135,11 +135,45 @@ public sealed class IdentityAndMergeTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(merged.Attributes["screen_size_inch"].Value, Is.EqualTo(55m));
+            Assert.That(merged.Attributes["screen_size_inch"].Value, Is.EqualTo(65m));
             Assert.That(merged.Attributes["screen_size_inch"].HasConflict, Is.True);
             Assert.That(conflicts, Has.Count.EqualTo(1));
             Assert.That(conflicts[0].AttributeKey, Is.EqualTo("screen_size_inch"));
             Assert.That(conflicts[0].Reason, Is.EqualTo("Materially different numeric values detected across sources."));
+            Assert.That(conflicts[0].SuggestedValue, Is.EqualTo(65m));
+            Assert.That(conflicts[0].SuggestedSourceName, Is.EqualTo("retailer-two"));
+            Assert.That(conflicts[0].HighestConfidenceValue, Is.EqualTo(65m));
+        });
+    }
+
+    [Test]
+    public void Merge_UsesWeightedSelectionToPreferTrustedRecentValue()
+    {
+        var mergeService = new CanonicalMergeService();
+        var existing = mergeService.Merge(null, CreateWeightedSource(
+            sourceId: "source-1",
+            sourceName: "low-trust-source",
+            screenSize: 55m,
+            attributeConfidence: 0.62m,
+            fetchedUtc: new DateTime(2026, 01, 01, 10, 00, 00, DateTimeKind.Utc),
+            attributeCount: 1));
+
+        var merged = mergeService.Merge(existing, CreateWeightedSource(
+            sourceId: "source-2",
+            sourceName: "high-trust-source",
+            screenSize: 65m,
+            attributeConfidence: 0.98m,
+            fetchedUtc: new DateTime(2026, 03, 20, 10, 00, 00, DateTimeKind.Utc),
+            attributeCount: 5));
+
+        var attribute = merged.Attributes["screen_size_inch"];
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(attribute.Value, Is.EqualTo(65m));
+            Assert.That(attribute.WinningSourceName, Is.EqualTo("high-trust-source"));
+            Assert.That(attribute.MergeWeight, Is.GreaterThan(0m));
+            Assert.That(attribute.HasConflict, Is.True);
         });
     }
 
@@ -251,6 +285,54 @@ public sealed class IdentityAndMergeTests
         };
 
         sourceProduct.NormalisedAttributes = new TvAttributeNormaliser().Normalise(sourceProduct.CategoryKey, sourceProduct.RawAttributes);
+        return sourceProduct;
+    }
+
+    private static SourceProduct CreateWeightedSource(
+        string sourceId,
+        string sourceName,
+        decimal screenSize,
+        decimal attributeConfidence,
+        DateTime fetchedUtc,
+        int attributeCount)
+    {
+        var sourceProduct = new SourceProduct
+        {
+            Id = sourceId,
+            SourceName = sourceName,
+            SourceUrl = $"https://example.com/{sourceId}",
+            CategoryKey = "tv",
+            Brand = "Sony",
+            ModelNumber = "A95L",
+            Title = "Sony A95L",
+            RawSchemaJson = "{}",
+            FetchedUtc = fetchedUtc,
+            NormalisedAttributes = new Dictionary<string, NormalisedAttributeValue>
+            {
+                ["screen_size_inch"] = new()
+                {
+                    AttributeKey = "screen_size_inch",
+                    Value = screenSize,
+                    ValueType = "decimal",
+                    Unit = "inch",
+                    Confidence = attributeConfidence,
+                    SourceAttributeKey = "Screen Size",
+                    OriginalValue = $"{screenSize} inches"
+                }
+            }
+        };
+
+        for (var index = 0; index < attributeCount - 1; index++)
+        {
+            sourceProduct.NormalisedAttributes[$"extra_attribute_{index}"] = new NormalisedAttributeValue
+            {
+                AttributeKey = $"extra_attribute_{index}",
+                Value = $"value-{index}",
+                ValueType = "string",
+                Confidence = attributeConfidence
+            };
+        }
+
         return sourceProduct;
     }
 }

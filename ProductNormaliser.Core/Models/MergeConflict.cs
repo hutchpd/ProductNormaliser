@@ -10,6 +10,10 @@ public sealed class MergeConflict
     public string Reason { get; set; } = default!;
     public decimal Severity { get; set; }
     public string Status { get; set; } = default!;
+    public object? SuggestedValue { get; set; }
+    public string? SuggestedSourceName { get; set; }
+    public decimal SuggestedConfidence { get; set; }
+    public object? HighestConfidenceValue { get; set; }
     public DateTime CreatedUtc { get; set; }
     public DateTime? ResolvedUtc { get; set; }
 }

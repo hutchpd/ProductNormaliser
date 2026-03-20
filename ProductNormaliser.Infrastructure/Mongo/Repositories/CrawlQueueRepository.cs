@@ -25,4 +25,11 @@ public sealed class CrawlQueueRepository(MongoDbContext context) : MongoReposito
             .SortBy(item => item.EnqueuedUtc)
             .FirstOrDefaultAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<CrawlQueueItem>> ListQueuedAsync(DateTime utcNow, CancellationToken cancellationToken = default)
+    {
+        return await Collection.Find(item => item.Status == "queued" && (item.NextAttemptUtc == null || item.NextAttemptUtc <= utcNow))
+            .SortBy(item => item.EnqueuedUtc)
+            .ToListAsync(cancellationToken);
+    }
 }

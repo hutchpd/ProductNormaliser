@@ -25,4 +25,10 @@ public sealed class QualityController(IDataIntelligenceService dataIntelligenceS
     {
         return Ok(await dataIntelligenceService.GetSourceQualityScoresAsync(categoryKey, cancellationToken));
     }
+
+    [HttpGet("merge-insights")]
+    public async Task<IActionResult> GetMergeInsights([FromQuery] string categoryKey = TvCategorySchemaProvider.CategoryKey, CancellationToken cancellationToken = default)
+    {
+        return Ok(await dataIntelligenceService.GetMergeInsightsAsync(categoryKey, cancellationToken));
+    }
 }

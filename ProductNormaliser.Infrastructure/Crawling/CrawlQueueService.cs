@@ -3,11 +3,13 @@ using ProductNormaliser.Infrastructure.Mongo.Repositories;
 
 namespace ProductNormaliser.Infrastructure.Crawling;
 
-public sealed class CrawlQueueService(ICrawlQueueStore crawlQueueStore) : ICrawlQueueService
+public sealed class CrawlQueueService(ICrawlQueueStore crawlQueueStore, ICrawlPriorityService crawlPriorityService) : ICrawlQueueService
 {
     public async Task<CrawlQueueLease?> DequeueAsync(CancellationToken cancellationToken)
     {
-        var queueItem = await crawlQueueStore.GetNextQueuedAsync(DateTime.UtcNow, cancellationToken);
+        var queueItem = (await crawlPriorityService.GetPrioritiesAsync(DateTime.UtcNow, cancellationToken))
+            .Select(assessment => assessment.QueueItem)
+            .FirstOrDefault();
         if (queueItem is null)
         {
             return null;

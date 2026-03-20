@@ -33,6 +33,7 @@ public sealed class CrawlOrchestrator(
         var sourceName = GetSourceName(target);
         string? contentHash = null;
         var extractedProductCount = 0;
+        SemanticDeltaResult? semanticDelta = null;
 
         logger.LogInformation("Processing crawl target {SourceName} {Url}", sourceName, target.Url);
 
@@ -86,6 +87,7 @@ public sealed class CrawlOrchestrator(
 
                 var sourceProduct = sourceProductBuilder.Build(sourceName, target.CategoryKey, extractedProduct, fetchResult.FetchedUtc);
                 sourceProduct.NormalisedAttributes = attributeNormaliser.Normalise(sourceProduct.CategoryKey, sourceProduct.RawAttributes);
+                semanticDelta = await deltaProcessor.DetectSemanticChangesAsync(sourceProduct, cancellationToken);
 
                 await sourceProductStore.UpsertAsync(sourceProduct, cancellationToken);
 
@@ -114,7 +116,7 @@ public sealed class CrawlOrchestrator(
 
             logger.LogInformation("Completed crawl for {Url}; processed {ProductCount} product(s)", target.Url, processedProductCount);
             var completedResult = CrawlProcessResult.Completed($"Processed {processedProductCount} product(s).", contentHash, extractedProductCount);
-            await WriteCrawlLogAsync(sourceName, target.Url, completedResult, stopwatch.ElapsedMilliseconds, cancellationToken);
+            await WriteCrawlLogAsync(sourceName, target.Url, completedResult, stopwatch.ElapsedMilliseconds, semanticDelta, cancellationToken);
             return completedResult;
         }
         catch (OperationCanceledException)
@@ -125,7 +127,7 @@ public sealed class CrawlOrchestrator(
         {
             logger.LogError(exception, "Unhandled crawl orchestration failure for {Url}", target.Url);
             var result = CrawlProcessResult.Failed(exception.Message, contentHash, extractedProductCount);
-            await WriteCrawlLogAsync(sourceName, target.Url, result, stopwatch.ElapsedMilliseconds, cancellationToken);
+            await WriteCrawlLogAsync(sourceName, target.Url, result, stopwatch.ElapsedMilliseconds, semanticDelta, cancellationToken);
             return result;
         }
     }
@@ -183,6 +185,11 @@ public sealed class CrawlOrchestrator(
 
     private async Task WriteCrawlLogAsync(string sourceName, string url, CrawlProcessResult result, long durationMs, CancellationToken cancellationToken)
     {
+        await WriteCrawlLogAsync(sourceName, url, result, durationMs, null, cancellationToken);
+    }
+
+    private async Task WriteCrawlLogAsync(string sourceName, string url, CrawlProcessResult result, long durationMs, SemanticDeltaResult? semanticDelta, CancellationToken cancellationToken)
+    {
         await crawlLogStore.InsertAsync(new CrawlLog
         {
             Id = $"crawl:{Guid.NewGuid():N}",
@@ -192,6 +199,8 @@ public sealed class CrawlOrchestrator(
             DurationMs = durationMs,
             ContentHash = result.ContentHash,
             ExtractedProductCount = result.ExtractedProductCount,
+            HadMeaningfulChange = semanticDelta?.HasMeaningfulChanges ?? false,
+            MeaningfulChangeSummary = semanticDelta?.Summary,
             ErrorMessage = result.Status == "failed" ? result.Message : null,
             TimestampUtc = DateTime.UtcNow
         }, cancellationToken);

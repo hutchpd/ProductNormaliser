@@ -53,6 +53,7 @@ public static class MongoServiceCollectionExtensions
             .Bind(configuration.GetSection(CrawlPipelineOptions.SectionName));
 
         services.AddSingleton<IDeltaProcessor, DeltaProcessor>();
+        services.AddSingleton<ICrawlPriorityService, CrawlPriorityService>();
         services.AddSingleton<ICrawlQueueService, CrawlQueueService>();
         services.AddSingleton<ISourceProductBuilder, SourceProductBuilder>();
 

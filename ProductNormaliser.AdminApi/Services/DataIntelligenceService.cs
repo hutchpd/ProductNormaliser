@@ -3,12 +3,16 @@ using MongoDB.Driver;
 using ProductNormaliser.AdminApi.Contracts;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Core.Schemas;
+using ProductNormaliser.Infrastructure.Crawling;
 using ProductNormaliser.Infrastructure.Mongo;
 using ProductNormaliser.Infrastructure.Mongo.Repositories;
 
 namespace ProductNormaliser.AdminApi.Services;
 
-public sealed class DataIntelligenceService(MongoDbContext mongoDbContext, IUnmappedAttributeStore unmappedAttributeStore) : IDataIntelligenceService
+public sealed class DataIntelligenceService(
+    MongoDbContext mongoDbContext,
+    IUnmappedAttributeStore unmappedAttributeStore,
+    ICrawlPriorityService? crawlPriorityService = null) : IDataIntelligenceService
 {
     private static readonly HashSet<string> DirectAttributeKeys = ["brand", "model_number", "gtin"];
 
@@ -131,6 +135,76 @@ public sealed class DataIntelligenceService(MongoDbContext mongoDbContext, IUnma
             .ThenByDescending(score => score.SourceProductCount)
             .ThenBy(score => score.SourceName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    public async Task<MergeInsightsResponse> GetMergeInsightsAsync(string categoryKey, CancellationToken cancellationToken)
+    {
+        var canonicalProducts = await GetCanonicalProductsAsync(categoryKey, cancellationToken);
+        var canonicalIds = canonicalProducts.Select(product => product.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var conflicts = await mongoDbContext.MergeConflicts.Find(Builders<MergeConflict>.Filter.Empty).ToListAsync(cancellationToken);
+        var openConflicts = conflicts
+            .Where(conflict => string.Equals(conflict.Status, "open", StringComparison.OrdinalIgnoreCase)
+                && canonicalIds.Contains(conflict.CanonicalProductId))
+            .OrderByDescending(conflict => conflict.Severity)
+            .ThenByDescending(conflict => conflict.CreatedUtc)
+            .Select(conflict => new MergeConflictInsightDto
+            {
+                Id = conflict.Id,
+                CanonicalProductId = conflict.CanonicalProductId,
+                AttributeKey = conflict.AttributeKey,
+                CurrentValue = conflict.ExistingValue,
+                IncomingValue = conflict.IncomingValue,
+                Reason = conflict.Reason,
+                Severity = conflict.Severity,
+                SuggestedValue = conflict.SuggestedValue,
+                SuggestedSourceName = conflict.SuggestedSourceName,
+                SuggestedConfidence = conflict.SuggestedConfidence,
+                HighestConfidenceValue = conflict.HighestConfidenceValue,
+                CreatedUtc = conflict.CreatedUtc
+            })
+            .ToArray();
+
+        var suggestions = (await unmappedAttributeStore.ListAsync(categoryKey, cancellationToken))
+            .Select(unmapped => BuildSuggestion(unmapped, GetSchema(categoryKey)))
+            .Where(suggestion => suggestion is not null)
+            .Select(suggestion => suggestion!)
+            .OrderByDescending(suggestion => suggestion.Confidence)
+            .ThenByDescending(suggestion => suggestion.OccurrenceCount)
+            .Take(10)
+            .ToArray();
+
+        return new MergeInsightsResponse
+        {
+            CategoryKey = categoryKey,
+            OpenConflicts = openConflicts,
+            AttributeSuggestions = suggestions
+        };
+    }
+
+    public async Task<IReadOnlyList<QueuePriorityDto>> GetQueuePrioritiesAsync(CancellationToken cancellationToken)
+    {
+        if (crawlPriorityService is null)
+        {
+            return [];
+        }
+
+        var priorities = await crawlPriorityService.GetPrioritiesAsync(DateTime.UtcNow, cancellationToken);
+        return priorities.Select(priority => new QueuePriorityDto
+        {
+            Id = priority.QueueItem.Id,
+            SourceName = priority.QueueItem.SourceName,
+            SourceUrl = priority.QueueItem.SourceUrl,
+            CategoryKey = priority.QueueItem.CategoryKey,
+            PriorityScore = priority.PriorityScore,
+            SourceQualityScore = priority.SourceQualityScore,
+            ChangeFrequencyScore = priority.ChangeFrequencyScore,
+            MissingAttributeScore = priority.MissingAttributeScore,
+            StalenessScore = priority.StalenessScore,
+            MissingAttributeCount = priority.MissingAttributeCount,
+            EnqueuedUtc = priority.QueueItem.EnqueuedUtc,
+            LastCrawledUtc = priority.LastCrawledUtc,
+            Reasons = priority.Reasons
+        }).ToArray();
     }
 
     private static AttributeCoverageDetailDto BuildCoverageDetail(CanonicalAttributeDefinition definition, IReadOnlyList<CanonicalProduct> products)
@@ -432,5 +506,65 @@ public sealed class DataIntelligenceService(MongoDbContext mongoDbContext, IUnma
             DisplayName = categoryKey,
             Attributes = []
         };
+    }
+
+    private static AttributeMappingSuggestionDto? BuildSuggestion(UnmappedAttribute unmappedAttribute, CategorySchema schema)
+    {
+        if (schema.Attributes.Count == 0)
+        {
+            return null;
+        }
+
+        var bestMatch = schema.Attributes
+            .Select(attribute => new
+            {
+                attribute.Key,
+                Score = ScoreSuggestion(unmappedAttribute.RawAttributeKey, attribute)
+            })
+            .OrderByDescending(candidate => candidate.Score)
+            .First();
+
+        if (bestMatch.Score < 0.60m)
+        {
+            return null;
+        }
+
+        return new AttributeMappingSuggestionDto
+        {
+            RawAttributeKey = unmappedAttribute.RawAttributeKey,
+            SuggestedCanonicalKey = bestMatch.Key,
+            Confidence = bestMatch.Score,
+            OccurrenceCount = unmappedAttribute.OccurrenceCount,
+            SourceNames = unmappedAttribute.SourceNames.OrderBy(source => source, StringComparer.OrdinalIgnoreCase).ToArray()
+        };
+    }
+
+    private static decimal ScoreSuggestion(string rawAttributeKey, CanonicalAttributeDefinition definition)
+    {
+        var rawTokens = Tokenise(rawAttributeKey);
+        var candidateTokens = Tokenise($"{definition.Key} {definition.DisplayName}");
+        if (rawTokens.Count == 0 || candidateTokens.Count == 0)
+        {
+            return 0m;
+        }
+
+        var overlap = rawTokens.Intersect(candidateTokens, StringComparer.OrdinalIgnoreCase).Count();
+        var union = rawTokens.Union(candidateTokens, StringComparer.OrdinalIgnoreCase).Count();
+        var jaccard = union == 0 ? 0m : decimal.Divide(overlap, union);
+        var containsBoost = rawTokens.All(token => candidateTokens.Contains(token, StringComparer.OrdinalIgnoreCase)) ? 0.20m : 0m;
+        var unitBoost = rawTokens.Contains("inch", StringComparer.OrdinalIgnoreCase) && string.Equals(definition.Unit, "inch", StringComparison.OrdinalIgnoreCase) ? 0.20m : 0m;
+        var screenBoost = rawTokens.Contains("screen", StringComparer.OrdinalIgnoreCase) && candidateTokens.Contains("screen", StringComparer.OrdinalIgnoreCase) ? 0.15m : 0m;
+
+        return Math.Min(0.99m, decimal.Round(jaccard + containsBoost + unitBoost + screenBoost, 2, MidpointRounding.AwayFromZero));
+    }
+
+    private static HashSet<string> Tokenise(string value)
+    {
+        return value
+            .Replace("_", " ", StringComparison.Ordinal)
+            .Replace("-", " ", StringComparison.Ordinal)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(token => token.Trim().ToLowerInvariant())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 }

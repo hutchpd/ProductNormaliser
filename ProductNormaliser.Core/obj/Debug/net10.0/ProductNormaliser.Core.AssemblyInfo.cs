@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ProductNormaliser.Core")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2edf00a013d2249ef3a8b562ee1a1fb06a119816")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+00d33312ed4aff838504e2f8a21cf2b5381ee208")]
 [assembly: System.Reflection.AssemblyProductAttribute("ProductNormaliser.Core")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ProductNormaliser.Core")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

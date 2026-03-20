@@ -42,6 +42,10 @@ public sealed class ConflictDetector(
                 Reason = reason,
                 Severity = attribute.HasConflict ? 0.90m : 0.75m,
                 Status = "open",
+                SuggestedValue = attribute.Value,
+                SuggestedSourceName = attribute.WinningSourceName ?? GetMostTrustedSource(attribute),
+                SuggestedConfidence = Math.Max(attribute.MergeWeight, attribute.Confidence),
+                HighestConfidenceValue = GetHighestConfidenceValue(attribute),
                 CreatedUtc = product.UpdatedUtc == default ? DateTime.UtcNow : product.UpdatedUtc
             });
         }
@@ -149,6 +153,37 @@ public sealed class ConflictDetector(
         return attribute.Evidence
             .Select(evidence => evidence.RawValue)
             .FirstOrDefault(rawValue => !string.Equals(rawValue?.Trim(), attribute.Value?.ToString()?.Trim(), StringComparison.OrdinalIgnoreCase));
+    }
+
+    private object? GetHighestConfidenceValue(CanonicalAttributeValue attribute)
+    {
+        var candidate = attribute.Evidence
+            .Where(evidence => !string.IsNullOrWhiteSpace(evidence.RawValue))
+            .OrderByDescending(evidence => evidence.Confidence)
+            .ThenByDescending(evidence => evidence.ObservedUtc)
+            .FirstOrDefault();
+
+        if (candidate?.RawValue is null)
+        {
+            return attribute.Value;
+        }
+
+        if (IsNumericValueType(attribute.ValueType))
+        {
+            var numericValue = TryParseEvidenceAsNumeric(attribute, candidate.RawValue);
+            return numericValue is not null ? numericValue.Value : candidate.RawValue;
+        }
+
+        return NormaliseEvidenceValue(attribute.AttributeKey, candidate.RawValue) ?? candidate.RawValue;
+    }
+
+    private static string? GetMostTrustedSource(CanonicalAttributeValue attribute)
+    {
+        return attribute.Evidence
+            .OrderByDescending(evidence => evidence.Confidence)
+            .ThenByDescending(evidence => evidence.ObservedUtc)
+            .Select(evidence => evidence.SourceName)
+            .FirstOrDefault();
     }
 
     private static bool IsNumericValueType(string valueType)

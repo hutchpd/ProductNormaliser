@@ -7,4 +7,5 @@ public interface IDataIntelligenceService
     Task<DetailedCoverageResponse> GetDetailedCoverageAsync(string categoryKey, CancellationToken cancellationToken);
     Task<IReadOnlyList<UnmappedAttributeDto>> GetUnmappedAttributesAsync(string categoryKey, CancellationToken cancellationToken);
     Task<IReadOnlyList<SourceQualityScoreDto>> GetSourceQualityScoresAsync(string categoryKey, CancellationToken cancellationToken);
+    Task<MergeInsightsResponse> GetMergeInsightsAsync(string categoryKey, CancellationToken cancellationToken);
 }

@@ -9,6 +9,8 @@ public sealed class CrawlLog
     public long DurationMs { get; set; }
     public string? ContentHash { get; set; }
     public int ExtractedProductCount { get; set; }
+    public bool HadMeaningfulChange { get; set; }
+    public string? MeaningfulChangeSummary { get; set; }
     public string? ErrorMessage { get; set; }
     public DateTime TimestampUtc { get; set; }
 }

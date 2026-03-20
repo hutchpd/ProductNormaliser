@@ -227,6 +227,9 @@ public sealed class AdminObservabilityTests
         public Task<ProductNormaliser.Infrastructure.Crawling.DeltaDetectionResult> DetectAsync(string sourceName, string sourceUrl, string html, CancellationToken cancellationToken)
             => Task.FromResult(new ProductNormaliser.Infrastructure.Crawling.DeltaDetectionResult { IsUnchanged = unchanged, ContentHash = "ABC123456789" });
 
+        public Task<ProductNormaliser.Infrastructure.Crawling.SemanticDeltaResult> DetectSemanticChangesAsync(SourceProduct sourceProduct, CancellationToken cancellationToken)
+            => Task.FromResult(new ProductNormaliser.Infrastructure.Crawling.SemanticDeltaResult { HasMeaningfulChanges = true, HasAttributeChanges = true, ChangedAttributeKeys = ["screen_size_inch"], Summary = "Spec changes: screen_size_inch" });
+
         public string ComputeHash(string html) => "ABC123456789";
     }
 

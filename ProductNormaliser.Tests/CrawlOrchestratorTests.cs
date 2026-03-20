@@ -258,6 +258,11 @@ public sealed class CrawlOrchestratorTests
             return Task.FromResult(new DeltaDetectionResult { IsUnchanged = unchanged, ContentHash = "ABC123" });
         }
 
+        public Task<SemanticDeltaResult> DetectSemanticChangesAsync(SourceProduct sourceProduct, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new SemanticDeltaResult { HasMeaningfulChanges = true, HasAttributeChanges = true, ChangedAttributeKeys = ["screen_size_inch"], Summary = "Spec changes: screen_size_inch" });
+        }
+
         public string ComputeHash(string html) => "ABC123";
     }
 
