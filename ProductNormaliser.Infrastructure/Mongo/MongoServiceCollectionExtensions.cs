@@ -5,6 +5,7 @@ using MongoDB.Driver;
 using ProductNormaliser.Infrastructure.Crawling;
 using ProductNormaliser.Infrastructure.Mongo.Repositories;
 using ProductNormaliser.Infrastructure.StructuredData;
+using ProductNormaliser.Core.Interfaces;
 
 namespace ProductNormaliser.Infrastructure.Mongo;
 
@@ -37,6 +38,7 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<MergeConflictRepository>();
         services.AddSingleton<CrawlQueueRepository>();
         services.AddSingleton<CrawlLogRepository>();
+        services.AddSingleton<UnmappedAttributeRepository>();
         services.AddSingleton<IRawPageStore>(serviceProvider => serviceProvider.GetRequiredService<RawPageRepository>());
         services.AddSingleton<ISourceProductStore>(serviceProvider => serviceProvider.GetRequiredService<SourceProductRepository>());
         services.AddSingleton<ICanonicalProductStore>(serviceProvider => serviceProvider.GetRequiredService<CanonicalProductRepository>());
@@ -44,6 +46,8 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<IMergeConflictStore>(serviceProvider => serviceProvider.GetRequiredService<MergeConflictRepository>());
         services.AddSingleton<ICrawlQueueStore>(serviceProvider => serviceProvider.GetRequiredService<CrawlQueueRepository>());
         services.AddSingleton<ICrawlLogStore>(serviceProvider => serviceProvider.GetRequiredService<CrawlLogRepository>());
+        services.AddSingleton<IUnmappedAttributeStore>(serviceProvider => serviceProvider.GetRequiredService<UnmappedAttributeRepository>());
+        services.AddSingleton<IUnmappedAttributeRecorder>(serviceProvider => serviceProvider.GetRequiredService<UnmappedAttributeRepository>());
 
         services.AddOptions<CrawlPipelineOptions>()
             .Bind(configuration.GetSection(CrawlPipelineOptions.SectionName));

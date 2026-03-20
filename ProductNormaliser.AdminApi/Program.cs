@@ -7,6 +7,7 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddProductNormaliserMongo(builder.Configuration);
 builder.Services.AddSingleton<IAdminQueryService, AdminQueryService>();
+builder.Services.AddSingleton<IDataIntelligenceService, DataIntelligenceService>();
 
 var app = builder.Build();
 

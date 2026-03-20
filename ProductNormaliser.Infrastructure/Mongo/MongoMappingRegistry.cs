@@ -23,11 +23,13 @@ public static class MongoMappingRegistry
         RegisterClassMap<MergeConflict>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<CrawlQueueItem>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<CrawlLog>(map => map.MapIdMember(model => model.Id));
+        RegisterClassMap<UnmappedAttribute>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<CanonicalAttributeValue>();
         RegisterClassMap<AttributeEvidence>();
         RegisterClassMap<ProductSourceLink>();
         RegisterClassMap<SourceAttributeValue>();
         RegisterClassMap<NormalisedAttributeValue>();
+        RegisterClassMap<UnmappedAttributeObservation>();
     }
 
     private static void RegisterObjectSerializer()

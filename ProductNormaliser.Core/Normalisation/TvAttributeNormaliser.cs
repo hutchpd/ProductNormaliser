@@ -11,6 +11,7 @@ public sealed class TvAttributeNormaliser : IAttributeNormaliser
     private readonly MeasurementParser measurementParser;
     private readonly UnitConversionService unitConversionService;
     private readonly ValueMappingRegistry valueMappingRegistry;
+    private readonly IUnmappedAttributeRecorder unmappedAttributeRecorder;
     private readonly IReadOnlyDictionary<string, CanonicalAttributeDefinition> schemaAttributes;
 
     public TvAttributeNormaliser(
@@ -18,13 +19,15 @@ public sealed class TvAttributeNormaliser : IAttributeNormaliser
         AttributeAliasDictionary? attributeAliasDictionary = null,
         MeasurementParser? measurementParser = null,
         UnitConversionService? unitConversionService = null,
-        ValueMappingRegistry? valueMappingRegistry = null)
+        ValueMappingRegistry? valueMappingRegistry = null,
+        IUnmappedAttributeRecorder? unmappedAttributeRecorder = null)
     {
         this.attributeNameNormaliser = attributeNameNormaliser ?? new AttributeNameNormaliser();
         this.attributeAliasDictionary = attributeAliasDictionary ?? new AttributeAliasDictionary(this.attributeNameNormaliser);
         this.measurementParser = measurementParser ?? new MeasurementParser();
         this.unitConversionService = unitConversionService ?? new UnitConversionService(this.measurementParser);
         this.valueMappingRegistry = valueMappingRegistry ?? new ValueMappingRegistry();
+        this.unmappedAttributeRecorder = unmappedAttributeRecorder ?? NullUnmappedAttributeRecorder.Instance;
         schemaAttributes = new TvCategorySchemaProvider()
             .GetSchema()
             .Attributes
@@ -66,6 +69,8 @@ public sealed class TvAttributeNormaliser : IAttributeNormaliser
     {
         if (!schemaAttributes.TryGetValue(canonicalKey, out var definition))
         {
+            unmappedAttributeRecorder.Record(TvCategorySchemaProvider.CategoryKey, canonicalKey, rawAttribute);
+
             return new NormalisedAttributeValue
             {
                 AttributeKey = canonicalKey,

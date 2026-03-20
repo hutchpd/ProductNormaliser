@@ -27,7 +27,7 @@ public sealed class SourceProductBuilder : ISourceProductBuilder
             ModelNumber = extractedProduct.ModelNumber,
             Gtin = extractedProduct.Gtin,
             Title = extractedProduct.Name,
-            RawAttributes = BuildRawAttributes(extractedProduct.Attributes),
+            RawAttributes = BuildRawAttributes(sourceName, extractedProduct.Attributes),
             Offers = BuildOffers(sourceName, extractedProduct.SourceUrl, extractedProduct.Offers, fetchedUtc),
             RawSchemaJson = extractedProduct.RawJson,
             FetchedUtc = fetchedUtc
@@ -48,7 +48,7 @@ public sealed class SourceProductBuilder : ISourceProductBuilder
         return $"{sourceName}:{Convert.ToHexString(hashBytes)[..16]}";
     }
 
-    private static Dictionary<string, SourceAttributeValue> BuildRawAttributes(IReadOnlyDictionary<string, string> attributes)
+    private static Dictionary<string, SourceAttributeValue> BuildRawAttributes(string sourceName, IReadOnlyDictionary<string, string> attributes)
     {
         var rawAttributes = new Dictionary<string, SourceAttributeValue>(StringComparer.OrdinalIgnoreCase);
 
@@ -59,7 +59,7 @@ public sealed class SourceProductBuilder : ISourceProductBuilder
                 AttributeKey = attribute.Key,
                 Value = attribute.Value,
                 ValueType = InferValueType(attribute.Value),
-                SourcePath = "jsonld.additionalProperty"
+                SourcePath = $"source:{sourceName}|jsonld.additionalProperty"
             };
         }
 

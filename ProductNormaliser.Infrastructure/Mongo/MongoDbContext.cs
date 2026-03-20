@@ -26,6 +26,7 @@ public sealed class MongoDbContext
         MergeConflicts = Database.GetCollection<MergeConflict>(MongoCollectionNames.MergeConflicts);
         CrawlQueueItems = Database.GetCollection<CrawlQueueItem>(MongoCollectionNames.CrawlQueue);
         CrawlLogs = Database.GetCollection<CrawlLog>(MongoCollectionNames.CrawlLogs);
+        UnmappedAttributes = Database.GetCollection<UnmappedAttribute>(MongoCollectionNames.UnmappedAttributes);
     }
 
     public IMongoClient Client { get; }
@@ -45,6 +46,8 @@ public sealed class MongoDbContext
     public IMongoCollection<CrawlQueueItem> CrawlQueueItems { get; }
 
     public IMongoCollection<CrawlLog> CrawlLogs { get; }
+
+    public IMongoCollection<UnmappedAttribute> UnmappedAttributes { get; }
 
     public async Task EnsureIndexesAsync(CancellationToken cancellationToken = default)
     {
@@ -71,6 +74,12 @@ public sealed class MongoDbContext
             new CreateIndexModel<MergeConflict>(Builders<MergeConflict>.IndexKeys
                 .Ascending(conflict => conflict.CanonicalProductId)
                 .Ascending(conflict => conflict.Status)),
+            cancellationToken: cancellationToken);
+
+        await UnmappedAttributes.Indexes.CreateOneAsync(
+            new CreateIndexModel<UnmappedAttribute>(Builders<UnmappedAttribute>.IndexKeys
+                .Ascending(attribute => attribute.CategoryKey)
+                .Ascending(attribute => attribute.OccurrenceCount)),
             cancellationToken: cancellationToken);
     }
 }

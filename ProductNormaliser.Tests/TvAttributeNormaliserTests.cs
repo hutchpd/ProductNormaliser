@@ -1,3 +1,4 @@
+using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Core.Normalisation;
 
@@ -149,6 +150,35 @@ public sealed class TvAttributeNormaliserTests
         });
     }
 
+    [Test]
+    public void Normalise_RecordsUnmappedAttributes()
+    {
+        var recorder = new RecordingUnmappedAttributeRecorder();
+        var sut = new TvAttributeNormaliser(unmappedAttributeRecorder: recorder);
+
+        sut.Normalise(
+            "tv",
+            new Dictionary<string, SourceAttributeValue>
+            {
+                ["Panel Depth"] = new()
+                {
+                    AttributeKey = "Panel Depth",
+                    Value = "42 mm",
+                    ValueType = "string",
+                    SourcePath = "source:example-retailer|jsonld.additionalProperty"
+                }
+            });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(recorder.Calls, Has.Count.EqualTo(1));
+            Assert.That(recorder.Calls[0].CategoryKey, Is.EqualTo("tv"));
+            Assert.That(recorder.Calls[0].CanonicalKey, Is.EqualTo("panel_depth"));
+            Assert.That(recorder.Calls[0].RawAttribute.AttributeKey, Is.EqualTo("Panel Depth"));
+            Assert.That(recorder.Calls[0].RawAttribute.SourcePath, Is.EqualTo("source:example-retailer|jsonld.additionalProperty"));
+        });
+    }
+
     private static NormalisedAttributeValue NormaliseSingle(string attributeName, string rawValue)
     {
         var sut = new TvAttributeNormaliser();
@@ -166,5 +196,27 @@ public sealed class TvAttributeNormaliserTests
             });
 
         return result.Values.Single();
+    }
+
+    private sealed class RecordingUnmappedAttributeRecorder : IUnmappedAttributeRecorder
+    {
+        public List<RecordedCall> Calls { get; } = [];
+
+        public void Record(string categoryKey, string canonicalKey, SourceAttributeValue rawAttribute)
+        {
+            Calls.Add(new RecordedCall
+            {
+                CategoryKey = categoryKey,
+                CanonicalKey = canonicalKey,
+                RawAttribute = rawAttribute
+            });
+        }
+    }
+
+    private sealed class RecordedCall
+    {
+        public string CategoryKey { get; init; } = default!;
+        public string CanonicalKey { get; init; } = default!;
+        public SourceAttributeValue RawAttribute { get; init; } = default!;
     }
 }
