@@ -1,0 +1,13 @@
+{
+  "display_technology": {
+    "oled": "OLED",
+    "qled": "QLED",
+    "led": "LED"
+  },
+  "native_resolution": {
+    "4k ultra hd": "4K",
+    "ultra hd": "4K",
+    "full hd": "1080p",
+    "hd ready": "720p"
+  }
+}

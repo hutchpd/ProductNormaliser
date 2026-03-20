@@ -1,0 +1,6 @@
+@ProductNormaliser.AdminApi_HostAddress = http://localhost:5209
+
+GET {{ProductNormaliser.AdminApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

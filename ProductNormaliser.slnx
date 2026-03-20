@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="ProductNormaliser.AdminApi/ProductNormaliser.AdminApi.csproj" />
+  <Project Path="ProductNormaliser.Core/ProductNormaliser.Core.csproj" />
+  <Project Path="ProductNormaliser.Infrastructure/ProductNormaliser.Infrastructure.csproj" />
+  <Project Path="ProductNormaliser.Tests/ProductNormaliser.Tests.csproj" />
+  <Project Path="ProductNormaliser.Worker/ProductNormaliser.Worker.csproj" />
+</Solution>

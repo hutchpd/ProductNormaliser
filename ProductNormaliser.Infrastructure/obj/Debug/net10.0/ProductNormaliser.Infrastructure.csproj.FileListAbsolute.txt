@@ -1,0 +1,15 @@
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Infrastructure\bin\Debug\net10.0\ProductNormaliser.Infrastructure.deps.json
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Infrastructure\bin\Debug\net10.0\ProductNormaliser.Infrastructure.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Infrastructure\bin\Debug\net10.0\ProductNormaliser.Infrastructure.pdb
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Infrastructure\bin\Debug\net10.0\ProductNormaliser.Core.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Infrastructure\bin\Debug\net10.0\ProductNormaliser.Core.pdb
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Infrastructure\obj\Debug\net10.0\ProductNormaliser.Infrastructure.csproj.AssemblyReference.cache
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Infrastructure\obj\Debug\net10.0\ProductNormaliser.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Infrastructure\obj\Debug\net10.0\ProductNormaliser.Infrastructure.AssemblyInfoInputs.cache
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Infrastructure\obj\Debug\net10.0\ProductNormaliser.Infrastructure.AssemblyInfo.cs
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Infrastructure\obj\Debug\net10.0\ProductNormaliser.Infrastructure.csproj.CoreCompileInputs.cache
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Infrastructure\obj\Debug\net10.0\ProductN.68B79FBB.Up2Date
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Infrastructure\obj\Debug\net10.0\ProductNormaliser.Infrastructure.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Infrastructure\obj\Debug\net10.0\refint\ProductNormaliser.Infrastructure.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Infrastructure\obj\Debug\net10.0\ProductNormaliser.Infrastructure.pdb
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Infrastructure\obj\Debug\net10.0\ref\ProductNormaliser.Infrastructure.dll

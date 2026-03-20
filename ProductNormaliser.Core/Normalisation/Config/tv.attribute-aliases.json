@@ -1,0 +1,9 @@
+{
+  "screen size": "screen_size_inch",
+  "screensize": "screen_size_inch",
+  "display size": "screen_size_inch",
+  "hdmi ports": "hdmi_port_count",
+  "number of hdmi ports": "hdmi_port_count",
+  "smart tv": "smart_tv",
+  "refresh rate": "refresh_rate_hz"
+}
