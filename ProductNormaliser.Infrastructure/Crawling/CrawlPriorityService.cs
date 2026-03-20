@@ -18,6 +18,10 @@ public sealed class CrawlPriorityService(MongoDbContext mongoDbContext) : ICrawl
             .SortByDescending(log => log.TimestampUtc)
             .Limit(500)
             .ToListAsync(cancellationToken);
+        var sourceSnapshots = await mongoDbContext.SourceQualitySnapshots.Find(Builders<SourceQualitySnapshot>.Filter.Empty)
+            .SortByDescending(snapshot => snapshot.TimestampUtc)
+            .Limit(500)
+            .ToListAsync(cancellationToken);
 
         var assessments = new List<CrawlPriorityAssessment>(queueItems.Count);
 
@@ -25,13 +29,20 @@ public sealed class CrawlPriorityService(MongoDbContext mongoDbContext) : ICrawl
         {
             var sourceQualityScore = CalculateSourceQuality(queueItem.SourceName, sourceProducts);
             var changeFrequencyScore = CalculateChangeFrequency(queueItem, crawlLogs);
+            var latestSnapshot = sourceSnapshots.FirstOrDefault(snapshot =>
+                string.Equals(snapshot.SourceName, queueItem.SourceName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(snapshot.CategoryKey, queueItem.CategoryKey, StringComparison.OrdinalIgnoreCase));
+            var priceVolatilityScore = latestSnapshot?.PriceVolatilityScore ?? 0m;
+            var specStabilityScore = latestSnapshot?.SpecStabilityScore ?? 1m;
+            var adaptiveChangeScore = Clamp(decimal.Round(changeFrequencyScore * 0.55m + priceVolatilityScore * 0.45m, 4, MidpointRounding.AwayFromZero));
             var (missingAttributeCount, missingAttributeScore) = CalculateMissingAttributeSignal(queueItem, sourceProducts, canonicalProducts);
             var (stalenessScore, lastCrawledUtc) = CalculateStaleness(queueItem, utcNow, crawlLogs);
+            var adaptiveStalenessScore = Clamp(decimal.Round(stalenessScore * (specStabilityScore >= 0.90m && missingAttributeCount == 0 ? 0.55m : 1.00m), 4, MidpointRounding.AwayFromZero));
             var priorityScore = decimal.Round(
-                sourceQualityScore * 35m
-                + changeFrequencyScore * 25m
-                + missingAttributeScore * 30m
-                + stalenessScore * 10m,
+                sourceQualityScore * 30m
+                + adaptiveChangeScore * 30m
+                + missingAttributeScore * 25m
+                + adaptiveStalenessScore * 15m,
                 2,
                 MidpointRounding.AwayFromZero);
 
@@ -40,12 +51,14 @@ public sealed class CrawlPriorityService(MongoDbContext mongoDbContext) : ICrawl
                 QueueItem = queueItem,
                 PriorityScore = priorityScore,
                 SourceQualityScore = decimal.Round(sourceQualityScore * 100m, 2, MidpointRounding.AwayFromZero),
-                ChangeFrequencyScore = decimal.Round(changeFrequencyScore * 100m, 2, MidpointRounding.AwayFromZero),
+                ChangeFrequencyScore = decimal.Round(adaptiveChangeScore * 100m, 2, MidpointRounding.AwayFromZero),
+                PriceVolatilityScore = decimal.Round(priceVolatilityScore * 100m, 2, MidpointRounding.AwayFromZero),
+                SpecStabilityScore = decimal.Round(specStabilityScore * 100m, 2, MidpointRounding.AwayFromZero),
                 MissingAttributeScore = decimal.Round(missingAttributeScore * 100m, 2, MidpointRounding.AwayFromZero),
-                StalenessScore = decimal.Round(stalenessScore * 100m, 2, MidpointRounding.AwayFromZero),
+                StalenessScore = decimal.Round(adaptiveStalenessScore * 100m, 2, MidpointRounding.AwayFromZero),
                 MissingAttributeCount = missingAttributeCount,
                 LastCrawledUtc = lastCrawledUtc,
-                Reasons = BuildReasons(sourceQualityScore, changeFrequencyScore, missingAttributeCount, stalenessScore)
+                Reasons = BuildReasons(sourceQualityScore, adaptiveChangeScore, priceVolatilityScore, specStabilityScore, missingAttributeCount, adaptiveStalenessScore)
             });
         }
 
@@ -146,7 +159,7 @@ public sealed class CrawlPriorityService(MongoDbContext mongoDbContext) : ICrawl
         return (staleness, lastLog.TimestampUtc);
     }
 
-    private static IReadOnlyList<string> BuildReasons(decimal sourceQuality, decimal changeFrequency, int missingAttributeCount, decimal staleness)
+    private static IReadOnlyList<string> BuildReasons(decimal sourceQuality, decimal changeFrequency, decimal priceVolatility, decimal specStability, int missingAttributeCount, decimal staleness)
     {
         var reasons = new List<string>();
         if (sourceQuality >= 0.70m)
@@ -159,9 +172,19 @@ public sealed class CrawlPriorityService(MongoDbContext mongoDbContext) : ICrawl
             reasons.Add("Frequently changing page");
         }
 
+        if (priceVolatility >= 0.50m)
+        {
+            reasons.Add("Volatile price history");
+        }
+
         if (missingAttributeCount > 0)
         {
             reasons.Add($"Canonical product missing {missingAttributeCount} attributes");
+        }
+
+        if (specStability >= 0.90m && missingAttributeCount == 0)
+        {
+            reasons.Add("Stable specification history lowers recrawl urgency");
         }
 
         if (staleness >= 0.70m)

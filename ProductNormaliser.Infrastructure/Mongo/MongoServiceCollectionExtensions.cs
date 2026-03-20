@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using ProductNormaliser.Infrastructure.Crawling;
+using ProductNormaliser.Infrastructure.Intelligence;
 using ProductNormaliser.Infrastructure.Mongo.Repositories;
 using ProductNormaliser.Infrastructure.StructuredData;
 using ProductNormaliser.Core.Interfaces;
@@ -39,6 +40,10 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<CrawlQueueRepository>();
         services.AddSingleton<CrawlLogRepository>();
         services.AddSingleton<UnmappedAttributeRepository>();
+        services.AddSingleton<SourceQualitySnapshotRepository>();
+        services.AddSingleton<ProductChangeEventRepository>();
+        services.AddSingleton<AdaptiveCrawlPolicyRepository>();
+        services.AddSingleton<SourceAttributeDisagreementRepository>();
         services.AddSingleton<IRawPageStore>(serviceProvider => serviceProvider.GetRequiredService<RawPageRepository>());
         services.AddSingleton<ISourceProductStore>(serviceProvider => serviceProvider.GetRequiredService<SourceProductRepository>());
         services.AddSingleton<ICanonicalProductStore>(serviceProvider => serviceProvider.GetRequiredService<CanonicalProductRepository>());
@@ -48,6 +53,14 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<ICrawlLogStore>(serviceProvider => serviceProvider.GetRequiredService<CrawlLogRepository>());
         services.AddSingleton<IUnmappedAttributeStore>(serviceProvider => serviceProvider.GetRequiredService<UnmappedAttributeRepository>());
         services.AddSingleton<IUnmappedAttributeRecorder>(serviceProvider => serviceProvider.GetRequiredService<UnmappedAttributeRepository>());
+        services.AddSingleton<ISourceQualitySnapshotStore>(serviceProvider => serviceProvider.GetRequiredService<SourceQualitySnapshotRepository>());
+        services.AddSingleton<IProductChangeEventStore>(serviceProvider => serviceProvider.GetRequiredService<ProductChangeEventRepository>());
+        services.AddSingleton<IAdaptiveCrawlPolicyStore>(serviceProvider => serviceProvider.GetRequiredService<AdaptiveCrawlPolicyRepository>());
+        services.AddSingleton<ISourceAttributeDisagreementStore>(serviceProvider => serviceProvider.GetRequiredService<SourceAttributeDisagreementRepository>());
+        services.AddSingleton<ICrawlBackoffService, AdaptiveCrawlBackoffService>();
+        services.AddSingleton<ISourceDisagreementService, SourceDisagreementService>();
+        services.AddSingleton<ISourceTrustService, SourceTrustService>();
+        services.AddSingleton<IAttributeStabilityService, AttributeStabilityService>();
 
         services.AddOptions<CrawlPipelineOptions>()
             .Bind(configuration.GetSection(CrawlPipelineOptions.SectionName));

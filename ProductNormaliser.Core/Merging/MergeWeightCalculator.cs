@@ -1,8 +1,12 @@
+using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Core.Merging;
 
-public sealed class MergeWeightCalculator
+public sealed class MergeWeightCalculator(
+    ISourceTrustService? sourceTrustService = null,
+    IAttributeStabilityService? attributeStabilityService = null,
+    ISourceDisagreementService? sourceDisagreementService = null)
 {
     public decimal CalculateSourceQuality(SourceProduct sourceProduct)
     {
@@ -84,9 +88,16 @@ public sealed class MergeWeightCalculator
     public decimal CalculateIncomingWeight(SourceProduct sourceProduct, NormalisedAttributeValue attribute, CanonicalAttributeValue? existingAttribute)
     {
         var referenceUtc = GetReferenceUtc(sourceProduct, existingAttribute);
+        var historicalTrust = GetHistoricalTrust(sourceProduct.SourceName, sourceProduct.CategoryKey);
+        var stabilityScore = GetAttributeStability(sourceProduct.CategoryKey, attribute.AttributeKey);
+        var disagreementAdjustment = GetSourceDisagreementAdjustment(sourceProduct.SourceName, sourceProduct.CategoryKey, attribute.AttributeKey);
+
         return Clamp(decimal.Round(
-            CalculateSourceQuality(sourceProduct)
+            historicalTrust
+            * CalculateSourceQuality(sourceProduct)
             * CalculateAttributeReliability(attribute, existingAttribute)
+            * stabilityScore
+            * disagreementAdjustment
             * CalculateRecencyFactor(sourceProduct.FetchedUtc, referenceUtc),
             4,
             MidpointRounding.AwayFromZero));
@@ -105,14 +116,48 @@ public sealed class MergeWeightCalculator
             ? referenceUtc
             : attribute.LastObservedUtc;
         var sourceQuality = attribute.SourceQualityScore > 0m ? attribute.SourceQualityScore : attribute.Confidence;
+        var historicalTrust = attribute.HistoricalTrustScore > 0m ? attribute.HistoricalTrustScore : 0.72m;
         var reliability = attribute.ReliabilityScore > 0m ? attribute.ReliabilityScore : attribute.Confidence;
+        var stability = attribute.StabilityScore > 0m ? attribute.StabilityScore : 0.90m;
 
         return Clamp(decimal.Round(
-            sourceQuality
+            historicalTrust
+            * sourceQuality
             * reliability
+            * stability
             * CalculateRecencyFactor(observedUtc, referenceUtc),
             4,
             MidpointRounding.AwayFromZero));
+    }
+
+    public decimal GetHistoricalTrust(string sourceName, string categoryKey)
+    {
+        if (sourceTrustService is null || string.IsNullOrWhiteSpace(sourceName) || string.IsNullOrWhiteSpace(categoryKey))
+        {
+            return 0.72m;
+        }
+
+        return Clamp(sourceTrustService.GetHistoricalTrustScore(sourceName, categoryKey));
+    }
+
+    public decimal GetAttributeStability(string categoryKey, string attributeKey)
+    {
+        if (attributeStabilityService is null || string.IsNullOrWhiteSpace(categoryKey) || string.IsNullOrWhiteSpace(attributeKey))
+        {
+            return 0.90m;
+        }
+
+        return Clamp(attributeStabilityService.GetStabilityScore(categoryKey, attributeKey));
+    }
+
+    public decimal GetSourceDisagreementAdjustment(string sourceName, string categoryKey, string attributeKey)
+    {
+        if (sourceDisagreementService is null || string.IsNullOrWhiteSpace(sourceName) || string.IsNullOrWhiteSpace(categoryKey) || string.IsNullOrWhiteSpace(attributeKey))
+        {
+            return 1.00m;
+        }
+
+        return Clamp(sourceDisagreementService.GetSourceAttributeAdjustment(sourceName, categoryKey, attributeKey));
     }
 
     private static DateTime GetReferenceUtc(SourceProduct sourceProduct, CanonicalAttributeValue? existingAttribute)

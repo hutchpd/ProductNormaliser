@@ -11,6 +11,7 @@ builder.Services.AddProductNormaliserMongo(builder.Configuration);
 builder.Services.AddSingleton<IStructuredDataExtractor, SchemaOrgJsonLdExtractor>();
 builder.Services.AddSingleton<IAttributeNormaliser, TvAttributeNormaliser>();
 builder.Services.AddSingleton<IProductIdentityResolver, ProductIdentityResolver>();
+builder.Services.AddSingleton<MergeWeightCalculator>();
 builder.Services.AddSingleton<ICanonicalMergeService, CanonicalMergeService>();
 builder.Services.AddSingleton<IConflictDetector, ConflictDetector>();
 builder.Services.AddSingleton<CrawlOrchestrator>();

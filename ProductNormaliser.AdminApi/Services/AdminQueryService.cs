@@ -11,6 +11,7 @@ public sealed class AdminQueryService(
     ICrawlLogStore crawlLogStore,
     ICanonicalProductStore canonicalProductStore,
     ISourceProductStore sourceProductStore,
+    IProductChangeEventStore productChangeEventStore,
     MongoDbContext mongoDbContext) : IAdminQueryService
 {
     private static readonly string[] KeyAttributeKeys = ["brand", "model_number", "screen_size_inch", "native_resolution", "display_technology"];
@@ -39,7 +40,10 @@ public sealed class AdminQueryService(
             CategoryKey = item.CategoryKey,
             Status = item.Status,
             AttemptCount = item.AttemptCount,
+            ConsecutiveFailureCount = item.ConsecutiveFailureCount,
+            ImportanceScore = item.ImportanceScore,
             EnqueuedUtc = item.EnqueuedUtc,
+            LastAttemptUtc = item.LastAttemptUtc,
             NextAttemptUtc = item.NextAttemptUtc,
             LastError = item.LastError
         }).ToArray();
@@ -115,6 +119,21 @@ public sealed class AdminQueryService(
                 }).OrderBy(attribute => attribute.AttributeKey).ToArray()
             }).ToArray()
         };
+    }
+
+    public async Task<IReadOnlyList<ProductChangeEventDto>> GetProductHistoryAsync(string id, CancellationToken cancellationToken)
+    {
+        var history = await productChangeEventStore.GetByCanonicalProductIdAsync(id, cancellationToken: cancellationToken);
+        return history.Select(changeEvent => new ProductChangeEventDto
+        {
+            CanonicalProductId = changeEvent.CanonicalProductId,
+            CategoryKey = changeEvent.CategoryKey,
+            AttributeKey = changeEvent.AttributeKey,
+            OldValue = changeEvent.OldValue,
+            NewValue = changeEvent.NewValue,
+            SourceName = changeEvent.SourceName,
+            TimestampUtc = changeEvent.TimestampUtc
+        }).ToArray();
     }
 
     public async Task<IReadOnlyList<ConflictDto>> GetConflictsAsync(CancellationToken cancellationToken)

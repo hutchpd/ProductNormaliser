@@ -58,7 +58,9 @@ public sealed class CanonicalMergeService(
             {
                 var initialIncomingWeight = mergeWeightCalculator.CalculateIncomingWeight(incoming, incomingAttribute, null);
                 var sourceQuality = mergeWeightCalculator.CalculateSourceQuality(incoming);
+                var historicalTrust = mergeWeightCalculator.GetHistoricalTrust(incoming.SourceName, incoming.CategoryKey);
                 var reliability = mergeWeightCalculator.CalculateAttributeReliability(incomingAttribute, null);
+                var stabilityScore = mergeWeightCalculator.GetAttributeStability(incoming.CategoryKey, incomingAttribute.AttributeKey);
 
                 canonical.Attributes[incomingAttribute.AttributeKey] = new CanonicalAttributeValue
                 {
@@ -71,6 +73,8 @@ public sealed class CanonicalMergeService(
                     MergeWeight = initialIncomingWeight,
                     ReliabilityScore = reliability,
                     SourceQualityScore = sourceQuality,
+                    HistoricalTrustScore = historicalTrust,
+                    StabilityScore = stabilityScore,
                     WinningSourceName = incoming.SourceName,
                     LastObservedUtc = incoming.FetchedUtc,
                     Evidence = [evidence]
@@ -93,6 +97,12 @@ public sealed class CanonicalMergeService(
                 canonicalAttribute.SourceQualityScore = Math.Max(
                     canonicalAttribute.SourceQualityScore,
                     mergeWeightCalculator.CalculateSourceQuality(incoming));
+                canonicalAttribute.HistoricalTrustScore = Math.Max(
+                    canonicalAttribute.HistoricalTrustScore,
+                    mergeWeightCalculator.GetHistoricalTrust(incoming.SourceName, incoming.CategoryKey));
+                canonicalAttribute.StabilityScore = Math.Max(
+                    canonicalAttribute.StabilityScore,
+                    mergeWeightCalculator.GetAttributeStability(incoming.CategoryKey, incomingAttribute.AttributeKey));
                 canonicalAttribute.LastObservedUtc = incoming.FetchedUtc;
 
                 canonicalAttribute.Confidence = confidenceScorer.ScoreMergedAttribute(
@@ -118,11 +128,13 @@ public sealed class CanonicalMergeService(
                 canonicalAttribute.WinningSourceName = incoming.SourceName;
                 canonicalAttribute.LastObservedUtc = incoming.FetchedUtc;
                 canonicalAttribute.SourceQualityScore = mergeWeightCalculator.CalculateSourceQuality(incoming);
+                canonicalAttribute.HistoricalTrustScore = mergeWeightCalculator.GetHistoricalTrust(incoming.SourceName, incoming.CategoryKey);
             }
 
             canonicalAttribute.HasConflict = true;
             canonicalAttribute.MergeWeight = shouldReplace ? incomingWeight : Math.Max(existingWeight, incomingWeight);
             canonicalAttribute.ReliabilityScore = mergeWeightCalculator.CalculateAttributeReliability(incomingAttribute, canonicalAttribute);
+            canonicalAttribute.StabilityScore = mergeWeightCalculator.GetAttributeStability(incoming.CategoryKey, incomingAttribute.AttributeKey);
             if (canonicalAttribute.LastObservedUtc == default)
             {
                 canonicalAttribute.LastObservedUtc = incoming.FetchedUtc;

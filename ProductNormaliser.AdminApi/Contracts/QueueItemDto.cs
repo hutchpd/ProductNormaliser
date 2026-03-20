@@ -8,7 +8,10 @@ public sealed class QueueItemDto
     public string CategoryKey { get; init; } = default!;
     public string Status { get; init; } = default!;
     public int AttemptCount { get; init; }
+    public int ConsecutiveFailureCount { get; init; }
+    public decimal ImportanceScore { get; init; }
     public DateTime EnqueuedUtc { get; init; }
+    public DateTime? LastAttemptUtc { get; init; }
     public DateTime? NextAttemptUtc { get; init; }
     public string? LastError { get; init; }
 }

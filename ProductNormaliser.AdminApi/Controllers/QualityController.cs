@@ -31,4 +31,22 @@ public sealed class QualityController(IDataIntelligenceService dataIntelligenceS
     {
         return Ok(await dataIntelligenceService.GetMergeInsightsAsync(categoryKey, cancellationToken));
     }
+
+    [HttpGet("source-history")]
+    public async Task<IActionResult> GetSourceHistory([FromQuery] string categoryKey = TvCategorySchemaProvider.CategoryKey, [FromQuery] string? sourceName = null, CancellationToken cancellationToken = default)
+    {
+        return Ok(await dataIntelligenceService.GetSourceHistoryAsync(categoryKey, sourceName, cancellationToken));
+    }
+
+    [HttpGet("attribute-stability")]
+    public async Task<IActionResult> GetAttributeStability([FromQuery] string categoryKey = TvCategorySchemaProvider.CategoryKey, CancellationToken cancellationToken = default)
+    {
+        return Ok(await dataIntelligenceService.GetAttributeStabilityAsync(categoryKey, cancellationToken));
+    }
+
+    [HttpGet("source-disagreements")]
+    public async Task<IActionResult> GetSourceDisagreements([FromQuery] string categoryKey = TvCategorySchemaProvider.CategoryKey, [FromQuery] string? sourceName = null, CancellationToken cancellationToken = default)
+    {
+        return Ok(await dataIntelligenceService.GetSourceDisagreementsAsync(categoryKey, sourceName, cancellationToken));
+    }
 }

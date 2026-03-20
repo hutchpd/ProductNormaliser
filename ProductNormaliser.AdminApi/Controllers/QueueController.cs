@@ -28,9 +28,12 @@ public sealed class QueueController(IAdminQueryService adminQueryService, ICrawl
             PriorityScore = priority.PriorityScore,
             SourceQualityScore = priority.SourceQualityScore,
             ChangeFrequencyScore = priority.ChangeFrequencyScore,
+            PriceVolatilityScore = priority.PriceVolatilityScore,
+            SpecStabilityScore = priority.SpecStabilityScore,
             MissingAttributeScore = priority.MissingAttributeScore,
             StalenessScore = priority.StalenessScore,
             MissingAttributeCount = priority.MissingAttributeCount,
+            NextAttemptUtc = priority.QueueItem.NextAttemptUtc,
             EnqueuedUtc = priority.QueueItem.EnqueuedUtc,
             LastCrawledUtc = priority.LastCrawledUtc,
             Reasons = priority.Reasons

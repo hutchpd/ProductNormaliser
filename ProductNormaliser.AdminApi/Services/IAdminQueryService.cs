@@ -8,6 +8,7 @@ public interface IAdminQueryService
     Task<CrawlLogDto?> GetCrawlLogAsync(string id, CancellationToken cancellationToken);
     Task<IReadOnlyList<QueueItemDto>> GetQueueAsync(CancellationToken cancellationToken);
     Task<ProductDetailResponse?> GetProductAsync(string id, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ProductChangeEventDto>> GetProductHistoryAsync(string id, CancellationToken cancellationToken);
     Task<IReadOnlyList<ConflictDto>> GetConflictsAsync(CancellationToken cancellationToken);
     Task<StatsResponse> GetStatsAsync(CancellationToken cancellationToken);
 }

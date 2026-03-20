@@ -11,12 +11,15 @@ public sealed class CrawlOrchestrator(
     IRobotsPolicyService robotsPolicyService,
     IHttpFetcher httpFetcher,
     IDeltaProcessor deltaProcessor,
+    ISourceTrustService sourceTrustService,
+    ISourceDisagreementService sourceDisagreementService,
     IRawPageStore rawPageStore,
     IStructuredDataExtractor structuredDataExtractor,
     ISourceProductBuilder sourceProductBuilder,
     IAttributeNormaliser attributeNormaliser,
     ISourceProductStore sourceProductStore,
     ICanonicalProductStore canonicalProductStore,
+    IProductChangeEventStore productChangeEventStore,
     IProductIdentityResolver productIdentityResolver,
     ICanonicalMergeService canonicalMergeService,
     IProductOfferStore productOfferStore,
@@ -98,6 +101,10 @@ public sealed class CrawlOrchestrator(
 
                 var canonicalProduct = canonicalMergeService.Merge(existingCanonical, sourceProduct);
                 await canonicalProductStore.UpsertAsync(canonicalProduct, cancellationToken);
+                sourceDisagreementService.RefreshForProduct(canonicalProduct);
+
+                var changeEvents = deltaProcessor.BuildChangeEvents(existingCanonical, canonicalProduct, sourceProduct, semanticDelta);
+                await productChangeEventStore.InsertManyAsync(changeEvents, cancellationToken);
 
                 foreach (var offer in sourceProduct.Offers)
                 {
@@ -112,6 +119,11 @@ public sealed class CrawlOrchestrator(
                 }
 
                 processedProductCount += 1;
+            }
+
+            if (processedProductCount > 0)
+            {
+                sourceTrustService.CaptureSnapshot(sourceName, target.CategoryKey);
             }
 
             logger.LogInformation("Completed crawl for {Url}; processed {ProductCount} product(s)", target.Url, processedProductCount);

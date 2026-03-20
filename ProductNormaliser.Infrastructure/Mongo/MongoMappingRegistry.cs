@@ -24,6 +24,10 @@ public static class MongoMappingRegistry
         RegisterClassMap<CrawlQueueItem>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<CrawlLog>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<UnmappedAttribute>(map => map.MapIdMember(model => model.Id));
+        RegisterClassMap<SourceQualitySnapshot>(map => map.MapIdMember(model => model.Id));
+        RegisterClassMap<ProductChangeEvent>(map => map.MapIdMember(model => model.Id));
+        RegisterClassMap<AdaptiveCrawlPolicy>(map => map.MapIdMember(model => model.Id));
+        RegisterClassMap<SourceAttributeDisagreement>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<CanonicalAttributeValue>();
         RegisterClassMap<AttributeEvidence>();
         RegisterClassMap<ProductSourceLink>();

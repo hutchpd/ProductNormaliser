@@ -13,4 +13,10 @@ public sealed class ProductsController(IAdminQueryService adminQueryService) : C
         var product = await adminQueryService.GetProductAsync(id, cancellationToken);
         return product is null ? NotFound() : Ok(product);
     }
+
+    [HttpGet("{id}/history")]
+    public async Task<IActionResult> GetProductHistory(string id, CancellationToken cancellationToken)
+    {
+        return Ok(await adminQueryService.GetProductHistoryAsync(id, cancellationToken));
+    }
 }

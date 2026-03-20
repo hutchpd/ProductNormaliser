@@ -8,5 +8,6 @@ public sealed class SemanticDeltaResult
     public bool PriceChanged { get; init; }
     public bool AvailabilityChanged { get; init; }
     public IReadOnlyList<string> ChangedAttributeKeys { get; init; } = [];
+    public IReadOnlyList<SemanticChangeDetail> ChangeDetails { get; init; } = [];
     public string Summary { get; init; } = "No semantic changes detected.";
 }

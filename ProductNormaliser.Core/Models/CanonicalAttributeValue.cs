@@ -11,6 +11,8 @@ public sealed class CanonicalAttributeValue
     public decimal MergeWeight { get; set; }
     public decimal ReliabilityScore { get; set; }
     public decimal SourceQualityScore { get; set; }
+    public decimal HistoricalTrustScore { get; set; }
+    public decimal StabilityScore { get; set; }
     public string? WinningSourceName { get; set; }
     public DateTime LastObservedUtc { get; set; }
 

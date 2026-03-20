@@ -27,6 +27,10 @@ public sealed class MongoDbContext
         CrawlQueueItems = Database.GetCollection<CrawlQueueItem>(MongoCollectionNames.CrawlQueue);
         CrawlLogs = Database.GetCollection<CrawlLog>(MongoCollectionNames.CrawlLogs);
         UnmappedAttributes = Database.GetCollection<UnmappedAttribute>(MongoCollectionNames.UnmappedAttributes);
+        SourceQualitySnapshots = Database.GetCollection<SourceQualitySnapshot>(MongoCollectionNames.SourceQualitySnapshots);
+        ProductChangeEvents = Database.GetCollection<ProductChangeEvent>(MongoCollectionNames.ProductChangeEvents);
+        AdaptiveCrawlPolicies = Database.GetCollection<AdaptiveCrawlPolicy>(MongoCollectionNames.AdaptiveCrawlPolicies);
+        SourceAttributeDisagreements = Database.GetCollection<SourceAttributeDisagreement>(MongoCollectionNames.SourceAttributeDisagreements);
     }
 
     public IMongoClient Client { get; }
@@ -48,6 +52,14 @@ public sealed class MongoDbContext
     public IMongoCollection<CrawlLog> CrawlLogs { get; }
 
     public IMongoCollection<UnmappedAttribute> UnmappedAttributes { get; }
+
+    public IMongoCollection<SourceQualitySnapshot> SourceQualitySnapshots { get; }
+
+    public IMongoCollection<ProductChangeEvent> ProductChangeEvents { get; }
+
+    public IMongoCollection<AdaptiveCrawlPolicy> AdaptiveCrawlPolicies { get; }
+
+    public IMongoCollection<SourceAttributeDisagreement> SourceAttributeDisagreements { get; }
 
     public async Task EnsureIndexesAsync(CancellationToken cancellationToken = default)
     {
@@ -80,6 +92,32 @@ public sealed class MongoDbContext
             new CreateIndexModel<UnmappedAttribute>(Builders<UnmappedAttribute>.IndexKeys
                 .Ascending(attribute => attribute.CategoryKey)
                 .Ascending(attribute => attribute.OccurrenceCount)),
+            cancellationToken: cancellationToken);
+
+        await SourceQualitySnapshots.Indexes.CreateOneAsync(
+            new CreateIndexModel<SourceQualitySnapshot>(Builders<SourceQualitySnapshot>.IndexKeys
+                .Ascending(snapshot => snapshot.SourceName)
+                .Ascending(snapshot => snapshot.CategoryKey)
+                .Descending(snapshot => snapshot.TimestampUtc)),
+            cancellationToken: cancellationToken);
+
+        await ProductChangeEvents.Indexes.CreateOneAsync(
+            new CreateIndexModel<ProductChangeEvent>(Builders<ProductChangeEvent>.IndexKeys
+                .Ascending(changeEvent => changeEvent.CanonicalProductId)
+                .Descending(changeEvent => changeEvent.TimestampUtc)),
+            cancellationToken: cancellationToken);
+
+        await AdaptiveCrawlPolicies.Indexes.CreateOneAsync(
+            new CreateIndexModel<AdaptiveCrawlPolicy>(Builders<AdaptiveCrawlPolicy>.IndexKeys
+                .Ascending(policy => policy.SourceName)
+                .Ascending(policy => policy.CategoryKey)),
+            cancellationToken: cancellationToken);
+
+        await SourceAttributeDisagreements.Indexes.CreateOneAsync(
+            new CreateIndexModel<SourceAttributeDisagreement>(Builders<SourceAttributeDisagreement>.IndexKeys
+                .Ascending(disagreement => disagreement.SourceName)
+                .Ascending(disagreement => disagreement.CategoryKey)
+                .Ascending(disagreement => disagreement.AttributeKey)),
             cancellationToken: cancellationToken);
     }
 }

@@ -17,6 +17,8 @@ public sealed class AdminObservabilityTests
         await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.SourceProducts);
         await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.MergeConflicts);
         await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.CrawlQueue);
+        await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.ProductChangeEvents);
+        await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.SourceQualitySnapshots);
         await context.EnsureIndexesAsync();
     }
 
@@ -29,12 +31,15 @@ public sealed class AdminObservabilityTests
             new FakeRobotsPolicyService(true),
             new FakeHttpFetcher(true, "<html />"),
             new FakeDeltaProcessor(false),
+            new FakeSourceTrustService(),
+            new FakeSourceDisagreementService(),
             new RawPageRepository(MongoIntegrationTestFixture.Context),
             new FakeStructuredDataExtractor([new ExtractedStructuredProduct { SourceUrl = "https://example.com/products/1", Name = "TV", RawJson = "{}" }]),
             new FakeSourceProductBuilder(),
             new FakeAttributeNormaliser(),
             new SourceProductRepository(MongoIntegrationTestFixture.Context),
             new CanonicalProductRepository(MongoIntegrationTestFixture.Context),
+            new ProductChangeEventRepository(MongoIntegrationTestFixture.Context),
             new FakeIdentityResolver(),
             new FakeMergeService(),
             new ProductOfferRepository(MongoIntegrationTestFixture.Context),
@@ -111,6 +116,7 @@ public sealed class AdminObservabilityTests
             new CrawlLogRepository(context),
             new CanonicalProductRepository(context),
             new SourceProductRepository(context),
+            new ProductChangeEventRepository(context),
             context);
 
         var stats = await service.GetStatsAsync(CancellationToken.None);
@@ -197,6 +203,7 @@ public sealed class AdminObservabilityTests
             new CrawlLogRepository(context),
             new CanonicalProductRepository(context),
             new SourceProductRepository(context),
+            new ProductChangeEventRepository(context),
             context);
 
         var detail = await service.GetProductAsync("canonical-1", CancellationToken.None);
@@ -230,7 +237,32 @@ public sealed class AdminObservabilityTests
         public Task<ProductNormaliser.Infrastructure.Crawling.SemanticDeltaResult> DetectSemanticChangesAsync(SourceProduct sourceProduct, CancellationToken cancellationToken)
             => Task.FromResult(new ProductNormaliser.Infrastructure.Crawling.SemanticDeltaResult { HasMeaningfulChanges = true, HasAttributeChanges = true, ChangedAttributeKeys = ["screen_size_inch"], Summary = "Spec changes: screen_size_inch" });
 
+        public IReadOnlyList<ProductChangeEvent> BuildChangeEvents(CanonicalProduct? previousCanonical, CanonicalProduct currentCanonical, SourceProduct sourceProduct, ProductNormaliser.Infrastructure.Crawling.SemanticDeltaResult semanticDelta)
+            => [];
+
         public string ComputeHash(string html) => "ABC123456789";
+    }
+
+    private sealed class FakeSourceTrustService : ProductNormaliser.Core.Interfaces.ISourceTrustService
+    {
+        public void CaptureSnapshot(string sourceName, string categoryKey)
+        {
+        }
+
+        public decimal GetHistoricalTrustScore(string sourceName, string categoryKey) => 0.75m;
+
+        public IReadOnlyList<SourceQualitySnapshot> GetSourceHistory(string categoryKey, string? sourceName = null, int limit = 30) => [];
+    }
+
+    private sealed class FakeSourceDisagreementService : ProductNormaliser.Core.Interfaces.ISourceDisagreementService
+    {
+        public decimal GetSourceAttributeAdjustment(string sourceName, string categoryKey, string attributeKey) => 1.00m;
+
+        public IReadOnlyList<SourceAttributeDisagreement> GetDisagreements(string categoryKey, string? sourceName = null) => [];
+
+        public void RefreshForProduct(CanonicalProduct product)
+        {
+        }
     }
 
     private sealed class FakeStructuredDataExtractor(IReadOnlyCollection<ExtractedStructuredProduct> products) : ProductNormaliser.Core.Interfaces.IStructuredDataExtractor

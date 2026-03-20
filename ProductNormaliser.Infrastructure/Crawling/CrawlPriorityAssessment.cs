@@ -8,6 +8,8 @@ public sealed class CrawlPriorityAssessment
     public decimal PriorityScore { get; init; }
     public decimal SourceQualityScore { get; init; }
     public decimal ChangeFrequencyScore { get; init; }
+    public decimal PriceVolatilityScore { get; init; }
+    public decimal SpecStabilityScore { get; init; }
     public decimal MissingAttributeScore { get; init; }
     public decimal StalenessScore { get; init; }
     public int MissingAttributeCount { get; init; }

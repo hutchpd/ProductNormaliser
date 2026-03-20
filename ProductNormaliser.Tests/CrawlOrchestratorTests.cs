@@ -209,12 +209,15 @@ public sealed class CrawlOrchestratorTests
             robotsPolicyService,
             httpFetcher,
             deltaProcessor,
+            new FakeSourceTrustService(),
+            new FakeSourceDisagreementService(),
             new FakeRawPageStore(calls),
             structuredDataExtractor,
             sourceProductBuilder,
             attributeNormaliser,
             sourceProductStore,
             canonicalProductStore,
+            new FakeProductChangeEventStore(),
             productIdentityResolver,
             canonicalMergeService,
             productOfferStore,
@@ -262,6 +265,9 @@ public sealed class CrawlOrchestratorTests
         {
             return Task.FromResult(new SemanticDeltaResult { HasMeaningfulChanges = true, HasAttributeChanges = true, ChangedAttributeKeys = ["screen_size_inch"], Summary = "Spec changes: screen_size_inch" });
         }
+
+        public IReadOnlyList<ProductChangeEvent> BuildChangeEvents(CanonicalProduct? previousCanonical, CanonicalProduct currentCanonical, SourceProduct sourceProduct, SemanticDeltaResult semanticDelta)
+            => [];
 
         public string ComputeHash(string html) => "ABC123";
     }
@@ -448,6 +454,39 @@ public sealed class CrawlOrchestratorTests
         public Task InsertAsync(CrawlLog log, CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeSourceTrustService : ISourceTrustService
+    {
+        public void CaptureSnapshot(string sourceName, string categoryKey)
+        {
+        }
+
+        public decimal GetHistoricalTrustScore(string sourceName, string categoryKey) => 0.75m;
+
+        public IReadOnlyList<SourceQualitySnapshot> GetSourceHistory(string categoryKey, string? sourceName = null, int limit = 30) => [];
+    }
+
+    private sealed class FakeProductChangeEventStore : IProductChangeEventStore
+    {
+        public Task InsertManyAsync(IReadOnlyCollection<ProductChangeEvent> changeEvents, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<ProductChangeEvent>> GetByCanonicalProductIdAsync(string canonicalProductId, int limit = 100, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<ProductChangeEvent>>([]);
+
+        public Task<IReadOnlyList<ProductChangeEvent>> ListByCategoryAsync(string categoryKey, int limit = 500, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<ProductChangeEvent>>([]);
+    }
+
+    private sealed class FakeSourceDisagreementService : ISourceDisagreementService
+    {
+        public decimal GetSourceAttributeAdjustment(string sourceName, string categoryKey, string attributeKey) => 1.00m;
+
+        public IReadOnlyList<SourceAttributeDisagreement> GetDisagreements(string categoryKey, string? sourceName = null) => [];
+
+        public void RefreshForProduct(CanonicalProduct product)
+        {
         }
     }
 }

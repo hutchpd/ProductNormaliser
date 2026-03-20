@@ -178,6 +178,42 @@ public sealed class IdentityAndMergeTests
     }
 
     [Test]
+    public void Merge_UsesHistoricalTrustToBreakTies()
+    {
+        var mergeWeightCalculator = new MergeWeightCalculator(
+            new StubSourceTrustService(new Dictionary<string, decimal>
+            {
+                ["trusted-source"] = 0.95m,
+                ["weak-source"] = 0.35m
+            }),
+            new StubAttributeStabilityService(1.00m));
+        var mergeService = new CanonicalMergeService(mergeWeightCalculator: mergeWeightCalculator);
+
+        var existing = mergeService.Merge(null, CreateWeightedSource(
+            sourceId: "source-1",
+            sourceName: "weak-source",
+            screenSize: 55m,
+            attributeConfidence: 0.90m,
+            fetchedUtc: new DateTime(2026, 03, 20, 10, 00, 00, DateTimeKind.Utc),
+            attributeCount: 4));
+
+        var merged = mergeService.Merge(existing, CreateWeightedSource(
+            sourceId: "source-2",
+            sourceName: "trusted-source",
+            screenSize: 65m,
+            attributeConfidence: 0.90m,
+            fetchedUtc: new DateTime(2026, 03, 20, 10, 01, 00, DateTimeKind.Utc),
+            attributeCount: 4));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(merged.Attributes["screen_size_inch"].Value, Is.EqualTo(65m));
+            Assert.That(merged.Attributes["screen_size_inch"].HistoricalTrustScore, Is.EqualTo(0.95m));
+            Assert.That(merged.Attributes["screen_size_inch"].WinningSourceName, Is.EqualTo("trusted-source"));
+        });
+    }
+
+    [Test]
     public void Merge_RetainsEvidenceTrailAndSourceLinks()
     {
         var mergeService = new CanonicalMergeService();
@@ -334,5 +370,24 @@ public sealed class IdentityAndMergeTests
         }
 
         return sourceProduct;
+    }
+
+    private sealed class StubSourceTrustService(Dictionary<string, decimal> scores) : ProductNormaliser.Core.Interfaces.ISourceTrustService
+    {
+        public void CaptureSnapshot(string sourceName, string categoryKey)
+        {
+        }
+
+        public decimal GetHistoricalTrustScore(string sourceName, string categoryKey)
+            => scores.TryGetValue(sourceName, out var score) ? score : 0.72m;
+
+        public IReadOnlyList<SourceQualitySnapshot> GetSourceHistory(string categoryKey, string? sourceName = null, int limit = 30) => [];
+    }
+
+    private sealed class StubAttributeStabilityService(decimal score) : ProductNormaliser.Core.Interfaces.IAttributeStabilityService
+    {
+        public decimal GetStabilityScore(string categoryKey, string attributeKey) => score;
+
+        public IReadOnlyList<AttributeStabilityScore> GetScores(string categoryKey) => [];
     }
 }

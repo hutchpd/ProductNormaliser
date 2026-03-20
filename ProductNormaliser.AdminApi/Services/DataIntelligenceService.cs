@@ -1,6 +1,7 @@
 using System.Globalization;
 using MongoDB.Driver;
 using ProductNormaliser.AdminApi.Contracts;
+using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Core.Schemas;
 using ProductNormaliser.Infrastructure.Crawling;
@@ -12,7 +13,10 @@ namespace ProductNormaliser.AdminApi.Services;
 public sealed class DataIntelligenceService(
     MongoDbContext mongoDbContext,
     IUnmappedAttributeStore unmappedAttributeStore,
-    ICrawlPriorityService? crawlPriorityService = null) : IDataIntelligenceService
+    ICrawlPriorityService? crawlPriorityService = null,
+    ISourceTrustService? sourceTrustService = null,
+    IAttributeStabilityService? attributeStabilityService = null,
+    ISourceDisagreementService? sourceDisagreementService = null) : IDataIntelligenceService
 {
     private static readonly HashSet<string> DirectAttributeKeys = ["brand", "model_number", "gtin"];
 
@@ -181,6 +185,63 @@ public sealed class DataIntelligenceService(
         };
     }
 
+    public Task<IReadOnlyList<SourceQualitySnapshotDto>> GetSourceHistoryAsync(string categoryKey, string? sourceName, CancellationToken cancellationToken)
+    {
+        var history = sourceTrustService?.GetSourceHistory(categoryKey, sourceName) ?? [];
+        return Task.FromResult<IReadOnlyList<SourceQualitySnapshotDto>>(history
+            .Select(snapshot => new SourceQualitySnapshotDto
+            {
+                SourceName = snapshot.SourceName,
+                CategoryKey = snapshot.CategoryKey,
+                TimestampUtc = snapshot.TimestampUtc,
+                AttributeCoverage = snapshot.AttributeCoverage,
+                ConflictRate = snapshot.ConflictRate,
+                AgreementRate = snapshot.AgreementRate,
+                SuccessfulCrawlRate = snapshot.SuccessfulCrawlRate,
+                PriceVolatilityScore = snapshot.PriceVolatilityScore,
+                SpecStabilityScore = snapshot.SpecStabilityScore,
+                HistoricalTrustScore = snapshot.HistoricalTrustScore
+            })
+            .ToArray());
+    }
+
+    public Task<IReadOnlyList<AttributeStabilityDto>> GetAttributeStabilityAsync(string categoryKey, CancellationToken cancellationToken)
+    {
+        var scores = attributeStabilityService?.GetScores(categoryKey) ?? [];
+        return Task.FromResult<IReadOnlyList<AttributeStabilityDto>>(scores
+            .Select(score => new AttributeStabilityDto
+            {
+                CategoryKey = score.CategoryKey,
+                AttributeKey = score.AttributeKey,
+                ChangeCount = score.ChangeCount,
+                OscillationCount = score.OscillationCount,
+                DistinctValueCount = score.DistinctValueCount,
+                StabilityScore = score.StabilityScore,
+                IsSuspicious = score.IsSuspicious,
+                SuspicionReason = score.SuspicionReason
+            })
+            .ToArray());
+    }
+
+    public Task<IReadOnlyList<SourceAttributeDisagreementDto>> GetSourceDisagreementsAsync(string categoryKey, string? sourceName, CancellationToken cancellationToken)
+    {
+        var disagreements = sourceDisagreementService?.GetDisagreements(categoryKey, sourceName) ?? [];
+        return Task.FromResult<IReadOnlyList<SourceAttributeDisagreementDto>>(disagreements
+            .Select(item => new SourceAttributeDisagreementDto
+            {
+                SourceName = item.SourceName,
+                CategoryKey = item.CategoryKey,
+                AttributeKey = item.AttributeKey,
+                TotalComparisons = item.TotalComparisons,
+                TimesDisagreed = item.TimesDisagreed,
+                TimesWon = item.TimesWon,
+                DisagreementRate = item.DisagreementRate,
+                WinRate = item.WinRate,
+                LastUpdatedUtc = item.LastUpdatedUtc
+            })
+            .ToArray());
+    }
+
     public async Task<IReadOnlyList<QueuePriorityDto>> GetQueuePrioritiesAsync(CancellationToken cancellationToken)
     {
         if (crawlPriorityService is null)
@@ -198,9 +259,12 @@ public sealed class DataIntelligenceService(
             PriorityScore = priority.PriorityScore,
             SourceQualityScore = priority.SourceQualityScore,
             ChangeFrequencyScore = priority.ChangeFrequencyScore,
+            PriceVolatilityScore = priority.PriceVolatilityScore,
+            SpecStabilityScore = priority.SpecStabilityScore,
             MissingAttributeScore = priority.MissingAttributeScore,
             StalenessScore = priority.StalenessScore,
             MissingAttributeCount = priority.MissingAttributeCount,
+            NextAttemptUtc = priority.QueueItem.NextAttemptUtc,
             EnqueuedUtc = priority.QueueItem.EnqueuedUtc,
             LastCrawledUtc = priority.LastCrawledUtc,
             Reasons = priority.Reasons
@@ -529,11 +593,15 @@ public sealed class DataIntelligenceService(
             return null;
         }
 
+        var persistenceWindowDays = Math.Max(1m, (decimal)(unmappedAttribute.LastSeenUtc - unmappedAttribute.FirstSeenUtc).TotalDays + 1m);
+        var persistenceBoost = Math.Min(0.15m, persistenceWindowDays / 30m * 0.15m);
+        var occurrenceBoost = Math.Min(0.10m, unmappedAttribute.OccurrenceCount / 20m * 0.10m);
+
         return new AttributeMappingSuggestionDto
         {
             RawAttributeKey = unmappedAttribute.RawAttributeKey,
             SuggestedCanonicalKey = bestMatch.Key,
-            Confidence = bestMatch.Score,
+            Confidence = Math.Min(0.99m, decimal.Round(bestMatch.Score + persistenceBoost + occurrenceBoost, 2, MidpointRounding.AwayFromZero)),
             OccurrenceCount = unmappedAttribute.OccurrenceCount,
             SourceNames = unmappedAttribute.SourceNames.OrderBy(source => source, StringComparer.OrdinalIgnoreCase).ToArray()
         };
