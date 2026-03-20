@@ -25,6 +25,7 @@ public sealed class MongoDbContext
         ProductOffers = Database.GetCollection<ProductOffer>(MongoCollectionNames.ProductOffers);
         MergeConflicts = Database.GetCollection<MergeConflict>(MongoCollectionNames.MergeConflicts);
         CrawlQueueItems = Database.GetCollection<CrawlQueueItem>(MongoCollectionNames.CrawlQueue);
+        CrawlLogs = Database.GetCollection<CrawlLog>(MongoCollectionNames.CrawlLogs);
     }
 
     public IMongoClient Client { get; }
@@ -42,6 +43,8 @@ public sealed class MongoDbContext
     public IMongoCollection<MergeConflict> MergeConflicts { get; }
 
     public IMongoCollection<CrawlQueueItem> CrawlQueueItems { get; }
+
+    public IMongoCollection<CrawlLog> CrawlLogs { get; }
 
     public async Task EnsureIndexesAsync(CancellationToken cancellationToken = default)
     {

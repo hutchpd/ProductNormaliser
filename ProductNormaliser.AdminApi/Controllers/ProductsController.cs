@@ -1,0 +1,16 @@
+using Microsoft.AspNetCore.Mvc;
+using ProductNormaliser.AdminApi.Services;
+
+namespace ProductNormaliser.AdminApi.Controllers;
+
+[ApiController]
+[Route("api/products")]
+public sealed class ProductsController(IAdminQueryService adminQueryService) : ControllerBase
+{
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetProduct(string id, CancellationToken cancellationToken)
+    {
+        var product = await adminQueryService.GetProductAsync(id, cancellationToken);
+        return product is null ? NotFound() : Ok(product);
+    }
+}

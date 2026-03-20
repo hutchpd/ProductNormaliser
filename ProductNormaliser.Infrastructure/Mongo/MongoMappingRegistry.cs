@@ -22,6 +22,7 @@ public static class MongoMappingRegistry
         RegisterClassMap<ProductOffer>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<MergeConflict>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<CrawlQueueItem>(map => map.MapIdMember(model => model.Id));
+        RegisterClassMap<CrawlLog>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<CanonicalAttributeValue>();
         RegisterClassMap<AttributeEvidence>();
         RegisterClassMap<ProductSourceLink>();

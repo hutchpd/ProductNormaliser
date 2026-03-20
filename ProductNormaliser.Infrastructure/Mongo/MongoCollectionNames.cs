@@ -8,4 +8,5 @@ public static class MongoCollectionNames
     public const string ProductOffers = "product_offers";
     public const string MergeConflicts = "merge_conflicts";
     public const string CrawlQueue = "crawl_queue";
+    public const string CrawlLogs = "crawl_logs";
 }

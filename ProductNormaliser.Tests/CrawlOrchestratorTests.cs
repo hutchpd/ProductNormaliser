@@ -220,7 +220,8 @@ public sealed class CrawlOrchestratorTests
             productOfferStore,
             conflictDetector,
             mergeConflictStore,
-            new FakeLogger<CrawlOrchestrator>());
+            new FakeCrawlLogStore(),
+            new TestLogger<CrawlOrchestrator>());
     }
 
     private sealed class FakeRobotsPolicyService(List<string> calls, bool allowed) : IRobotsPolicyService
@@ -432,10 +433,16 @@ public sealed class CrawlOrchestratorTests
         }
     }
 
-    private sealed class FakeLogger<T> : ILogger<T>
+    private sealed class FakeCrawlLogStore : ICrawlLogStore
     {
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-        public bool IsEnabled(LogLevel logLevel) => true;
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) { }
+        public Task<CrawlLog?> GetByIdAsync(string id, CancellationToken cancellationToken = default) => Task.FromResult<CrawlLog?>(null);
+
+        public Task<IReadOnlyList<CrawlLog>> ListAsync(int limit = 100, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<CrawlLog>>([]);
+
+        public Task InsertAsync(CrawlLog log, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
     }
 }

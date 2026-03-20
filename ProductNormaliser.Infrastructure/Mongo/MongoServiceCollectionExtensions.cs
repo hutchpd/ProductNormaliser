@@ -36,12 +36,14 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<ProductOfferRepository>();
         services.AddSingleton<MergeConflictRepository>();
         services.AddSingleton<CrawlQueueRepository>();
+        services.AddSingleton<CrawlLogRepository>();
         services.AddSingleton<IRawPageStore>(serviceProvider => serviceProvider.GetRequiredService<RawPageRepository>());
         services.AddSingleton<ISourceProductStore>(serviceProvider => serviceProvider.GetRequiredService<SourceProductRepository>());
         services.AddSingleton<ICanonicalProductStore>(serviceProvider => serviceProvider.GetRequiredService<CanonicalProductRepository>());
         services.AddSingleton<IProductOfferStore>(serviceProvider => serviceProvider.GetRequiredService<ProductOfferRepository>());
         services.AddSingleton<IMergeConflictStore>(serviceProvider => serviceProvider.GetRequiredService<MergeConflictRepository>());
         services.AddSingleton<ICrawlQueueStore>(serviceProvider => serviceProvider.GetRequiredService<CrawlQueueRepository>());
+        services.AddSingleton<ICrawlLogStore>(serviceProvider => serviceProvider.GetRequiredService<CrawlLogRepository>());
 
         services.AddOptions<CrawlPipelineOptions>()
             .Bind(configuration.GetSection(CrawlPipelineOptions.SectionName));
