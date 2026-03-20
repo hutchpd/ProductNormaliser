@@ -3,6 +3,7 @@ using MongoDB.Driver;
 using ProductNormaliser.AdminApi.Contracts;
 using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
+using ProductNormaliser.Core.Normalisation;
 using ProductNormaliser.Core.Schemas;
 using ProductNormaliser.Infrastructure.Crawling;
 using ProductNormaliser.Infrastructure.Mongo;
@@ -16,13 +17,22 @@ public sealed class DataIntelligenceService(
     ICrawlPriorityService? crawlPriorityService = null,
     ISourceTrustService? sourceTrustService = null,
     IAttributeStabilityService? attributeStabilityService = null,
-    ISourceDisagreementService? sourceDisagreementService = null) : IDataIntelligenceService
+    ISourceDisagreementService? sourceDisagreementService = null,
+    ICategorySchemaRegistry? categorySchemaRegistry = null,
+    ICategoryAttributeNormaliserRegistry? categoryAttributeNormaliserRegistry = null) : IDataIntelligenceService
 {
     private static readonly HashSet<string> DirectAttributeKeys = ["brand", "model_number", "gtin"];
+    private readonly ICategorySchemaRegistry categorySchemaRegistry = categorySchemaRegistry ?? new CategorySchemaRegistry([new TvCategorySchemaProvider(), new MonitorCategorySchemaProvider(), new LaptopCategorySchemaProvider(), new RefrigeratorCategorySchemaProvider()]);
+    private readonly ICategoryAttributeNormaliserRegistry categoryAttributeNormaliserRegistry = categoryAttributeNormaliserRegistry ?? new CategoryAttributeNormaliserRegistry([
+        new TvAttributeNormaliser(),
+        new MonitorAttributeNormaliser(),
+        new LaptopAttributeNormaliser(),
+        new RefrigeratorAttributeNormaliser()
+    ]);
 
     public async Task<DetailedCoverageResponse> GetDetailedCoverageAsync(string categoryKey, CancellationToken cancellationToken)
     {
-        var schema = GetSchema(categoryKey);
+        var schema = ResolveSchema(categoryKey);
         var canonicalProducts = await GetCanonicalProductsAsync(categoryKey, cancellationToken);
         var sourceProducts = await GetSourceProductsAsync(categoryKey, cancellationToken);
 
@@ -88,8 +98,8 @@ public sealed class DataIntelligenceService(
 
     public async Task<IReadOnlyList<SourceQualityScoreDto>> GetSourceQualityScoresAsync(string categoryKey, CancellationToken cancellationToken)
     {
-        var schema = GetSchema(categoryKey);
-        var schemaKeys = schema.Attributes.Select(attribute => attribute.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var schema = ResolveSchema(categoryKey);
+        var evaluationKeys = GetEvaluationKeys(categoryKey, schema);
         var sourceProducts = await GetSourceProductsAsync(categoryKey, cancellationToken);
         var canonicalProducts = await GetCanonicalProductsAsync(categoryKey, cancellationToken);
         var sourceProductById = sourceProducts.ToDictionary(product => product.Id, StringComparer.OrdinalIgnoreCase);
@@ -101,19 +111,19 @@ public sealed class DataIntelligenceService(
             var groupProducts = sourceGroup.ToArray();
             var averageMappedAttributes = groupProducts.Length == 0
                 ? 0m
-                : decimal.Round(groupProducts.Average(product => (decimal)CountMappedAttributes(product, schemaKeys)), 2, MidpointRounding.AwayFromZero);
-            var coveragePercent = schema.Attributes.Count == 0
+                : decimal.Round(groupProducts.Average(product => (decimal)CountMappedAttributes(product, evaluationKeys)), 2, MidpointRounding.AwayFromZero);
+            var coveragePercent = evaluationKeys.Count == 0
                 ? 0m
-                : decimal.Round(averageMappedAttributes / schema.Attributes.Count * 100m, 2, MidpointRounding.AwayFromZero);
+                : decimal.Round(averageMappedAttributes / evaluationKeys.Count * 100m, 2, MidpointRounding.AwayFromZero);
 
             var attributeConfidences = groupProducts
-                .SelectMany(product => GetMappedConfidences(product, schemaKeys))
+                .SelectMany(product => GetMappedConfidences(product, evaluationKeys))
                 .ToArray();
             var averageAttributeConfidence = attributeConfidences.Length == 0
                 ? 0m
                 : decimal.Round(attributeConfidences.Average() * 100m, 2, MidpointRounding.AwayFromZero);
 
-            var (agreementCount, comparisonCount) = CountSourceAgreement(sourceGroup.Key, canonicalProducts, sourceProductById, schemaKeys);
+            var (agreementCount, comparisonCount) = CountSourceAgreement(sourceGroup.Key, canonicalProducts, sourceProductById, evaluationKeys);
             var agreementPercent = ToPercent(agreementCount, comparisonCount);
             var qualityScore = decimal.Round(
                 coveragePercent * 0.50m
@@ -169,7 +179,7 @@ public sealed class DataIntelligenceService(
             .ToArray();
 
         var suggestions = (await unmappedAttributeStore.ListAsync(categoryKey, cancellationToken))
-            .Select(unmapped => BuildSuggestion(unmapped, GetSchema(categoryKey)))
+            .Select(unmapped => BuildSuggestion(unmapped, ResolveSchema(categoryKey)))
             .Where(suggestion => suggestion is not null)
             .Select(suggestion => suggestion!)
             .OrderByDescending(suggestion => suggestion.Confidence)
@@ -557,19 +567,35 @@ public sealed class DataIntelligenceService(
         return await cursor.ToListAsync(cancellationToken);
     }
 
-    private static CategorySchema GetSchema(string categoryKey)
+    private HashSet<string> GetEvaluationKeys(string categoryKey, CategorySchema schema)
     {
-        if (string.Equals(categoryKey, TvCategorySchemaProvider.CategoryKey, StringComparison.OrdinalIgnoreCase))
+        var keys = schema.Attributes
+            .Where(attribute => attribute.IsRequired)
+            .Select(attribute => attribute.Key)
+            .Concat(categoryAttributeNormaliserRegistry.GetCompletenessAttributeKeys(categoryKey))
+            .Concat(categoryAttributeNormaliserRegistry.GetIdentityAttributeKeys(categoryKey))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (keys.Count > 0)
         {
-            return new TvCategorySchemaProvider().GetSchema();
+            return keys;
         }
 
-        return new CategorySchema
-        {
-            CategoryKey = categoryKey,
-            DisplayName = categoryKey,
-            Attributes = []
-        };
+        return schema.Attributes
+            .Select(attribute => attribute.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private CategorySchema ResolveSchema(string categoryKey)
+    {
+        return categorySchemaRegistry.GetSchema(categoryKey)
+            ?? new CategorySchema
+            {
+                CategoryKey = categoryKey,
+                DisplayName = categoryKey,
+                Attributes = []
+            };
     }
 
     private static AttributeMappingSuggestionDto? BuildSuggestion(UnmappedAttribute unmappedAttribute, CategorySchema schema)

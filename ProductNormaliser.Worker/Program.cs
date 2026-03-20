@@ -9,7 +9,6 @@ using ProductNormaliser.Worker;
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddProductNormaliserMongo(builder.Configuration);
 builder.Services.AddSingleton<IStructuredDataExtractor, SchemaOrgJsonLdExtractor>();
-builder.Services.AddSingleton<IAttributeNormaliser, TvAttributeNormaliser>();
 builder.Services.AddSingleton<IProductIdentityResolver, ProductIdentityResolver>();
 builder.Services.AddSingleton<MergeWeightCalculator>();
 builder.Services.AddSingleton<ICanonicalMergeService, CanonicalMergeService>();

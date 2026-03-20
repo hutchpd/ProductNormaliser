@@ -8,9 +8,7 @@ C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\bin\Debug\net10.0\Pr
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\bin\Debug\net10.0\ProductNormaliser.AdminApi.pdb
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\bin\Debug\net10.0\Microsoft.AspNetCore.OpenApi.dll
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\bin\Debug\net10.0\Microsoft.OpenApi.dll
-C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\bin\Debug\net10.0\ProductNormaliser.Core.dll
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\bin\Debug\net10.0\ProductNormaliser.Infrastructure.dll
-C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\bin\Debug\net10.0\ProductNormaliser.Core.pdb
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\bin\Debug\net10.0\ProductNormaliser.Infrastructure.pdb
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\obj\Debug\net10.0\ProductNormaliser.AdminApi.csproj.AssemblyReference.cache
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\obj\Debug\net10.0\rpswa.dswa.cache.json
@@ -41,3 +39,8 @@ C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\bin\Debug\net10.0\Mo
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\bin\Debug\net10.0\SharpCompress.dll
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\bin\Debug\net10.0\Snappier.dll
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\bin\Debug\net10.0\ZstdSharp.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\bin\Debug\net10.0\ProductNormaliser.Application.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\bin\Debug\net10.0\ProductNormaliser.Domain.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\bin\Debug\net10.0\ProductNormaliser.Application.pdb
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\bin\Debug\net10.0\ProductNormaliser.Domain.pdb
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.AdminApi\obj\Debug\net10.0\ProductNormaliser.AdminApi.sourcelink.json

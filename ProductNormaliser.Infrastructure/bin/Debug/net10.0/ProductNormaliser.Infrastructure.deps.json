@@ -12,7 +12,8 @@
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.0",
           "Microsoft.Extensions.Options.ConfigurationExtensions": "10.0.0",
           "MongoDB.Driver": "3.5.0",
-          "ProductNormaliser.Core": "1.0.0"
+          "ProductNormaliser.Application": "1.0.0",
+          "ProductNormaliser.Domain": "1.0.0"
         },
         "runtime": {
           "ProductNormaliser.Infrastructure.dll": {}
@@ -160,9 +161,20 @@
           }
         }
       },
-      "ProductNormaliser.Core/1.0.0": {
+      "ProductNormaliser.Application/1.0.0": {
+        "dependencies": {
+          "ProductNormaliser.Domain": "1.0.0"
+        },
         "runtime": {
-          "ProductNormaliser.Core.dll": {
+          "ProductNormaliser.Application.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "ProductNormaliser.Domain/1.0.0": {
+        "runtime": {
+          "ProductNormaliser.Domain.dll": {
             "assemblyVersion": "1.0.0.0",
             "fileVersion": "1.0.0.0"
           }
@@ -274,7 +286,12 @@
       "path": "zstdsharp.port/0.7.3",
       "hashPath": "zstdsharp.port.0.7.3.nupkg.sha512"
     },
-    "ProductNormaliser.Core/1.0.0": {
+    "ProductNormaliser.Application/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "ProductNormaliser.Domain/1.0.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

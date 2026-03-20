@@ -2,7 +2,7 @@
 
 ProductNormaliser is an open product-intelligence engine for turning messy retail and manufacturer page data into clean, canonical, comparable product records. It crawls source pages, extracts structured product evidence, normalises attributes into a category schema, resolves identity across sources, merges competing claims into a canonical product, and keeps learning over time from quality history, disagreement patterns, and page volatility.
 
-The current implementation is opinionated toward televisions as the first fully modelled category, but the architecture is intended to support additional categories by adding new schemas, normalisers, and extraction rules.
+The platform started with televisions and now includes category metadata, schema, and normalisation extension points that support broader electrical goods. `tv` remains the most mature category, with `monitor`, `laptop`, and `refrigerator` now represented in the category and normaliser infrastructure so the system can expand safely.
 
 ## What problem this solves
 
@@ -61,13 +61,18 @@ It is most useful where you want to own the data pipeline, inspect merge decisio
 
 ## Solution structure
 
-The solution contains five projects:
+The solution now contains ten projects:
 
-- [ProductNormaliser.Core](ProductNormaliser.Core/README.md): domain models, category schema, normalisation contracts, merge logic, and intelligence interfaces
+- [ProductNormaliser.Domain](ProductNormaliser.Domain/README.md): domain models, category schema, normalisation contracts, merge logic, and intelligence interfaces
+- [ProductNormaliser.Application](ProductNormaliser.Application/README.md): application-layer seam for use cases, orchestration, and future category-agnostic workflow composition
 - [ProductNormaliser.Infrastructure](ProductNormaliser.Infrastructure/README.md): MongoDB persistence, crawl queue, fetch/robots services, delta detection, extraction, trust, stability, and disagreement services
-- [ProductNormaliser.Worker](ProductNormaliser.Worker/README.md): background processing host that executes the crawl and merge pipeline
 - [ProductNormaliser.AdminApi](ProductNormaliser.AdminApi/README.md): operational and intelligence read API for queue state, crawl logs, conflicts, product history, and quality analytics
-- [ProductNormaliser.Tests](ProductNormaliser.Tests/README.md): NUnit test suite covering the pipeline end to end
+- [ProductNormaliser.Worker](ProductNormaliser.Worker/README.md): background processing host that executes the crawl and merge pipeline
+- [ProductNormaliser.Web](ProductNormaliser.Web/README.md): web UI host that will consume backend APIs rather than talking to persistence directly
+- [ProductNormaliser.Domain.Tests](ProductNormaliser.Domain.Tests/README.md): focused test project for domain-level rules and models
+- [ProductNormaliser.Application.Tests](ProductNormaliser.Application.Tests/README.md): current broad integration and orchestration test suite while responsibilities are being split by layer
+- [ProductNormaliser.AdminApi.Tests](ProductNormaliser.AdminApi.Tests/README.md): focused test project for API host and controller-facing behavior
+- [ProductNormaliser.Web.Tests](ProductNormaliser.Web.Tests/README.md): focused test project for the web UI host
 
 ## Architecture at a glance
 
@@ -86,19 +91,23 @@ The solution contains five projects:
 
 The solution currently includes:
 
-- schema-driven attribute normalisation for the TV category
+- category metadata and schema discovery for electrical-goods families
+- schema-driven attribute normalisation for TV, with category-specific providers in place for monitors, laptops, and refrigerators
 - alias handling and measurement parsing
 - structured data extraction from HTML and JSON-LD
 - MongoDB persistence for source and canonical records
+- MongoDB persistence for managed crawl sources and per-source throttling policy
 - identity resolution across sources
 - explainable merge weighting and conflict detection
 - semantic delta detection for product changes
 - worker orchestration with retry and skip/fail handling
 - admin endpoints for operational observability
+- admin endpoints for category catalog management and crawl-source management
 - quality analytics for coverage, unmapped attributes, source quality, and merge insights
 - temporal intelligence for source trust history, attribute stability, and product change timelines
 - adaptive crawl scheduling based on volatility, stability, freshness, and source behavior
 - per-source disagreement tracking that feeds back into trust and merge decisions
+- a Razor Pages web dashboard that reads category detail and source management data from the Admin API
 
 ## Prerequisites
 
@@ -179,6 +188,23 @@ OpenAPI is mapped in development builds.
 - `GET /api/products/{id}`: canonical product detail
 - `GET /api/products/{id}/history`: product change timeline
 
+### Category and source management endpoints
+
+- `GET /api/categories`: list known categories
+- `GET /api/categories/families`: list category families for dashboard grouping
+- `GET /api/categories/enabled`: list enabled crawlable categories
+- `GET /api/categories/{categoryKey}`: get category metadata
+- `GET /api/categories/{categoryKey}/schema`: get category schema
+- `GET /api/categories/{categoryKey}/detail`: get metadata and schema in one payload
+- `GET /api/sources`: list managed crawl sources
+- `GET /api/sources/{sourceId}`: get one managed source
+- `POST /api/sources`: register a managed source
+- `PUT /api/sources/{sourceId}`: update display name, base URL, and description
+- `POST /api/sources/{sourceId}/enable`: enable a source
+- `POST /api/sources/{sourceId}/disable`: disable a source
+- `PUT /api/sources/{sourceId}/categories`: update assigned category keys
+- `PUT /api/sources/{sourceId}/throttling`: update host throttling policy
+
 ### Quality and intelligence endpoints
 
 - `GET /api/quality/coverage/detailed`: category coverage against the schema
@@ -189,7 +215,7 @@ OpenAPI is mapped in development builds.
 - `GET /api/quality/attribute-stability`: per-attribute stability analytics
 - `GET /api/quality/source-disagreements`: per-source disagreement metrics
 
-The quality endpoints default to the `tv` category, which is the current first-class category schema.
+The quality endpoints default to the `tv` category, which remains the current first-class category schema, but the scoring and completeness model are now category-aware.
 
 ## Typical development workflow
 
@@ -209,8 +235,8 @@ The quality endpoints default to the `tv` category, which is the current first-c
 
 ## Current limitations
 
-- televisions are the only fully modelled category today
-- there is no dedicated ingestion UI or queue-management write API yet
+- TV remains the most mature category; monitor, laptop, and refrigerator support are currently thinner and should be extended with deeper extraction and normalisation rules over time
+- queue write flows are still not exposed as a public management API
 - authentication and role-based access are not configured for the admin surface
 - production deployment concerns such as distributed workers, secret management, and externalized observability are not yet formalized in the repo
 

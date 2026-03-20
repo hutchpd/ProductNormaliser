@@ -1,0 +1,39 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "ProductNormaliser.Application/1.0.0": {
+        "dependencies": {
+          "ProductNormaliser.Domain": "1.0.0"
+        },
+        "runtime": {
+          "ProductNormaliser.Application.dll": {}
+        }
+      },
+      "ProductNormaliser.Domain/1.0.0": {
+        "runtime": {
+          "ProductNormaliser.Domain.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "ProductNormaliser.Application/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "ProductNormaliser.Domain/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

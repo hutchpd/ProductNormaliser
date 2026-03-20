@@ -11,7 +11,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ProductNormaliser.Core\ProductNormaliser.Core.csproj" />
+    <ProjectReference Include="..\ProductNormaliser.Application\ProductNormaliser.Application.csproj" />
+    <ProjectReference Include="..\ProductNormaliser.Domain\ProductNormaliser.Domain.csproj" />
     <ProjectReference Include="..\ProductNormaliser.Infrastructure\ProductNormaliser.Infrastructure.csproj" />
   </ItemGroup>
 

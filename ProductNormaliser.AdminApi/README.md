@@ -1,6 +1,6 @@
 # ProductNormaliser.AdminApi
 
-ProductNormaliser.AdminApi is the read-side operational and intelligence API for the platform. It exposes queue state, crawl logs, conflicts, canonical product detail, change history, and quality analytics over the shared MongoDB database.
+ProductNormaliser.AdminApi is the operational, intelligence, and dashboard management API for the platform. It exposes queue state, crawl logs, conflicts, canonical product detail, change history, quality analytics, category metadata, and managed crawl-source administration over the shared MongoDB database.
 
 This is an internal-facing service designed to help operators, analysts, and developers inspect what the system is doing and why.
 
@@ -9,6 +9,8 @@ This is an internal-facing service designed to help operators, analysts, and dev
 - expose operational monitoring endpoints
 - expose product and change-history views
 - expose quality and source-intelligence analytics
+- expose category catalog and schema metadata for dashboard discovery
+- expose managed crawl-source administration for the web UI
 - translate persisted domain records into API DTOs suitable for inspection or dashboarding
 
 ## Runtime composition
@@ -20,6 +22,8 @@ At startup the API registers:
 - MongoDB-backed stores and infrastructure services
 - `IAdminQueryService` for operational read models
 - `IDataIntelligenceService` for quality and historical intelligence read models
+- `ICategoryManagementService` for category catalog and combined detail lookups
+- `ISourceManagementService` for source registration, validation, and policy updates
 
 ## Main controllers and endpoints
 
@@ -56,6 +60,30 @@ Returns merge conflicts where evidence is competing or ambiguous.
 
 These endpoints let you inspect the canonical record and the time series of meaningful change events.
 
+### Categories
+
+- `GET /api/categories`
+- `GET /api/categories/families`
+- `GET /api/categories/enabled`
+- `GET /api/categories/{categoryKey}`
+- `GET /api/categories/{categoryKey}/schema`
+- `GET /api/categories/{categoryKey}/detail`
+
+These endpoints exist so the dashboard can discover supported electrical-goods categories, group them by family, and render one-call detail pages that combine metadata and schema.
+
+### Sources
+
+- `GET /api/sources`
+- `GET /api/sources/{sourceId}`
+- `POST /api/sources`
+- `PUT /api/sources/{sourceId}`
+- `POST /api/sources/{sourceId}/enable`
+- `POST /api/sources/{sourceId}/disable`
+- `PUT /api/sources/{sourceId}/categories`
+- `PUT /api/sources/{sourceId}/throttling`
+
+These endpoints manage the dedicated crawl-source registry used by the web UI. They include OpenAPI response annotations and concrete example payloads in the generated document so dashboard and client developers can inspect the expected shapes directly.
+
 ### Quality and intelligence
 
 - `GET /api/quality/coverage/detailed`
@@ -66,7 +94,7 @@ These endpoints let you inspect the canonical record and the time series of mean
 - `GET /api/quality/attribute-stability`
 - `GET /api/quality/source-disagreements`
 
-Most of these endpoints accept a `categoryKey` query parameter and default to the `tv` category.
+Most of the quality endpoints accept a `categoryKey` query parameter and default to the `tv` category.
 
 The `source-history` and `source-disagreements` endpoints also support optional source filtering.
 
@@ -110,7 +138,7 @@ The included HTTP scratch file suggests a local development base address of `htt
 
 ## Current scope and limitations
 
-- this API is read-oriented; it does not currently expose queue-write or ingestion-management endpoints
+- queue write flows are still not exposed as a public ingestion API
 - authentication and authorization are not configured as a complete security model yet
 - it is best treated as an operational admin surface, not a public internet API
 

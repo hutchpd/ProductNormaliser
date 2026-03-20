@@ -1,0 +1,189 @@
+@page "{sourceId}"
+@model ProductNormaliser.Web.Pages.Sources.DetailsModel
+@{
+    ViewData["Title"] = Model.CurrentSource is null ? "Source" : Model.CurrentSource.DisplayName;
+}
+
+<section class="dashboard-shell">
+    <div class="hero-panel">
+        <div>
+            <p class="eyebrow">Source Management</p>
+            <h1>@(Model.CurrentSource?.DisplayName ?? "Unknown Source")</h1>
+            <p class="hero-copy">This page is wired to the source detail, update, enable or disable, categories, and throttling Admin API endpoints so the dashboard can manage crawl sources without direct database access.</p>
+        </div>
+        @if (Model.CurrentSource is not null)
+        {
+            <div class="hero-metrics">
+                <article>
+                    <span>Host</span>
+                    <strong>@Model.CurrentSource.Host</strong>
+                </article>
+                <article>
+                    <span>Categories</span>
+                    <strong>@Model.CurrentSource.SupportedCategoryKeys.Count</strong>
+                </article>
+                <article>
+                    <span>Status</span>
+                    <strong>@(Model.CurrentSource.IsEnabled ? "Enabled" : "Disabled")</strong>
+                </article>
+            </div>
+        }
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="notice success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="notice error">@Model.ErrorMessage</div>
+    }
+
+    <div asp-validation-summary="ModelOnly" class="notice error" role="alert"></div>
+
+    @if (Model.CurrentSource is null)
+    {
+        <div class="panel">
+            <p class="empty-state">The requested source could not be loaded.</p>
+        </div>
+    }
+    else
+    {
+        <div class="source-detail-grid">
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Identity</p>
+                        <h2>Edit core source settings</h2>
+                    </div>
+                    <form method="post" asp-page-handler="Toggle" class="inline-form">
+                        <input type="hidden" name="currentlyEnabled" value="@Model.CurrentSource.IsEnabled" />
+                        <button type="submit" class="btn @(Model.CurrentSource.IsEnabled ? "btn-outline-danger" : "btn-outline-success")">
+                            @(Model.CurrentSource.IsEnabled ? "Disable source" : "Enable source")
+                        </button>
+                    </form>
+                </div>
+
+                <form method="post" asp-page-handler="Update" class="source-form">
+                    <div class="form-grid">
+                        <div>
+                            <label asp-for="Source.DisplayName" class="form-label"></label>
+                            <input asp-for="Source.DisplayName" class="form-control" />
+                            <span asp-validation-for="Source.DisplayName" class="text-danger small"></span>
+                        </div>
+                        <div>
+                            <label asp-for="Source.BaseUrl" class="form-label"></label>
+                            <input asp-for="Source.BaseUrl" class="form-control" />
+                            <span asp-validation-for="Source.BaseUrl" class="text-danger small"></span>
+                        </div>
+                        <div class="wide">
+                            <label asp-for="Source.Description" class="form-label"></label>
+                            <textarea asp-for="Source.Description" rows="3" class="form-control"></textarea>
+                        </div>
+                    </div>
+                    <div class="actions-bar">
+                        <button type="submit" class="btn btn-dark">Save Source</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Categories</p>
+                        <h2>Assign supported product families</h2>
+                    </div>
+                </div>
+
+                <form method="post" asp-page-handler="Categories" class="source-form">
+                    <div class="check-grid">
+                    @foreach (var category in Model.AvailableCategories)
+                    {
+                        <label class="check-card">
+                            <input type="checkbox" name="CategoriesForm.CategoryKeys" value="@category.CategoryKey" checked="@Model.CategoriesForm.CategoryKeys.Contains(category.CategoryKey)" />
+                            <span>@category.DisplayName</span>
+                        </label>
+                    }
+                    </div>
+                    <div class="actions-bar">
+                        <button type="submit" class="btn btn-dark">Update Categories</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Throttling</p>
+                        <h2>Adjust host crawling policy</h2>
+                    </div>
+                </div>
+
+                <form method="post" asp-page-handler="Throttling" class="source-form">
+                    <div class="form-grid compact-grid">
+                        <div>
+                            <label asp-for="Throttling.MinDelayMs" class="form-label"></label>
+                            <input asp-for="Throttling.MinDelayMs" class="form-control" />
+                            <span asp-validation-for="Throttling.MinDelayMs" class="text-danger small"></span>
+                        </div>
+                        <div>
+                            <label asp-for="Throttling.MaxDelayMs" class="form-label"></label>
+                            <input asp-for="Throttling.MaxDelayMs" class="form-control" />
+                            <span asp-validation-for="Throttling.MaxDelayMs" class="text-danger small"></span>
+                        </div>
+                        <div>
+                            <label asp-for="Throttling.MaxConcurrentRequests" class="form-label"></label>
+                            <input asp-for="Throttling.MaxConcurrentRequests" class="form-control" />
+                            <span asp-validation-for="Throttling.MaxConcurrentRequests" class="text-danger small"></span>
+                        </div>
+                        <div>
+                            <label asp-for="Throttling.RequestsPerMinute" class="form-label"></label>
+                            <input asp-for="Throttling.RequestsPerMinute" class="form-control" />
+                            <span asp-validation-for="Throttling.RequestsPerMinute" class="text-danger small"></span>
+                        </div>
+                    </div>
+                    <label class="form-check">
+                        <input asp-for="Throttling.RespectRobotsTxt" class="form-check-input" />
+                        <span class="form-check-label">Respect robots.txt before crawling</span>
+                    </label>
+                    <div class="actions-bar">
+                        <button type="submit" class="btn btn-dark">Save Throttling</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Audit</p>
+                        <h2>Current source snapshot</h2>
+                    </div>
+                </div>
+
+                <dl class="detail-grid">
+                    <div>
+                        <dt>Source ID</dt>
+                        <dd>@Model.CurrentSource.SourceId</dd>
+                    </div>
+                    <div>
+                        <dt>Updated</dt>
+                        <dd>@Model.CurrentSource.UpdatedUtc.ToString("u")</dd>
+                    </div>
+                    <div>
+                        <dt>Created</dt>
+                        <dd>@Model.CurrentSource.CreatedUtc.ToString("u")</dd>
+                    </div>
+                    <div>
+                        <dt>Current categories</dt>
+                        <dd>@string.Join(", ", Model.CurrentSource.SupportedCategoryKeys)</dd>
+                    </div>
+                </dl>
+            </section>
+        </div>
+    }
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

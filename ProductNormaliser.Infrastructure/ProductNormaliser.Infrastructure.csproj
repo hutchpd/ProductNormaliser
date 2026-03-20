@@ -1,7 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\ProductNormaliser.Core\ProductNormaliser.Core.csproj" />
+    <ProjectReference Include="..\ProductNormaliser.Application\ProductNormaliser.Application.csproj" />
+    <ProjectReference Include="..\ProductNormaliser.Domain\ProductNormaliser.Domain.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

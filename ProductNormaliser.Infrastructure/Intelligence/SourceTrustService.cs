@@ -1,6 +1,7 @@
 using MongoDB.Driver;
 using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
+using ProductNormaliser.Core.Normalisation;
 using ProductNormaliser.Core.Schemas;
 using ProductNormaliser.Infrastructure.Mongo;
 
@@ -10,11 +11,24 @@ public sealed class SourceTrustService : ISourceTrustService
 {
     private readonly MongoDbContext mongoDbContext;
     private readonly ISourceDisagreementService? sourceDisagreementService;
+    private readonly ICategorySchemaRegistry categorySchemaRegistry;
+    private readonly ICategoryAttributeNormaliserRegistry categoryAttributeNormaliserRegistry;
 
-    public SourceTrustService(MongoDbContext mongoDbContext, ISourceDisagreementService? sourceDisagreementService = null)
+    public SourceTrustService(
+        MongoDbContext mongoDbContext,
+        ISourceDisagreementService? sourceDisagreementService = null,
+        ICategorySchemaRegistry? categorySchemaRegistry = null,
+        ICategoryAttributeNormaliserRegistry? categoryAttributeNormaliserRegistry = null)
     {
         this.mongoDbContext = mongoDbContext;
         this.sourceDisagreementService = sourceDisagreementService;
+        this.categorySchemaRegistry = categorySchemaRegistry ?? new CategorySchemaRegistry([new TvCategorySchemaProvider(), new MonitorCategorySchemaProvider(), new LaptopCategorySchemaProvider(), new RefrigeratorCategorySchemaProvider()]);
+        this.categoryAttributeNormaliserRegistry = categoryAttributeNormaliserRegistry ?? new CategoryAttributeNormaliserRegistry([
+            new TvAttributeNormaliser(),
+            new MonitorAttributeNormaliser(),
+            new LaptopAttributeNormaliser(),
+            new RefrigeratorAttributeNormaliser()
+        ]);
     }
 
     public decimal GetHistoricalTrustScore(string sourceName, string categoryKey)
@@ -55,7 +69,7 @@ public sealed class SourceTrustService : ISourceTrustService
 
     private SourceQualitySnapshot BuildSnapshot(string sourceName, string categoryKey)
     {
-        var schema = GetSchema(categoryKey);
+        var schema = ResolveSchema(categoryKey);
         var sourceProducts = mongoDbContext.SourceProducts
             .Find(product => product.SourceName == sourceName && product.CategoryKey == categoryKey)
             .ToList();
@@ -64,8 +78,9 @@ public sealed class SourceTrustService : ISourceTrustService
             .ToList()
             .Where(product => product.Sources.Any(source => string.Equals(source.SourceName, sourceName, StringComparison.OrdinalIgnoreCase)))
             .ToArray();
+        var sourceUrls = sourceProducts.Select(product => product.SourceUrl).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var crawlLogs = mongoDbContext.CrawlLogs
-            .Find(log => log.SourceName == sourceName)
+            .Find(log => log.SourceName == sourceName && (sourceUrls.Count == 0 || sourceUrls.Contains(log.Url)))
             .SortByDescending(log => log.TimestampUtc)
             .Limit(50)
             .ToList();
@@ -75,7 +90,7 @@ public sealed class SourceTrustService : ISourceTrustService
             .Limit(200)
             .ToList();
 
-        var attributeCoverage = CalculateAttributeCoverage(sourceProducts, schema);
+        var attributeCoverage = CalculateAttributeCoverage(sourceProducts, categoryKey, schema, categoryAttributeNormaliserRegistry);
         var conflictRate = CalculateConflictRate(relatedCanonicalProducts, sourceName);
         var agreementRate = CalculateAgreementRate(relatedCanonicalProducts, sourceName);
         var successfulCrawlRate = CalculateSuccessfulCrawlRate(crawlLogs);
@@ -108,36 +123,63 @@ public sealed class SourceTrustService : ISourceTrustService
         };
     }
 
-    private static decimal CalculateAttributeCoverage(IReadOnlyCollection<SourceProduct> sourceProducts, CategorySchema schema)
+    private static decimal CalculateAttributeCoverage(IReadOnlyCollection<SourceProduct> sourceProducts, string categoryKey, CategorySchema schema, ICategoryAttributeNormaliserRegistry categoryAttributeNormaliserRegistry)
     {
-        if (sourceProducts.Count == 0 || schema.Attributes.Count == 0)
+        if (sourceProducts.Count == 0)
         {
             return 0m;
         }
 
-        var totalCoverage = sourceProducts.Sum(product => Math.Min(1m, (decimal)CountMappedAttributes(product) / schema.Attributes.Count));
+        var evaluationKeys = GetEvaluationKeys(categoryKey, schema, categoryAttributeNormaliserRegistry);
+        if (evaluationKeys.Count == 0)
+        {
+            return 0m;
+        }
+
+        var totalCoverage = sourceProducts.Sum(product => Math.Min(1m, decimal.Divide(CountMappedAttributes(product, evaluationKeys), evaluationKeys.Count)));
         return Clamp(decimal.Round(totalCoverage / sourceProducts.Count, 4, MidpointRounding.AwayFromZero));
     }
 
-    private static int CountMappedAttributes(SourceProduct product)
+    private static int CountMappedAttributes(SourceProduct product, IReadOnlySet<string> evaluationKeys)
     {
-        var count = product.NormalisedAttributes.Values.Count(attribute => attribute.Value is not null);
-        if (!string.IsNullOrWhiteSpace(product.Brand))
+        var count = 0;
+        if (!string.IsNullOrWhiteSpace(product.Brand) && evaluationKeys.Contains("brand"))
         {
             count += 1;
         }
 
-        if (!string.IsNullOrWhiteSpace(product.ModelNumber))
+        if (!string.IsNullOrWhiteSpace(product.ModelNumber) && evaluationKeys.Contains("model_number"))
         {
             count += 1;
         }
 
-        if (!string.IsNullOrWhiteSpace(product.Gtin))
+        if (!string.IsNullOrWhiteSpace(product.Gtin) && evaluationKeys.Contains("gtin"))
         {
             count += 1;
         }
 
+        count += product.NormalisedAttributes.Values.Count(attribute => evaluationKeys.Contains(attribute.AttributeKey) && attribute.Value is not null && (attribute.Value is not string text || !string.IsNullOrWhiteSpace(text)));
         return count;
+    }
+
+    private static HashSet<string> GetEvaluationKeys(string categoryKey, CategorySchema schema, ICategoryAttributeNormaliserRegistry categoryAttributeNormaliserRegistry)
+    {
+        var keys = schema.Attributes
+            .Where(attribute => attribute.IsRequired)
+            .Select(attribute => attribute.Key)
+            .Concat(categoryAttributeNormaliserRegistry.GetCompletenessAttributeKeys(categoryKey))
+            .Concat(categoryAttributeNormaliserRegistry.GetIdentityAttributeKeys(categoryKey))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (keys.Count > 0)
+        {
+            return keys;
+        }
+
+        return schema.Attributes
+            .Select(attribute => attribute.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     private static decimal CalculateConflictRate(IReadOnlyCollection<CanonicalProduct> canonicalProducts, string sourceName)
@@ -208,11 +250,10 @@ public sealed class SourceTrustService : ISourceTrustService
         return Clamp(decimal.Round(1m - instability, 4, MidpointRounding.AwayFromZero));
     }
 
-    private static CategorySchema GetSchema(string categoryKey)
+    private CategorySchema ResolveSchema(string categoryKey)
     {
-        return string.Equals(categoryKey, TvCategorySchemaProvider.CategoryKey, StringComparison.OrdinalIgnoreCase)
-            ? new TvCategorySchemaProvider().GetSchema()
-            : new CategorySchema { CategoryKey = categoryKey, DisplayName = categoryKey, Attributes = [] };
+        return categorySchemaRegistry.GetSchema(categoryKey)
+            ?? new CategorySchema { CategoryKey = categoryKey, DisplayName = categoryKey, Attributes = [] };
     }
 
     private static decimal Clamp(decimal value)

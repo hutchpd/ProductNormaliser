@@ -6,8 +6,10 @@ using ProductNormaliser.Infrastructure.Mongo;
 
 namespace ProductNormaliser.Infrastructure.Intelligence;
 
-public sealed class AttributeStabilityService(MongoDbContext mongoDbContext) : IAttributeStabilityService
+public sealed class AttributeStabilityService(MongoDbContext mongoDbContext, ICategorySchemaRegistry? categorySchemaRegistry = null) : IAttributeStabilityService
 {
+    private readonly ICategorySchemaRegistry categorySchemaRegistry = categorySchemaRegistry ?? new CategorySchemaRegistry([new TvCategorySchemaProvider(), new MonitorCategorySchemaProvider(), new LaptopCategorySchemaProvider(), new RefrigeratorCategorySchemaProvider()]);
+
     public decimal GetStabilityScore(string categoryKey, string attributeKey)
     {
         return GetScores(categoryKey)
@@ -18,7 +20,7 @@ public sealed class AttributeStabilityService(MongoDbContext mongoDbContext) : I
 
     public IReadOnlyList<AttributeStabilityScore> GetScores(string categoryKey)
     {
-        var schema = GetSchema(categoryKey);
+        var schema = ResolveSchema(categoryKey);
         var events = mongoDbContext.ProductChangeEvents
             .Find(changeEvent => changeEvent.CategoryKey == categoryKey)
             .SortByDescending(changeEvent => changeEvent.TimestampUtc)
@@ -44,7 +46,7 @@ public sealed class AttributeStabilityService(MongoDbContext mongoDbContext) : I
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Count();
             var oscillationCount = CountOscillations(attributeEvents);
-            var (isSuspicious, suspicionReason) = DetectSuspicion(key, attributeEvents, oscillationCount);
+            var (isSuspicious, suspicionReason) = DetectSuspicion(categoryKey, key, attributeEvents, oscillationCount);
             var stabilityScore = CalculateStability(changeCount, oscillationCount, distinctValueCount, isSuspicious);
 
             scores.Add(new AttributeStabilityScore
@@ -100,7 +102,7 @@ public sealed class AttributeStabilityService(MongoDbContext mongoDbContext) : I
         return isSuspicious ? Math.Min(0.40m, stabilityScore) : stabilityScore;
     }
 
-    private static (bool IsSuspicious, string? Reason) DetectSuspicion(string attributeKey, IReadOnlyList<ProductChangeEvent> changeEvents, int oscillationCount)
+    private static (bool IsSuspicious, string? Reason) DetectSuspicion(string categoryKey, string attributeKey, IReadOnlyList<ProductChangeEvent> changeEvents, int oscillationCount)
     {
         if (oscillationCount >= 2)
         {
@@ -109,7 +111,7 @@ public sealed class AttributeStabilityService(MongoDbContext mongoDbContext) : I
 
         foreach (var changeEvent in changeEvents)
         {
-            if (IsImpossibleValue(attributeKey, changeEvent.NewValue))
+            if (IsImpossibleValue(categoryKey, attributeKey, changeEvent.NewValue))
             {
                 return (true, "Impossible or highly implausible value observed.");
             }
@@ -118,26 +120,38 @@ public sealed class AttributeStabilityService(MongoDbContext mongoDbContext) : I
         return (false, null);
     }
 
-    private static bool IsImpossibleValue(string attributeKey, object? value)
+    private static bool IsImpossibleValue(string categoryKey, string attributeKey, object? value)
     {
         if (value is null || !decimal.TryParse(value.ToString(), out var numericValue))
         {
             return false;
         }
 
-        return attributeKey switch
+        return (categoryKey, attributeKey) switch
         {
-            "refresh_rate_hz" => numericValue > 240m || numericValue < 24m,
-            "screen_size_inch" => numericValue > 120m || numericValue < 10m,
-            "hdmi_port_count" => numericValue > 12m || numericValue < 0m,
+            ("tv", "refresh_rate_hz") => numericValue > 240m || numericValue < 24m,
+            ("tv", "screen_size_inch") => numericValue > 120m || numericValue < 10m,
+            ("tv", "hdmi_port_count") => numericValue > 12m || numericValue < 0m,
+            ("monitor", "refresh_rate_hz") => numericValue > 500m || numericValue < 24m,
+            ("monitor", "screen_size_inch") => numericValue > 60m || numericValue < 10m,
+            ("monitor", "displayport_port_count") => numericValue > 6m || numericValue < 0m,
+            ("laptop", "ram_gb") => numericValue > 512m || numericValue < 2m,
+            ("laptop", "storage_capacity_gb") => numericValue > 8000m || numericValue < 32m,
+            ("laptop", "display_size_inch") => numericValue > 20m || numericValue < 10m,
+            ("laptop", "weight_kg") => numericValue > 10m || numericValue < 0.5m,
+            ("refrigerator", "total_capacity_litre") => numericValue > 1500m || numericValue < 40m,
+            ("refrigerator", "fridge_capacity_litre") => numericValue > 1200m || numericValue < 20m,
+            ("refrigerator", "freezer_capacity_litre") => numericValue > 800m || numericValue < 0m,
+            ("refrigerator", "width_mm") => numericValue > 2500m || numericValue < 300m,
+            ("refrigerator", "height_mm") => numericValue > 2500m || numericValue < 600m,
+            ("refrigerator", "depth_mm") => numericValue > 1500m || numericValue < 300m,
             _ => false
         };
     }
 
-    private static CategorySchema GetSchema(string categoryKey)
+    private CategorySchema ResolveSchema(string categoryKey)
     {
-        return string.Equals(categoryKey, TvCategorySchemaProvider.CategoryKey, StringComparison.OrdinalIgnoreCase)
-            ? new TvCategorySchemaProvider().GetSchema()
-            : new CategorySchema { CategoryKey = categoryKey, DisplayName = categoryKey, Attributes = [] };
+        return categorySchemaRegistry.GetSchema(categoryKey)
+            ?? new CategorySchema { CategoryKey = categoryKey, DisplayName = categoryKey, Attributes = [] };
     }
 }

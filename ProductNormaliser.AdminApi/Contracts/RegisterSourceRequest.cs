@@ -1,0 +1,23 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace ProductNormaliser.AdminApi.Contracts;
+
+public sealed class RegisterSourceRequest
+{
+    [Required]
+    public string SourceId { get; init; } = default!;
+
+    [Required]
+    public string DisplayName { get; init; } = default!;
+
+    [Required]
+    public string BaseUrl { get; init; } = default!;
+
+    public string? Description { get; init; }
+
+    public bool IsEnabled { get; init; } = true;
+
+    public IReadOnlyList<string> SupportedCategoryKeys { get; init; } = [];
+
+    public SourceThrottlingPolicyDto? ThrottlingPolicy { get; init; }
+}

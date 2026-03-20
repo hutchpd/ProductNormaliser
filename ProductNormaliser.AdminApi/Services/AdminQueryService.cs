@@ -1,6 +1,7 @@
 using MongoDB.Driver;
 using ProductNormaliser.AdminApi.Contracts;
 using ProductNormaliser.Core.Models;
+using ProductNormaliser.Core.Normalisation;
 using ProductNormaliser.Core.Schemas;
 using ProductNormaliser.Infrastructure.Mongo;
 using ProductNormaliser.Infrastructure.Mongo.Repositories;
@@ -12,9 +13,17 @@ public sealed class AdminQueryService(
     ICanonicalProductStore canonicalProductStore,
     ISourceProductStore sourceProductStore,
     IProductChangeEventStore productChangeEventStore,
-    MongoDbContext mongoDbContext) : IAdminQueryService
+    MongoDbContext mongoDbContext,
+    ICategorySchemaRegistry? categorySchemaRegistry = null,
+    ICategoryAttributeNormaliserRegistry? categoryAttributeNormaliserRegistry = null) : IAdminQueryService
 {
-    private static readonly string[] KeyAttributeKeys = ["brand", "model_number", "screen_size_inch", "native_resolution", "display_technology"];
+    private readonly ICategorySchemaRegistry categorySchemaRegistry = categorySchemaRegistry ?? new CategorySchemaRegistry([new TvCategorySchemaProvider(), new MonitorCategorySchemaProvider(), new LaptopCategorySchemaProvider(), new RefrigeratorCategorySchemaProvider()]);
+    private readonly ICategoryAttributeNormaliserRegistry categoryAttributeNormaliserRegistry = categoryAttributeNormaliserRegistry ?? new CategoryAttributeNormaliserRegistry([
+        new TvAttributeNormaliser(),
+        new MonitorAttributeNormaliser(),
+        new LaptopAttributeNormaliser(),
+        new RefrigeratorAttributeNormaliser()
+    ]);
 
     public async Task<IReadOnlyList<CrawlLogDto>> GetCrawlLogsAsync(CancellationToken cancellationToken)
     {
@@ -211,11 +220,15 @@ public sealed class AdminQueryService(
         return decimal.Round((decimal)numerator / denominator * 100m, 2, MidpointRounding.AwayFromZero);
     }
 
-    private static bool IsMissingKeyAttributes(CanonicalProduct product)
+    private bool IsMissingKeyAttributes(CanonicalProduct product)
     {
-        var provider = new TvCategorySchemaProvider();
-        var requiredKeys = provider.GetSchema().Attributes.Where(attribute => attribute.IsRequired).Select(attribute => attribute.Key);
-        var keysToCheck = requiredKeys.Concat(KeyAttributeKeys).Distinct(StringComparer.Ordinal);
+        var requiredKeys = categorySchemaRegistry.GetSchema(product.CategoryKey)?.Attributes
+            .Where(attribute => attribute.IsRequired)
+            .Select(attribute => attribute.Key)
+            ?? [];
+        var keysToCheck = requiredKeys
+            .Concat(categoryAttributeNormaliserRegistry.GetCompletenessAttributeKeys(product.CategoryKey))
+            .Distinct(StringComparer.Ordinal);
 
         foreach (var key in keysToCheck)
         {

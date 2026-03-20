@@ -1,12 +1,24 @@
 using MongoDB.Driver;
 using ProductNormaliser.Core.Models;
+using ProductNormaliser.Core.Normalisation;
 using ProductNormaliser.Core.Schemas;
 using ProductNormaliser.Infrastructure.Mongo;
 
 namespace ProductNormaliser.Infrastructure.Crawling;
 
-public sealed class CrawlPriorityService(MongoDbContext mongoDbContext) : ICrawlPriorityService
+public sealed class CrawlPriorityService(
+    MongoDbContext mongoDbContext,
+    ICategorySchemaRegistry? categorySchemaRegistry = null,
+    ICategoryAttributeNormaliserRegistry? categoryAttributeNormaliserRegistry = null) : ICrawlPriorityService
 {
+    private readonly ICategorySchemaRegistry categorySchemaRegistry = categorySchemaRegistry ?? new CategorySchemaRegistry([new TvCategorySchemaProvider(), new MonitorCategorySchemaProvider(), new LaptopCategorySchemaProvider(), new RefrigeratorCategorySchemaProvider()]);
+    private readonly ICategoryAttributeNormaliserRegistry categoryAttributeNormaliserRegistry = categoryAttributeNormaliserRegistry ?? new CategoryAttributeNormaliserRegistry([
+        new TvAttributeNormaliser(),
+        new MonitorAttributeNormaliser(),
+        new LaptopAttributeNormaliser(),
+        new RefrigeratorAttributeNormaliser()
+    ]);
+
     public async Task<IReadOnlyList<CrawlPriorityAssessment>> GetPrioritiesAsync(DateTime utcNow, CancellationToken cancellationToken)
     {
         var queueItems = await mongoDbContext.CrawlQueueItems.Find(item => item.Status == "queued" && (item.NextAttemptUtc == null || item.NextAttemptUtc <= utcNow))
@@ -27,7 +39,7 @@ public sealed class CrawlPriorityService(MongoDbContext mongoDbContext) : ICrawl
 
         foreach (var queueItem in queueItems)
         {
-            var sourceQualityScore = CalculateSourceQuality(queueItem.SourceName, sourceProducts);
+            var sourceQualityScore = CalculateSourceQuality(queueItem.SourceName, queueItem.CategoryKey, sourceProducts);
             var changeFrequencyScore = CalculateChangeFrequency(queueItem, crawlLogs);
             var latestSnapshot = sourceSnapshots.FirstOrDefault(snapshot =>
                 string.Equals(snapshot.SourceName, queueItem.SourceName, StringComparison.OrdinalIgnoreCase)
@@ -69,9 +81,10 @@ public sealed class CrawlPriorityService(MongoDbContext mongoDbContext) : ICrawl
             .ToArray();
     }
 
-    private static decimal CalculateSourceQuality(string sourceName, IReadOnlyCollection<SourceProduct> sourceProducts)
+    private decimal CalculateSourceQuality(string sourceName, string categoryKey, IReadOnlyCollection<SourceProduct> sourceProducts)
     {
-        var products = sourceProducts.Where(product => string.Equals(product.SourceName, sourceName, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var products = sourceProducts.Where(product => string.Equals(product.SourceName, sourceName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(product.CategoryKey, categoryKey, StringComparison.OrdinalIgnoreCase)).ToArray();
         if (products.Length == 0)
         {
             return 0.45m;
@@ -81,8 +94,21 @@ public sealed class CrawlPriorityService(MongoDbContext mongoDbContext) : ICrawl
             .SelectMany(product => product.NormalisedAttributes.Values)
             .DefaultIfEmpty(new NormalisedAttributeValue { Confidence = 0.70m })
             .Average(attribute => attribute.Confidence);
-        var completeness = products.Average(product => Math.Min(1.00m, (decimal)product.NormalisedAttributes.Count / 8m));
+        var completeness = products.Average(CalculateCompleteness);
         return Clamp(decimal.Round(averageConfidence * 0.65m + completeness * 0.35m, 4, MidpointRounding.AwayFromZero));
+    }
+
+    private decimal CalculateCompleteness(SourceProduct product)
+    {
+        var keysToCheck = GetEvaluationKeys(product.CategoryKey);
+
+        if (keysToCheck.Length == 0)
+        {
+            return Math.Min(1.00m, (decimal)product.NormalisedAttributes.Count / 8m);
+        }
+
+        var populatedCount = keysToCheck.Count(key => IsPresent(product, key));
+        return Math.Min(1.00m, decimal.Divide(populatedCount, keysToCheck.Length));
     }
 
     private static decimal CalculateChangeFrequency(CrawlQueueItem queueItem, IReadOnlyCollection<CrawlLog> crawlLogs)
@@ -102,7 +128,7 @@ public sealed class CrawlPriorityService(MongoDbContext mongoDbContext) : ICrawl
         return Clamp(decimal.Round((decimal)changeCount / recentLogs.Length, 4, MidpointRounding.AwayFromZero));
     }
 
-    private static (int MissingAttributeCount, decimal MissingAttributeScore) CalculateMissingAttributeSignal(
+    private (int MissingAttributeCount, decimal MissingAttributeScore) CalculateMissingAttributeSignal(
         CrawlQueueItem queueItem,
         IReadOnlyCollection<SourceProduct> sourceProducts,
         IReadOnlyCollection<CanonicalProduct> canonicalProducts)
@@ -125,14 +151,14 @@ public sealed class CrawlPriorityService(MongoDbContext mongoDbContext) : ICrawl
             return (2, 0.50m);
         }
 
-        var schema = GetSchema(queueItem.CategoryKey);
-        if (schema.Attributes.Count == 0)
+        var keysToCheck = GetEvaluationKeys(queueItem.CategoryKey);
+        if (keysToCheck.Length == 0)
         {
             return (0, 0m);
         }
 
-        var missingCount = schema.Attributes.Count(attribute => IsMissing(canonicalProduct, attribute.Key));
-        return (missingCount, Clamp(decimal.Round((decimal)missingCount / schema.Attributes.Count, 4, MidpointRounding.AwayFromZero)));
+        var missingCount = keysToCheck.Count(key => IsMissing(canonicalProduct, key));
+        return (missingCount, Clamp(decimal.Round(decimal.Divide(missingCount, keysToCheck.Length), 4, MidpointRounding.AwayFromZero)));
     }
 
     private static (decimal StalenessScore, DateTime? LastCrawledUtc) CalculateStaleness(CrawlQueueItem queueItem, DateTime utcNow, IReadOnlyCollection<CrawlLog> crawlLogs)
@@ -195,11 +221,26 @@ public sealed class CrawlPriorityService(MongoDbContext mongoDbContext) : ICrawl
         return reasons.Count == 0 ? ["Baseline recrawl priority"] : reasons;
     }
 
-    private static CategorySchema GetSchema(string categoryKey)
+    private CategorySchema ResolveSchema(string categoryKey)
     {
-        return string.Equals(categoryKey, TvCategorySchemaProvider.CategoryKey, StringComparison.OrdinalIgnoreCase)
-            ? new TvCategorySchemaProvider().GetSchema()
-            : new CategorySchema { CategoryKey = categoryKey, DisplayName = categoryKey, Attributes = [] };
+        return categorySchemaRegistry.GetSchema(categoryKey)
+            ?? new CategorySchema { CategoryKey = categoryKey, DisplayName = categoryKey, Attributes = [] };
+    }
+
+    private string[] GetEvaluationKeys(string categoryKey)
+    {
+        var schema = ResolveSchema(categoryKey);
+        var keys = schema.Attributes
+            .Where(attribute => attribute.IsRequired)
+            .Select(attribute => attribute.Key)
+            .Concat(categoryAttributeNormaliserRegistry.GetCompletenessAttributeKeys(categoryKey))
+            .Concat(categoryAttributeNormaliserRegistry.GetIdentityAttributeKeys(categoryKey))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return keys.Length > 0
+            ? keys
+            : schema.Attributes.Select(attribute => attribute.Key).ToArray();
     }
 
     private static bool IsMissing(CanonicalProduct product, string key)
@@ -210,6 +251,19 @@ public sealed class CrawlPriorityService(MongoDbContext mongoDbContext) : ICrawl
             "model_number" => string.IsNullOrWhiteSpace(product.ModelNumber),
             "gtin" => string.IsNullOrWhiteSpace(product.Gtin),
             _ => !product.Attributes.TryGetValue(key, out var attribute) || attribute.Value is null || (attribute.Value is string text && string.IsNullOrWhiteSpace(text))
+        };
+    }
+
+    private static bool IsPresent(SourceProduct product, string key)
+    {
+        return key switch
+        {
+            "brand" => !string.IsNullOrWhiteSpace(product.Brand),
+            "model_number" => !string.IsNullOrWhiteSpace(product.ModelNumber),
+            "gtin" => !string.IsNullOrWhiteSpace(product.Gtin),
+            _ => product.NormalisedAttributes.TryGetValue(key, out var attribute)
+                && attribute.Value is not null
+                && (attribute.Value is not string text || !string.IsNullOrWhiteSpace(text))
         };
     }
 

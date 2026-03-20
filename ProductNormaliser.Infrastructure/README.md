@@ -22,7 +22,7 @@ Contains MongoDB configuration, database context, collection naming, mappings, a
 The `AddProductNormaliserMongo` extension method wires up:
 
 - Mongo client and database context
-- repositories for raw pages, source products, canonical products, offers, conflicts, queue, logs, unmapped attributes, source quality snapshots, change events, adaptive crawl policies, and source disagreements
+- repositories for category metadata, managed crawl sources, raw pages, source products, canonical products, offers, conflicts, queue, logs, unmapped attributes, source quality snapshots, change events, adaptive crawl policies, and source disagreements
 - interface bindings used by the worker and API
 - intelligence services for trust, stability, disagreement, and backoff
 
@@ -69,6 +69,8 @@ Infrastructure is responsible for persisting the evidence trail, not just the fi
 - source disagreement records
 
 This is one of the most important distinctions between ProductNormaliser and a simplistic product import job. The system retains enough state to explain how and why it evolved.
+
+The newer managed source registry adds a dedicated `crawl_sources` collection so operator-controlled source state, category coverage, and throttling policy do not need to be inferred from queue or product data.
 
 ## Configuration
 

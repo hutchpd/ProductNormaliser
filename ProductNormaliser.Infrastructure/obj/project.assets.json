@@ -227,14 +227,27 @@
           "lib/net7.0/ZstdSharp.dll": {}
         }
       },
-      "ProductNormaliser.Core/1.0.0": {
+      "ProductNormaliser.Application/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v10.0",
+        "dependencies": {
+          "ProductNormaliser.Domain": "1.0.0"
+        },
+        "compile": {
+          "bin/placeholder/ProductNormaliser.Application.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/ProductNormaliser.Application.dll": {}
+        }
+      },
+      "ProductNormaliser.Domain/1.0.0": {
         "type": "project",
         "framework": ".NETCoreApp,Version=v10.0",
         "compile": {
-          "bin/placeholder/ProductNormaliser.Core.dll": {}
+          "bin/placeholder/ProductNormaliser.Domain.dll": {}
         },
         "runtime": {
-          "bin/placeholder/ProductNormaliser.Core.dll": {}
+          "bin/placeholder/ProductNormaliser.Domain.dll": {}
         }
       }
     }
@@ -602,10 +615,15 @@
         "zstdsharp.port.nuspec"
       ]
     },
-    "ProductNormaliser.Core/1.0.0": {
+    "ProductNormaliser.Application/1.0.0": {
       "type": "project",
-      "path": "../ProductNormaliser.Core/ProductNormaliser.Core.csproj",
-      "msbuildProject": "../ProductNormaliser.Core/ProductNormaliser.Core.csproj"
+      "path": "../ProductNormaliser.Application/ProductNormaliser.Application.csproj",
+      "msbuildProject": "../ProductNormaliser.Application/ProductNormaliser.Application.csproj"
+    },
+    "ProductNormaliser.Domain/1.0.0": {
+      "type": "project",
+      "path": "../ProductNormaliser.Domain/ProductNormaliser.Domain.csproj",
+      "msbuildProject": "../ProductNormaliser.Domain/ProductNormaliser.Domain.csproj"
     }
   },
   "projectFileDependencyGroups": {
@@ -614,7 +632,8 @@
       "Microsoft.Extensions.DependencyInjection.Abstractions >= 10.0.0",
       "Microsoft.Extensions.Options.ConfigurationExtensions >= 10.0.0",
       "MongoDB.Driver >= 3.5.0",
-      "ProductNormaliser.Core >= 1.0.0"
+      "ProductNormaliser.Application >= 1.0.0",
+      "ProductNormaliser.Domain >= 1.0.0"
     ]
   },
   "packageFolders": {
@@ -650,8 +669,11 @@
         "net10.0": {
           "targetAlias": "net10.0",
           "projectReferences": {
-            "C:\\Users\\xhabl\\ProductNormaliser\\ProductNormaliser.Core\\ProductNormaliser.Core.csproj": {
-              "projectPath": "C:\\Users\\xhabl\\ProductNormaliser\\ProductNormaliser.Core\\ProductNormaliser.Core.csproj"
+            "C:\\Users\\xhabl\\ProductNormaliser\\ProductNormaliser.Application\\ProductNormaliser.Application.csproj": {
+              "projectPath": "C:\\Users\\xhabl\\ProductNormaliser\\ProductNormaliser.Application\\ProductNormaliser.Application.csproj"
+            },
+            "C:\\Users\\xhabl\\ProductNormaliser\\ProductNormaliser.Domain\\ProductNormaliser.Domain.csproj": {
+              "projectPath": "C:\\Users\\xhabl\\ProductNormaliser\\ProductNormaliser.Domain\\ProductNormaliser.Domain.csproj"
             }
           }
         }

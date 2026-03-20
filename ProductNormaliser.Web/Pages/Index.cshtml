@@ -1,0 +1,268 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<section class="dashboard-shell">
+    <div class="hero-panel">
+        <div>
+            <p class="eyebrow">Operations Dashboard</p>
+            <h1>Category-aware product intelligence for electrical goods</h1>
+            <p class="hero-copy">The web layer now reads category detail and managed crawl sources directly from the Admin API, so the dashboard can inspect schema shape and control source availability without touching persistence.</p>
+        </div>
+        <div class="hero-metrics">
+            <article>
+                <span>Enabled categories</span>
+                <strong>@Model.Categories.Count</strong>
+            </article>
+            <article>
+                <span>Managed sources</span>
+                <strong>@Model.Sources.Count</strong>
+            </article>
+            <article>
+                <span>Selected category</span>
+                <strong>@(Model.SelectedCategory?.Metadata.DisplayName ?? "None")</strong>
+            </article>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="notice success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="notice error">@Model.ErrorMessage</div>
+    }
+
+    <div asp-validation-summary="ModelOnly" class="notice error" role="alert"></div>
+
+    <div class="dashboard-grid">
+        <section class="panel panel-category">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Category Detail</p>
+                    <h2>Schema and metadata in one request</h2>
+                </div>
+                <form method="get" class="category-picker">
+                    <label asp-for="SelectedCategoryKey" class="form-label">Category</label>
+                    <select asp-for="SelectedCategoryKey" class="form-select" onchange="this.form.submit()">
+                        @foreach (var category in Model.Categories)
+                        {
+                            <option value="@category.CategoryKey">@category.DisplayName</option>
+                        }
+                    </select>
+                </form>
+            </div>
+
+            @if (Model.SelectedCategory is null)
+            {
+                <p class="empty-state">No enabled categories are currently available from the Admin API.</p>
+            }
+            else
+            {
+                <div class="chip-row">
+                    <span class="chip">@Model.SelectedCategory.Metadata.FamilyDisplayName</span>
+                    <span class="chip">Support: @Model.SelectedCategory.Metadata.CrawlSupportStatus</span>
+                    <span class="chip">Completeness: @Model.SelectedCategory.Metadata.SchemaCompletenessScore</span>
+                </div>
+
+                <dl class="detail-grid">
+                    <div>
+                        <dt>Category key</dt>
+                        <dd>@Model.SelectedCategory.Metadata.CategoryKey</dd>
+                    </div>
+                    <div>
+                        <dt>Icon key</dt>
+                        <dd>@Model.SelectedCategory.Metadata.IconKey</dd>
+                    </div>
+                    <div>
+                        <dt>Enabled</dt>
+                        <dd>@(Model.SelectedCategory.Metadata.IsEnabled ? "Yes" : "No")</dd>
+                    </div>
+                    <div>
+                        <dt>Attributes</dt>
+                        <dd>@Model.SelectedCategory.Schema.Attributes.Count</dd>
+                    </div>
+                </dl>
+
+                <div class="table-wrap">
+                    <table class="table dashboard-table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Attribute</th>
+                                <th>Type</th>
+                                <th>Unit</th>
+                                <th>Required</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var schemaAttribute in Model.SelectedCategory.Schema.Attributes)
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@schemaAttribute.DisplayName</strong>
+                                    <div class="text-muted small">@schemaAttribute.Key</div>
+                                </td>
+                                <td>@schemaAttribute.ValueType</td>
+                                <td>@(schemaAttribute.Unit ?? "-")</td>
+                                <td>@(schemaAttribute.IsRequired ? "Required" : "Optional")</td>
+                                <td>@schemaAttribute.Description</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <section class="panel panel-sources">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Managed Sources</p>
+                    <h2>Live source registry</h2>
+                </div>
+            </div>
+
+            @if (Model.Sources.Count == 0)
+            {
+                <p class="empty-state">No managed crawl sources have been registered yet.</p>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table dashboard-table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Source</th>
+                                <th>Categories</th>
+                                <th>Rate limits</th>
+                                <th>Status</th>
+                                <th class="actions-col">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var source in Model.Sources)
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@source.DisplayName</strong>
+                                    <div class="text-muted small">@source.Host</div>
+                                </td>
+                                <td>@string.Join(", ", source.SupportedCategoryKeys)</td>
+                                <td>@source.ThrottlingPolicy.RequestsPerMinute rpm, @source.ThrottlingPolicy.MaxConcurrentRequests concurrent</td>
+                                <td>
+                                    <span class="status-pill @(source.IsEnabled ? "enabled" : "disabled")">
+                                        @(source.IsEnabled ? "Enabled" : "Disabled")
+                                    </span>
+                                </td>
+                                <td class="actions-col">
+                                    <a class="btn btn-outline-dark btn-sm" asp-page="/Sources/Details" asp-route-sourceId="@source.SourceId">Manage</a>
+                                    <form method="post" asp-page-handler="ToggleSource" class="inline-form">
+                                        <input type="hidden" name="sourceId" value="@source.SourceId" />
+                                        <input type="hidden" name="currentlyEnabled" value="@source.IsEnabled" />
+                                        <input type="hidden" name="category" value="@Model.SelectedCategoryKey" />
+                                        <button type="submit" class="btn btn-sm @(source.IsEnabled ? "btn-outline-danger" : "btn-outline-success")">
+                                            @(source.IsEnabled ? "Disable" : "Enable")
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    </div>
+
+    <section class="panel panel-register">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Register Source</p>
+                <h2>Seed a managed crawl source</h2>
+            </div>
+        </div>
+
+        <form method="post" asp-page-handler="RegisterSource" class="source-form">
+            <div class="form-grid">
+                <div>
+                    <label asp-for="RegisterSource.SourceId" class="form-label"></label>
+                    <input asp-for="RegisterSource.SourceId" class="form-control" placeholder="ao_uk" />
+                    <span asp-validation-for="RegisterSource.SourceId" class="text-danger small"></span>
+                </div>
+                <div>
+                    <label asp-for="RegisterSource.DisplayName" class="form-label"></label>
+                    <input asp-for="RegisterSource.DisplayName" class="form-control" placeholder="AO UK" />
+                    <span asp-validation-for="RegisterSource.DisplayName" class="text-danger small"></span>
+                </div>
+                <div class="wide">
+                    <label asp-for="RegisterSource.BaseUrl" class="form-label"></label>
+                    <input asp-for="RegisterSource.BaseUrl" class="form-control" placeholder="https://ao.com/" />
+                    <span asp-validation-for="RegisterSource.BaseUrl" class="text-danger small"></span>
+                </div>
+                <div class="wide">
+                    <label asp-for="RegisterSource.Description" class="form-label"></label>
+                    <textarea asp-for="RegisterSource.Description" class="form-control" rows="2" placeholder="Optional operational notes"></textarea>
+                </div>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <div class="form-grid compact-grid">
+                <div>
+                    <label asp-for="RegisterSource.MinDelayMs" class="form-label"></label>
+                    <input asp-for="RegisterSource.MinDelayMs" class="form-control" />
+                </div>
+                <div>
+                    <label asp-for="RegisterSource.MaxDelayMs" class="form-label"></label>
+                    <input asp-for="RegisterSource.MaxDelayMs" class="form-control" />
+                </div>
+                <div>
+                    <label asp-for="RegisterSource.MaxConcurrentRequests" class="form-label"></label>
+                    <input asp-for="RegisterSource.MaxConcurrentRequests" class="form-control" />
+                </div>
+                <div>
+                    <label asp-for="RegisterSource.RequestsPerMinute" class="form-label"></label>
+                    <input asp-for="RegisterSource.RequestsPerMinute" class="form-control" />
+                </div>
+            </div>
+
+            <div class="toggle-row">
+                <label class="form-check">
+                    <input asp-for="RegisterSource.IsEnabled" class="form-check-input" />
+                    <span class="form-check-label">Enable immediately</span>
+                </label>
+                <label class="form-check">
+                    <input asp-for="RegisterSource.RespectRobotsTxt" class="form-check-input" />
+                    <span class="form-check-label">Respect robots.txt</span>
+                </label>
+            </div>
+
+            <div>
+                <p class="form-label mb-2">Supported categories</p>
+                <div class="check-grid">
+                @foreach (var category in Model.Categories)
+                {
+                    <label class="check-card">
+                        <input type="checkbox" name="RegisterSource.SelectedCategoryKeys" value="@category.CategoryKey" checked="@Model.RegisterSource.SelectedCategoryKeys.Contains(category.CategoryKey)" />
+                        <span>@category.DisplayName</span>
+                    </label>
+                }
+                </div>
+                <span asp-validation-for="RegisterSource.SelectedCategoryKeys" class="text-danger small"></span>
+            </div>
+
+            <div class="actions-bar">
+                <button type="submit" class="btn btn-dark">Register Source</button>
+            </div>
+        </form>
+    </section>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

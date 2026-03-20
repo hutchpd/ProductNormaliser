@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ProductNormaliser.AdminApi")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+51be1d73a3f316353191056319dc66f3a31d522d")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+05e85a9682adc82d09ddd529cf4b1ecdcb05c976")]
 [assembly: System.Reflection.AssemblyProductAttribute("ProductNormaliser.AdminApi")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ProductNormaliser.AdminApi")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

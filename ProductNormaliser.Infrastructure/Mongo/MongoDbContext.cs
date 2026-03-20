@@ -19,6 +19,8 @@ public sealed class MongoDbContext
 
         Client = mongoClient;
         Database = mongoClient.GetDatabase(databaseName);
+        Categories = Database.GetCollection<CategoryMetadata>(MongoCollectionNames.Categories);
+        CrawlSources = Database.GetCollection<CrawlSource>(MongoCollectionNames.CrawlSources);
         RawPages = Database.GetCollection<RawPage>(MongoCollectionNames.RawPages);
         SourceProducts = Database.GetCollection<SourceProduct>(MongoCollectionNames.SourceProducts);
         CanonicalProducts = Database.GetCollection<CanonicalProduct>(MongoCollectionNames.CanonicalProducts);
@@ -36,6 +38,10 @@ public sealed class MongoDbContext
     public IMongoClient Client { get; }
 
     public IMongoDatabase Database { get; }
+
+    public IMongoCollection<CategoryMetadata> Categories { get; }
+
+    public IMongoCollection<CrawlSource> CrawlSources { get; }
 
     public IMongoCollection<RawPage> RawPages { get; }
 
@@ -63,6 +69,19 @@ public sealed class MongoDbContext
 
     public async Task EnsureIndexesAsync(CancellationToken cancellationToken = default)
     {
+        await Categories.Indexes.CreateOneAsync(
+            new CreateIndexModel<CategoryMetadata>(Builders<CategoryMetadata>.IndexKeys
+                .Ascending(category => category.FamilyKey)
+                .Ascending(category => category.IsEnabled)
+                .Ascending(category => category.CrawlSupportStatus)),
+            cancellationToken: cancellationToken);
+
+        await CrawlSources.Indexes.CreateOneAsync(
+            new CreateIndexModel<CrawlSource>(Builders<CrawlSource>.IndexKeys
+                .Ascending(source => source.Host)
+                .Ascending(source => source.IsEnabled)),
+            cancellationToken: cancellationToken);
+
         await CanonicalProducts.Indexes.CreateManyAsync(
             [
                 new CreateIndexModel<CanonicalProduct>(Builders<CanonicalProduct>.IndexKeys.Ascending(product => product.Gtin)),

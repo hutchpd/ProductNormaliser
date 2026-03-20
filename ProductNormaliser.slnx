@@ -1,7 +1,12 @@
 <Solution>
   <Project Path="ProductNormaliser.AdminApi/ProductNormaliser.AdminApi.csproj" />
-  <Project Path="ProductNormaliser.Core/ProductNormaliser.Core.csproj" />
+  <Project Path="ProductNormaliser.AdminApi.Tests/ProductNormaliser.AdminApi.Tests.csproj" />
+  <Project Path="ProductNormaliser.Application/ProductNormaliser.Application.csproj" />
+  <Project Path="ProductNormaliser.Application.Tests/ProductNormaliser.Application.Tests.csproj" />
+  <Project Path="ProductNormaliser.Domain/ProductNormaliser.Domain.csproj" />
+  <Project Path="ProductNormaliser.Domain.Tests/ProductNormaliser.Domain.Tests.csproj" />
   <Project Path="ProductNormaliser.Infrastructure/ProductNormaliser.Infrastructure.csproj" />
-  <Project Path="ProductNormaliser.Tests/ProductNormaliser.Tests.csproj" />
+  <Project Path="ProductNormaliser.Web/ProductNormaliser.Web.csproj" />
+  <Project Path="ProductNormaliser.Web.Tests/ProductNormaliser.Web.Tests.csproj" />
   <Project Path="ProductNormaliser.Worker/ProductNormaliser.Worker.csproj" />
 </Solution>
