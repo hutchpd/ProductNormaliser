@@ -1,0 +1,258 @@
+using MongoDB.Driver;
+using ProductNormaliser.Core.Models;
+using ProductNormaliser.Infrastructure.Mongo;
+using ProductNormaliser.Infrastructure.Mongo.Repositories;
+
+namespace ProductNormaliser.Tests;
+
+public sealed class MongoRepositoryTests
+{
+    private RawPageRepository rawPageRepository = default!;
+    private SourceProductRepository sourceProductRepository = default!;
+    private CanonicalProductRepository canonicalProductRepository = default!;
+    private ProductOfferRepository productOfferRepository = default!;
+    private MergeConflictRepository mergeConflictRepository = default!;
+    private CrawlQueueRepository crawlQueueRepository = default!;
+
+    [SetUp]
+    public async Task SetUpAsync()
+    {
+        var context = MongoIntegrationTestFixture.Context;
+        await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.RawPages);
+        await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.SourceProducts);
+        await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.CanonicalProducts);
+        await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.ProductOffers);
+        await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.MergeConflicts);
+        await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.CrawlQueue);
+        await context.EnsureIndexesAsync();
+
+        rawPageRepository = new RawPageRepository(context);
+        sourceProductRepository = new SourceProductRepository(context);
+        canonicalProductRepository = new CanonicalProductRepository(context);
+        productOfferRepository = new ProductOfferRepository(context);
+        mergeConflictRepository = new MergeConflictRepository(context);
+        crawlQueueRepository = new CrawlQueueRepository(context);
+    }
+
+    [Test]
+    public async Task RawPageRepository_UpsertsAndPreservesHtmlExactly()
+    {
+        var rawPage = new RawPage
+        {
+            Id = "page-1",
+            SourceName = "example-retailer",
+            SourceUrl = "https://example.com/tv/1",
+            CategoryKey = "tv",
+            Html = "<html><body><script>var x = \"raw\";</script></body></html>",
+            StatusCode = 200,
+            ContentType = "text/html",
+            FetchedUtc = new DateTime(2026, 03, 20, 10, 00, 00, DateTimeKind.Utc)
+        };
+
+        await rawPageRepository.UpsertAsync(rawPage);
+        var storedPage = await rawPageRepository.GetByIdAsync(rawPage.Id);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(storedPage, Is.Not.Null);
+            Assert.That(storedPage!.Html, Is.EqualTo(rawPage.Html));
+            Assert.That(storedPage.SourceUrl, Is.EqualTo(rawPage.SourceUrl));
+        });
+    }
+
+    [Test]
+    public async Task SourceProductRepository_PreservesRawDataAndSupportsIndexedLookup()
+    {
+        var sourceProduct = new SourceProduct
+        {
+            Id = "source-1",
+            SourceName = "example-retailer",
+            SourceUrl = "https://example.com/tv/1",
+            CategoryKey = "tv",
+            Brand = "Samsung",
+            ModelNumber = "QE55S90D",
+            Gtin = "8806095563140",
+            Title = "Samsung QE55S90D OLED TV",
+            RawSchemaJson = "{\"@type\":\"Product\",\"name\":\"Samsung QE55S90D OLED TV\"}",
+            FetchedUtc = new DateTime(2026, 03, 20, 10, 05, 00, DateTimeKind.Utc),
+            RawAttributes = new Dictionary<string, SourceAttributeValue>
+            {
+                ["Screen Size"] = new()
+                {
+                    AttributeKey = "Screen Size",
+                    Value = "55 in",
+                    ValueType = "string",
+                    SourcePath = "jsonld.additionalProperty"
+                }
+            }
+        };
+
+        await sourceProductRepository.UpsertAsync(sourceProduct);
+
+        var storedProduct = await sourceProductRepository.GetBySourceAsync(sourceProduct.SourceName, sourceProduct.SourceUrl);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(storedProduct, Is.Not.Null);
+            Assert.That(storedProduct!.RawSchemaJson, Is.EqualTo(sourceProduct.RawSchemaJson));
+            Assert.That(storedProduct.RawAttributes["Screen Size"].Value, Is.EqualTo("55 in"));
+        });
+    }
+
+    [Test]
+    public async Task CanonicalProductRepository_RoundTripsAndSupportsLookupIndexes()
+    {
+        var canonicalProduct = new CanonicalProduct
+        {
+            Id = "canonical-1",
+            CategoryKey = "tv",
+            Brand = "Samsung",
+            ModelNumber = "QE55S90D",
+            Gtin = "8806095563140",
+            DisplayName = "Samsung QE55S90D OLED TV",
+            CreatedUtc = new DateTime(2026, 03, 20, 10, 10, 00, DateTimeKind.Utc),
+            UpdatedUtc = new DateTime(2026, 03, 20, 10, 11, 00, DateTimeKind.Utc),
+            Attributes = new Dictionary<string, CanonicalAttributeValue>
+            {
+                ["screen_size_inch"] = new()
+                {
+                    AttributeKey = "screen_size_inch",
+                    Value = 55m,
+                    ValueType = "decimal",
+                    Unit = "inch",
+                    Confidence = 0.97m
+                }
+            },
+            Sources =
+            [
+                new ProductSourceLink
+                {
+                    SourceName = "example-retailer",
+                    SourceProductId = "source-1",
+                    SourceUrl = "https://example.com/tv/1",
+                    FirstSeenUtc = new DateTime(2026, 03, 20, 10, 00, 00, DateTimeKind.Utc),
+                    LastSeenUtc = new DateTime(2026, 03, 20, 10, 05, 00, DateTimeKind.Utc)
+                }
+            ]
+        };
+
+        await canonicalProductRepository.UpsertAsync(canonicalProduct);
+
+        var byGtin = await canonicalProductRepository.GetByGtinAsync("8806095563140");
+        var byBrandAndModel = await canonicalProductRepository.GetByBrandAndModelAsync("Samsung", "QE55S90D");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(byGtin, Is.Not.Null);
+            Assert.That(byBrandAndModel, Is.Not.Null);
+            Assert.That(byGtin!.Attributes["screen_size_inch"].Value, Is.EqualTo(55m));
+            Assert.That(byBrandAndModel!.DisplayName, Is.EqualTo("Samsung QE55S90D OLED TV"));
+        });
+    }
+
+    [Test]
+    public async Task ProductOfferRepository_UpsertsAndQueriesByCanonicalProductId()
+    {
+        var offer = new ProductOffer
+        {
+            Id = "offer-1",
+            CanonicalProductId = "canonical-1",
+            SourceName = "example-retailer",
+            SourceUrl = "https://example.com/tv/1",
+            Price = 1299.99m,
+            Currency = "GBP",
+            Availability = "InStock",
+            ObservedUtc = new DateTime(2026, 03, 20, 10, 15, 00, DateTimeKind.Utc)
+        };
+
+        await productOfferRepository.UpsertAsync(offer);
+
+        var offers = await productOfferRepository.GetByCanonicalProductIdAsync("canonical-1");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(offers, Has.Count.EqualTo(1));
+            Assert.That(offers[0].Price, Is.EqualTo(1299.99m));
+            Assert.That(offers[0].CanonicalProductId, Is.EqualTo("canonical-1"));
+        });
+    }
+
+    [Test]
+    public async Task MergeConflictRepository_UpsertsAndQueriesByCanonicalProductIdAndStatus()
+    {
+        var conflict = new MergeConflict
+        {
+            Id = "conflict-1",
+            CanonicalProductId = "canonical-1",
+            AttributeKey = "screen_size_inch",
+            ExistingValue = 55m,
+            IncomingValue = 54.6m,
+            Reason = "Two sources disagree on the nominal size.",
+            Severity = 0.8m,
+            Status = "open",
+            CreatedUtc = new DateTime(2026, 03, 20, 10, 20, 00, DateTimeKind.Utc)
+        };
+
+        await mergeConflictRepository.UpsertAsync(conflict);
+
+        var conflicts = await mergeConflictRepository.GetByCanonicalProductIdAndStatusAsync("canonical-1", "open");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(conflicts, Has.Count.EqualTo(1));
+            Assert.That(conflicts[0].AttributeKey, Is.EqualTo("screen_size_inch"));
+            Assert.That(conflicts[0].ExistingValue, Is.EqualTo(55m));
+        });
+    }
+
+    [Test]
+    public async Task CrawlQueueRepository_UpsertsAndReturnsNextQueuedItem()
+    {
+        var queuedItem = new CrawlQueueItem
+        {
+            Id = "queue-1",
+            SourceName = "example-retailer",
+            SourceUrl = "https://example.com/tv/next",
+            CategoryKey = "tv",
+            Status = "queued",
+            AttemptCount = 0,
+            EnqueuedUtc = new DateTime(2026, 03, 20, 10, 25, 00, DateTimeKind.Utc),
+            NextAttemptUtc = new DateTime(2026, 03, 20, 10, 30, 00, DateTimeKind.Utc)
+        };
+
+        await crawlQueueRepository.UpsertAsync(queuedItem);
+
+        var nextItem = await crawlQueueRepository.GetNextQueuedAsync(new DateTime(2026, 03, 20, 10, 30, 00, DateTimeKind.Utc));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(nextItem, Is.Not.Null);
+            Assert.That(nextItem!.Id, Is.EqualTo("queue-1"));
+            Assert.That(nextItem.SourceUrl, Is.EqualTo("https://example.com/tv/next"));
+        });
+    }
+
+    [Test]
+    public async Task MongoDbContext_CreatesRequiredIndexes()
+    {
+        var context = MongoIntegrationTestFixture.Context;
+
+        var canonicalIndexes = await context.CanonicalProducts.Indexes.ListAsync();
+        var sourceIndexes = await context.SourceProducts.Indexes.ListAsync();
+        var offerIndexes = await context.ProductOffers.Indexes.ListAsync();
+        var conflictIndexes = await context.MergeConflicts.Indexes.ListAsync();
+
+        var canonicalIndexDefinitions = await canonicalIndexes.ToListAsync();
+        var sourceIndexDefinitions = await sourceIndexes.ToListAsync();
+        var offerIndexDefinitions = await offerIndexes.ToListAsync();
+        var conflictIndexDefinitions = await conflictIndexes.ToListAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(canonicalIndexDefinitions.Count, Is.GreaterThanOrEqualTo(3));
+            Assert.That(sourceIndexDefinitions.Count, Is.GreaterThanOrEqualTo(2));
+            Assert.That(offerIndexDefinitions.Count, Is.GreaterThanOrEqualTo(2));
+            Assert.That(conflictIndexDefinitions.Count, Is.GreaterThanOrEqualTo(2));
+        });
+    }
+}

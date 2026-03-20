@@ -8,6 +8,19 @@
           "build/netstandard2.0/coverlet.collector.targets": {}
         }
       },
+      "DnsClient/1.6.1": {
+        "type": "package",
+        "compile": {
+          "lib/net5.0/DnsClient.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net5.0/DnsClient.dll": {
+            "related": ".xml"
+          }
+        }
+      },
       "Microsoft.ApplicationInsights/2.22.0": {
         "type": "package",
         "compile": {
@@ -1179,6 +1192,57 @@
           "build/net8.0/Microsoft.TestPlatform.TestHost.targets": {}
         }
       },
+      "Mongo2Go/4.1.0": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.Extensions.Logging.Abstractions": "6.0.0",
+          "MongoDB.Driver": "3.1.0"
+        },
+        "compile": {
+          "lib/netstandard2.1/Mongo2Go.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.1/Mongo2Go.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "MongoDB.Bson/3.5.0": {
+        "type": "package",
+        "compile": {
+          "lib/net6.0/MongoDB.Bson.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net6.0/MongoDB.Bson.dll": {
+            "related": ".xml"
+          }
+        }
+      },
+      "MongoDB.Driver/3.5.0": {
+        "type": "package",
+        "dependencies": {
+          "DnsClient": "1.6.1",
+          "Microsoft.Extensions.Logging.Abstractions": "2.0.0",
+          "MongoDB.Bson": "3.5.0",
+          "SharpCompress": "0.30.1",
+          "Snappier": "1.0.0",
+          "ZstdSharp.Port": "0.7.3"
+        },
+        "compile": {
+          "lib/net6.0/MongoDB.Driver.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net6.0/MongoDB.Driver.dll": {
+            "related": ".xml"
+          }
+        }
+      },
       "Newtonsoft.Json/13.0.3": {
         "type": "package",
         "compile": {
@@ -1228,6 +1292,28 @@
           "build/netcoreapp3.1/NUnit3TestAdapter.targets": {}
         }
       },
+      "SharpCompress/0.30.1": {
+        "type": "package",
+        "compile": {
+          "lib/net5.0/SharpCompress.dll": {}
+        },
+        "runtime": {
+          "lib/net5.0/SharpCompress.dll": {}
+        }
+      },
+      "Snappier/1.0.0": {
+        "type": "package",
+        "compile": {
+          "lib/net5.0/Snappier.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net5.0/Snappier.dll": {
+            "related": ".xml"
+          }
+        }
+      },
       "System.Diagnostics.EventLog/10.0.5": {
         "type": "package",
         "compile": {
@@ -1252,6 +1338,15 @@
             "assetType": "runtime",
             "rid": "win"
           }
+        }
+      },
+      "ZstdSharp.Port/0.7.3": {
+        "type": "package",
+        "compile": {
+          "lib/net7.0/ZstdSharp.dll": {}
+        },
+        "runtime": {
+          "lib/net7.0/ZstdSharp.dll": {}
         }
       },
       "ProductNormaliser.AdminApi/1.0.0": {
@@ -1286,6 +1381,10 @@
         "type": "project",
         "framework": ".NETCoreApp,Version=v10.0",
         "dependencies": {
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.0",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.0",
+          "Microsoft.Extensions.Options.ConfigurationExtensions": "10.0.0",
+          "MongoDB.Driver": "3.5.0",
           "ProductNormaliser.Core": "1.0.0"
         },
         "compile": {
@@ -1381,6 +1480,30 @@
         "coverlet-icon.png",
         "coverlet.collector.6.0.4.nupkg.sha512",
         "coverlet.collector.nuspec"
+      ]
+    },
+    "DnsClient/1.6.1": {
+      "sha512": "4H/f2uYJOZ+YObZjpY9ABrKZI+JNw3uizp6oMzTXwDw6F+2qIPhpRl/1t68O/6e98+vqNiYGu+lswmwdYUy3gg==",
+      "type": "package",
+      "path": "dnsclient/1.6.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "dnsclient.1.6.1.nupkg.sha512",
+        "dnsclient.nuspec",
+        "icon.png",
+        "lib/net45/DnsClient.dll",
+        "lib/net45/DnsClient.xml",
+        "lib/net471/DnsClient.dll",
+        "lib/net471/DnsClient.xml",
+        "lib/net5.0/DnsClient.dll",
+        "lib/net5.0/DnsClient.xml",
+        "lib/netstandard1.3/DnsClient.dll",
+        "lib/netstandard1.3/DnsClient.xml",
+        "lib/netstandard2.0/DnsClient.dll",
+        "lib/netstandard2.0/DnsClient.xml",
+        "lib/netstandard2.1/DnsClient.dll",
+        "lib/netstandard2.1/DnsClient.xml"
       ]
     },
     "Microsoft.ApplicationInsights/2.22.0": {
@@ -2996,6 +3119,91 @@
         "microsoft.testplatform.testhost.nuspec"
       ]
     },
+    "Mongo2Go/4.1.0": {
+      "sha512": "QXpNsQj/k50aO5J/bTXP/0Jb43koXqQtoNAmJUuUfZ5DUtpTtsf3IUEYdJ4mAqtC2rqBKWD5lnm7xDaR6993WA==",
+      "type": "package",
+      "path": "mongo2go/4.1.0",
+      "hasTools": true,
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "icon.png",
+        "lib/net472/Mongo2Go.dll",
+        "lib/net472/Mongo2Go.xml",
+        "lib/netstandard2.1/Mongo2Go.dll",
+        "lib/netstandard2.1/Mongo2Go.xml",
+        "mongo2go.4.1.0.nupkg.sha512",
+        "mongo2go.nuspec",
+        "tools/mongodb-linux-4.4.4-database-tools-100.3.1/bin/mongod",
+        "tools/mongodb-linux-4.4.4-database-tools-100.3.1/bin/mongoexport",
+        "tools/mongodb-linux-4.4.4-database-tools-100.3.1/bin/mongoimport",
+        "tools/mongodb-linux-4.4.4-database-tools-100.3.1/community-server/LICENSE-Community.txt",
+        "tools/mongodb-linux-4.4.4-database-tools-100.3.1/community-server/MPL-2",
+        "tools/mongodb-linux-4.4.4-database-tools-100.3.1/community-server/README",
+        "tools/mongodb-linux-4.4.4-database-tools-100.3.1/community-server/THIRD-PARTY-NOTICES",
+        "tools/mongodb-linux-4.4.4-database-tools-100.3.1/database-tools/LICENSE.md",
+        "tools/mongodb-linux-4.4.4-database-tools-100.3.1/database-tools/README.md",
+        "tools/mongodb-linux-4.4.4-database-tools-100.3.1/database-tools/THIRD-PARTY-NOTICES",
+        "tools/mongodb-macos-4.4.4-database-tools-100.3.1/bin/mongod",
+        "tools/mongodb-macos-4.4.4-database-tools-100.3.1/bin/mongoexport",
+        "tools/mongodb-macos-4.4.4-database-tools-100.3.1/bin/mongoimport",
+        "tools/mongodb-macos-4.4.4-database-tools-100.3.1/community-server/LICENSE-Community.txt",
+        "tools/mongodb-macos-4.4.4-database-tools-100.3.1/community-server/MPL-2",
+        "tools/mongodb-macos-4.4.4-database-tools-100.3.1/community-server/README",
+        "tools/mongodb-macos-4.4.4-database-tools-100.3.1/community-server/THIRD-PARTY-NOTICES",
+        "tools/mongodb-macos-4.4.4-database-tools-100.3.1/database-tools/LICENSE.md",
+        "tools/mongodb-macos-4.4.4-database-tools-100.3.1/database-tools/README.md",
+        "tools/mongodb-macos-4.4.4-database-tools-100.3.1/database-tools/THIRD-PARTY-NOTICES",
+        "tools/mongodb-windows-4.4.4-database-tools-100.3.1/bin/mongod.exe",
+        "tools/mongodb-windows-4.4.4-database-tools-100.3.1/bin/mongoexport.exe",
+        "tools/mongodb-windows-4.4.4-database-tools-100.3.1/bin/mongoimport.exe",
+        "tools/mongodb-windows-4.4.4-database-tools-100.3.1/community-server/LICENSE-Community.txt",
+        "tools/mongodb-windows-4.4.4-database-tools-100.3.1/community-server/MPL-2",
+        "tools/mongodb-windows-4.4.4-database-tools-100.3.1/community-server/README",
+        "tools/mongodb-windows-4.4.4-database-tools-100.3.1/community-server/THIRD-PARTY-NOTICES",
+        "tools/mongodb-windows-4.4.4-database-tools-100.3.1/database-tools/LICENSE.md",
+        "tools/mongodb-windows-4.4.4-database-tools-100.3.1/database-tools/README.md",
+        "tools/mongodb-windows-4.4.4-database-tools-100.3.1/database-tools/THIRD-PARTY-NOTICES"
+      ]
+    },
+    "MongoDB.Bson/3.5.0": {
+      "sha512": "JGNK6BanLDEifgkvPLqVFCPus5EDCy416pxf1dxUBRSVd3D9+NB3AvMVX190eXlk5/UXuCxpsQv7jWfNKvppBQ==",
+      "type": "package",
+      "path": "mongodb.bson/3.5.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "lib/net472/MongoDB.Bson.dll",
+        "lib/net472/MongoDB.Bson.xml",
+        "lib/net6.0/MongoDB.Bson.dll",
+        "lib/net6.0/MongoDB.Bson.xml",
+        "lib/netstandard2.1/MongoDB.Bson.dll",
+        "lib/netstandard2.1/MongoDB.Bson.xml",
+        "mongodb.bson.3.5.0.nupkg.sha512",
+        "mongodb.bson.nuspec",
+        "packageIcon.png"
+      ]
+    },
+    "MongoDB.Driver/3.5.0": {
+      "sha512": "ST90u7psyMkNNOWFgSkexsrB3kPn7Ynl2DlMFj2rJyYuc6SIxjmzu4ufy51yzM+cPVE1SvVcdb5UFobrRw6cMg==",
+      "type": "package",
+      "path": "mongodb.driver/3.5.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "lib/net472/MongoDB.Driver.dll",
+        "lib/net472/MongoDB.Driver.xml",
+        "lib/net6.0/MongoDB.Driver.dll",
+        "lib/net6.0/MongoDB.Driver.xml",
+        "lib/netstandard2.1/MongoDB.Driver.dll",
+        "lib/netstandard2.1/MongoDB.Driver.xml",
+        "mongodb.driver.3.5.0.nupkg.sha512",
+        "mongodb.driver.nuspec",
+        "packageIcon.png"
+      ]
+    },
     "Newtonsoft.Json/13.0.3": {
       "sha512": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ==",
       "type": "package",
@@ -3100,6 +3308,42 @@
         "nunit_256.png"
       ]
     },
+    "SharpCompress/0.30.1": {
+      "sha512": "XqD4TpfyYGa7QTPzaGlMVbcecKnXy4YmYLDWrU+JIj7IuRNl7DH2END+Ll7ekWIY8o3dAMWLFDE1xdhfIWD1nw==",
+      "type": "package",
+      "path": "sharpcompress/0.30.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "lib/net461/SharpCompress.dll",
+        "lib/net5.0/SharpCompress.dll",
+        "lib/netcoreapp3.1/SharpCompress.dll",
+        "lib/netstandard2.0/SharpCompress.dll",
+        "lib/netstandard2.1/SharpCompress.dll",
+        "sharpcompress.0.30.1.nupkg.sha512",
+        "sharpcompress.nuspec"
+      ]
+    },
+    "Snappier/1.0.0": {
+      "sha512": "rFtK2KEI9hIe8gtx3a0YDXdHOpedIf9wYCEYtBEmtlyiWVX3XlCNV03JrmmAi/Cdfn7dxK+k0sjjcLv4fpHnqA==",
+      "type": "package",
+      "path": "snappier/1.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "COPYING.txt",
+        "lib/net5.0/Snappier.dll",
+        "lib/net5.0/Snappier.xml",
+        "lib/netcoreapp3.0/Snappier.dll",
+        "lib/netcoreapp3.0/Snappier.xml",
+        "lib/netstandard2.0/Snappier.dll",
+        "lib/netstandard2.0/Snappier.xml",
+        "lib/netstandard2.1/Snappier.dll",
+        "lib/netstandard2.1/Snappier.xml",
+        "snappier.1.0.0.nupkg.sha512",
+        "snappier.nuspec"
+      ]
+    },
     "System.Diagnostics.EventLog/10.0.5": {
       "sha512": "wugvy+pBVzjQEnRs9wMTWwoaeNFX3hsaHeVHFDIvJSWXp7wfmNWu3mxAwBIE6pyW+g6+rHa1Of5fTzb0QVqUTA==",
       "type": "package",
@@ -3138,6 +3382,24 @@
         "useSharedDesignerContext.txt"
       ]
     },
+    "ZstdSharp.Port/0.7.3": {
+      "sha512": "U9Ix4l4cl58Kzz1rJzj5hoVTjmbx1qGMwzAcbv1j/d3NzrFaESIurQyg+ow4mivCgkE3S413y+U9k4WdnEIkRA==",
+      "type": "package",
+      "path": "zstdsharp.port/0.7.3",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "lib/net461/ZstdSharp.dll",
+        "lib/net5.0/ZstdSharp.dll",
+        "lib/net6.0/ZstdSharp.dll",
+        "lib/net7.0/ZstdSharp.dll",
+        "lib/netcoreapp3.1/ZstdSharp.dll",
+        "lib/netstandard2.0/ZstdSharp.dll",
+        "lib/netstandard2.1/ZstdSharp.dll",
+        "zstdsharp.port.0.7.3.nupkg.sha512",
+        "zstdsharp.port.nuspec"
+      ]
+    },
     "ProductNormaliser.AdminApi/1.0.0": {
       "type": "project",
       "path": "../ProductNormaliser.AdminApi/ProductNormaliser.AdminApi.csproj",
@@ -3162,6 +3424,7 @@
   "projectFileDependencyGroups": {
     "net10.0": [
       "Microsoft.NET.Test.Sdk >= 17.14.0",
+      "Mongo2Go >= 4.1.0",
       "NUnit >= 4.3.2",
       "NUnit.Analyzers >= 4.7.0",
       "NUnit3TestAdapter >= 5.0.0",
@@ -3239,6 +3502,10 @@
           "Microsoft.NET.Test.Sdk": {
             "target": "Package",
             "version": "[17.14.0, )"
+          },
+          "Mongo2Go": {
+            "target": "Package",
+            "version": "[4.1.0, )"
           },
           "NUnit": {
             "target": "Package",

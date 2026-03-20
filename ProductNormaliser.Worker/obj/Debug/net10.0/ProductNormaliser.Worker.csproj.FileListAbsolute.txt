@@ -50,3 +50,9 @@ C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Worker\obj\Debug\net10.0\refi
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Worker\obj\Debug\net10.0\ProductNormaliser.Worker.pdb
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Worker\obj\Debug\net10.0\ProductNormaliser.Worker.genruntimeconfig.cache
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Worker\obj\Debug\net10.0\ref\ProductNormaliser.Worker.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Worker\bin\Debug\net10.0\DnsClient.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Worker\bin\Debug\net10.0\MongoDB.Bson.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Worker\bin\Debug\net10.0\MongoDB.Driver.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Worker\bin\Debug\net10.0\SharpCompress.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Worker\bin\Debug\net10.0\Snappier.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Worker\bin\Debug\net10.0\ZstdSharp.dll

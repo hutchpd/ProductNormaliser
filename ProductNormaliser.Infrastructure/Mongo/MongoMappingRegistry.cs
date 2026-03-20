@@ -1,0 +1,70 @@
+using MongoDB.Bson.Serialization;
+using MongoDB.Bson.Serialization.Serializers;
+using ProductNormaliser.Core.Models;
+
+namespace ProductNormaliser.Infrastructure.Mongo;
+
+public static class MongoMappingRegistry
+{
+    private static int isRegistered;
+
+    public static void Register()
+    {
+        if (Interlocked.Exchange(ref isRegistered, 1) == 1)
+        {
+            return;
+        }
+
+        RegisterObjectSerializer();
+        RegisterClassMap<RawPage>(map => map.MapIdMember(model => model.Id));
+        RegisterClassMap<SourceProduct>(map => map.MapIdMember(model => model.Id));
+        RegisterClassMap<CanonicalProduct>(map => map.MapIdMember(model => model.Id));
+        RegisterClassMap<ProductOffer>(map => map.MapIdMember(model => model.Id));
+        RegisterClassMap<MergeConflict>(map => map.MapIdMember(model => model.Id));
+        RegisterClassMap<CrawlQueueItem>(map => map.MapIdMember(model => model.Id));
+        RegisterClassMap<CanonicalAttributeValue>();
+        RegisterClassMap<AttributeEvidence>();
+        RegisterClassMap<ProductSourceLink>();
+        RegisterClassMap<SourceAttributeValue>();
+        RegisterClassMap<NormalisedAttributeValue>();
+    }
+
+    private static void RegisterObjectSerializer()
+    {
+        BsonSerializer.RegisterSerializer(new ObjectSerializer(type =>
+            ObjectSerializer.DefaultAllowedTypes(type)
+            || type == typeof(decimal)
+            || type == typeof(decimal?)
+            || type == typeof(DateTime)
+            || type == typeof(DateTime?)));
+    }
+
+    private static void RegisterClassMap<T>()
+    {
+        if (BsonClassMap.IsClassMapRegistered(typeof(T)))
+        {
+            return;
+        }
+
+        BsonClassMap.RegisterClassMap<T>(map =>
+        {
+            map.AutoMap();
+            map.SetIgnoreExtraElements(true);
+        });
+    }
+
+    private static void RegisterClassMap<T>(Action<BsonClassMap<T>> configure)
+    {
+        if (BsonClassMap.IsClassMapRegistered(typeof(T)))
+        {
+            return;
+        }
+
+        BsonClassMap.RegisterClassMap<T>(map =>
+        {
+            map.AutoMap();
+            configure(map);
+            map.SetIgnoreExtraElements(true);
+        });
+    }
+}

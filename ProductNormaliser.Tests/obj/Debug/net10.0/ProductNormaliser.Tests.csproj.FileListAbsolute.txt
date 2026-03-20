@@ -176,3 +176,10 @@ C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Tests\obj\Debug\net10.0\refin
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Tests\obj\Debug\net10.0\ProductNormaliser.Tests.pdb
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Tests\obj\Debug\net10.0\ProductNormaliser.Tests.genruntimeconfig.cache
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Tests\obj\Debug\net10.0\ref\ProductNormaliser.Tests.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Tests\bin\Debug\net10.0\DnsClient.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Tests\bin\Debug\net10.0\Mongo2Go.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Tests\bin\Debug\net10.0\MongoDB.Bson.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Tests\bin\Debug\net10.0\MongoDB.Driver.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Tests\bin\Debug\net10.0\SharpCompress.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Tests\bin\Debug\net10.0\Snappier.dll
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Tests\bin\Debug\net10.0\ZstdSharp.dll

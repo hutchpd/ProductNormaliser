@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Malformed JSON-LD</title>
+    <script type="application/ld+json">
+    { "@context": "https://schema.org", "@type": "Product", "name": "Broken Product",
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      "name": "Recovered Product",
+      "brand": "Hisense",
+      "sku": "55U7NQTUK"
+    }
+    </script>
+</head>
+<body>
+    <main>Recovery Product</main>
+</body>
+</html>
