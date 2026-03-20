@@ -3,7 +3,7 @@ using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Infrastructure.Mongo.Repositories;
 
-public sealed class CanonicalProductRepository(MongoDbContext context) : MongoRepositoryBase<CanonicalProduct>(context.CanonicalProducts)
+public sealed class CanonicalProductRepository(MongoDbContext context) : MongoRepositoryBase<CanonicalProduct>(context.CanonicalProducts), ICanonicalProductStore
 {
     public async Task<CanonicalProduct?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
     {
@@ -19,6 +19,18 @@ public sealed class CanonicalProductRepository(MongoDbContext context) : MongoRe
     {
         return await Collection.Find(product => product.Brand == brand && product.ModelNumber == modelNumber)
             .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<CanonicalProduct>> ListPotentialMatchesAsync(string categoryKey, string? brand, CancellationToken cancellationToken = default)
+    {
+        var filter = Builders<CanonicalProduct>.Filter.Eq(product => product.CategoryKey, categoryKey);
+        if (!string.IsNullOrWhiteSpace(brand))
+        {
+            filter &= Builders<CanonicalProduct>.Filter.Eq(product => product.Brand, brand);
+        }
+
+        var cursor = await Collection.FindAsync(filter, cancellationToken: cancellationToken);
+        return await cursor.ToListAsync(cancellationToken);
     }
 
     public async Task UpsertAsync(CanonicalProduct product, CancellationToken cancellationToken = default)

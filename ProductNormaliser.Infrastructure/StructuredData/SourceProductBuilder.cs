@@ -5,7 +5,7 @@ using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Infrastructure.StructuredData;
 
-public sealed class SourceProductBuilder
+public sealed class SourceProductBuilder : ISourceProductBuilder
 {
     public SourceProduct Build(
         string sourceName,

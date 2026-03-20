@@ -3,7 +3,7 @@ using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Infrastructure.Mongo.Repositories;
 
-public sealed class SourceProductRepository(MongoDbContext context) : MongoRepositoryBase<SourceProduct>(context.SourceProducts)
+public sealed class SourceProductRepository(MongoDbContext context) : MongoRepositoryBase<SourceProduct>(context.SourceProducts), ISourceProductStore
 {
     public async Task<SourceProduct?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
     {

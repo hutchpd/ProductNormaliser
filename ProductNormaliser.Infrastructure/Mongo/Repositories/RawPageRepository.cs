@@ -3,11 +3,18 @@ using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Infrastructure.Mongo.Repositories;
 
-public sealed class RawPageRepository(MongoDbContext context) : MongoRepositoryBase<RawPage>(context.RawPages)
+public sealed class RawPageRepository(MongoDbContext context) : MongoRepositoryBase<RawPage>(context.RawPages), IRawPageStore
 {
     public async Task<RawPage?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
     {
         return await Collection.Find(page => page.Id == id).FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<RawPage?> GetLatestBySourceAsync(string sourceName, string sourceUrl, CancellationToken cancellationToken = default)
+    {
+        return await Collection.Find(page => page.SourceName == sourceName && page.SourceUrl == sourceUrl)
+            .SortByDescending(page => page.FetchedUtc)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task UpsertAsync(RawPage page, CancellationToken cancellationToken = default)

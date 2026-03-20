@@ -763,6 +763,10 @@
             "Microsoft.Extensions.Hosting": {
               "target": "Package",
               "version": "[10.0.5, )"
+            },
+            "Microsoft.Extensions.Http": {
+              "target": "Package",
+              "version": "[10.0.0, )"
             }
           },
           "imports": [

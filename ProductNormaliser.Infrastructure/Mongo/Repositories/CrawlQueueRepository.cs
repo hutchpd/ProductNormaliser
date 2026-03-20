@@ -3,7 +3,7 @@ using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Infrastructure.Mongo.Repositories;
 
-public sealed class CrawlQueueRepository(MongoDbContext context) : MongoRepositoryBase<CrawlQueueItem>(context.CrawlQueueItems)
+public sealed class CrawlQueueRepository(MongoDbContext context) : MongoRepositoryBase<CrawlQueueItem>(context.CrawlQueueItems), ICrawlQueueStore
 {
     public async Task<CrawlQueueItem?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
     {

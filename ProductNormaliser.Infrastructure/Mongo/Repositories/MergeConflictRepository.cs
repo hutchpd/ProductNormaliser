@@ -3,7 +3,7 @@ using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Infrastructure.Mongo.Repositories;
 
-public sealed class MergeConflictRepository(MongoDbContext context) : MongoRepositoryBase<MergeConflict>(context.MergeConflicts)
+public sealed class MergeConflictRepository(MongoDbContext context) : MongoRepositoryBase<MergeConflict>(context.MergeConflicts), IMergeConflictStore
 {
     public async Task<MergeConflict?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
     {
