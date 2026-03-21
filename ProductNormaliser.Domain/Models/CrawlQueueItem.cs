@@ -3,6 +3,7 @@ namespace ProductNormaliser.Core.Models;
 public sealed class CrawlQueueItem
 {
     public string Id { get; set; } = default!;
+    public string? JobId { get; set; }
     public string SourceName { get; set; } = default!;
     public string SourceUrl { get; set; } = default!;
     public string CategoryKey { get; set; } = default!;

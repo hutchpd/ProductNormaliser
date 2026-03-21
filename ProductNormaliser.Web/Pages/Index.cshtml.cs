@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using ProductNormaliser.Web.Contracts;
+using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
 
 namespace ProductNormaliser.Web.Pages;
@@ -16,10 +17,15 @@ public sealed class IndexModel(
     [BindProperty]
     public RegisterSourceInput RegisterSource { get; set; } = new();
 
+    [BindProperty]
+    public QuickCrawlInput QuickCrawl { get; set; } = new();
+
     [TempData]
     public string? StatusMessage { get; set; }
 
     public string? ErrorMessage { get; private set; }
+
+    public StatsDto Stats { get; private set; } = new();
 
     public IReadOnlyList<CategoryMetadataDto> Categories { get; private set; } = [];
 
@@ -27,9 +33,63 @@ public sealed class IndexModel(
 
     public IReadOnlyList<SourceDto> Sources { get; private set; } = [];
 
+    public IReadOnlyList<CrawlJobDto> RecentJobs { get; private set; } = [];
+
+    public PageHeroModel Hero => new()
+    {
+        Eyebrow = "Operations Dashboard",
+        Title = "Internal control surface for category, source, product, and crawl orchestration",
+        Description = "Razor Pages is the pragmatic fit here: rich enough for an internal dashboard, server-rendered by default, and simple to wire into the Admin API with typed HTTP clients and page-model state.",
+        Metrics =
+        [
+            new HeroMetricModel { Label = "Enabled categories", Value = Categories.Count(category => category.IsEnabled).ToString() },
+            new HeroMetricModel { Label = "Managed sources", Value = Sources.Count.ToString() },
+            new HeroMetricModel { Label = "Canonical products", Value = Stats.TotalCanonicalProducts.ToString() },
+            new HeroMetricModel { Label = "Recent jobs", Value = RecentJobs.Count.ToString() }
+        ]
+    };
+
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         await LoadDashboardAsync(cancellationToken);
+    }
+
+    public async Task<IActionResult> OnPostLaunchCategoryCrawlAsync(CancellationToken cancellationToken)
+    {
+        var categoryKey = string.IsNullOrWhiteSpace(QuickCrawl.CategoryKey)
+            ? SelectedCategoryKey
+            : QuickCrawl.CategoryKey;
+
+        if (string.IsNullOrWhiteSpace(categoryKey))
+        {
+            ModelState.AddModelError($"{nameof(QuickCrawl)}.{nameof(QuickCrawl.CategoryKey)}", "Select a category before launching a crawl job.");
+            await LoadDashboardAsync(cancellationToken);
+            return Page();
+        }
+
+        try
+        {
+            var job = await adminApiClient.CreateCrawlJobAsync(new CreateCrawlJobRequest
+            {
+                RequestType = "category",
+                RequestedCategories = [categoryKey]
+            }, cancellationToken);
+
+            StatusMessage = $"Queued crawl job '{job.JobId}' for category '{categoryKey}'.";
+            return RedirectToPage("/CrawlJobs/Index", new { jobId = job.JobId, category = categoryKey });
+        }
+        catch (AdminApiValidationException exception)
+        {
+            AddValidationErrors(exception);
+        }
+        catch (AdminApiException exception)
+        {
+            logger.LogWarning(exception, "Failed to create crawl job from the dashboard.");
+            ErrorMessage = exception.Message;
+        }
+
+        await LoadDashboardAsync(cancellationToken);
+        return Page();
     }
 
     public async Task<IActionResult> OnPostRegisterSourceAsync(CancellationToken cancellationToken)
@@ -77,51 +137,38 @@ public sealed class IndexModel(
         return Page();
     }
 
-    public async Task<IActionResult> OnPostToggleSourceAsync(string sourceId, bool currentlyEnabled, string? category, CancellationToken cancellationToken)
-    {
-        SelectedCategoryKey = category;
-
-        try
-        {
-            if (currentlyEnabled)
-            {
-                await adminApiClient.DisableSourceAsync(sourceId, cancellationToken);
-                StatusMessage = $"Disabled source '{sourceId}'.";
-            }
-            else
-            {
-                await adminApiClient.EnableSourceAsync(sourceId, cancellationToken);
-                StatusMessage = $"Enabled source '{sourceId}'.";
-            }
-
-            return RedirectToPage(new { category });
-        }
-        catch (AdminApiException exception)
-        {
-            logger.LogWarning(exception, "Failed to toggle source {SourceId} from dashboard.", sourceId);
-            ErrorMessage = exception.Message;
-            await LoadDashboardAsync(cancellationToken);
-            return Page();
-        }
-    }
-
     private async Task LoadDashboardAsync(CancellationToken cancellationToken)
     {
         try
         {
-            Categories = await adminApiClient.GetEnabledCategoriesAsync(cancellationToken);
-            Sources = await adminApiClient.GetSourcesAsync(cancellationToken);
+            var categoriesTask = adminApiClient.GetCategoriesAsync(cancellationToken);
+            var sourcesTask = adminApiClient.GetSourcesAsync(cancellationToken);
+            var statsTask = adminApiClient.GetStatsAsync(cancellationToken);
+            var jobsTask = adminApiClient.GetCrawlJobsAsync(new CrawlJobQueryDto { Page = 1, PageSize = 5 }, cancellationToken);
+
+            await Task.WhenAll(categoriesTask, sourcesTask, statsTask, jobsTask);
+
+            Categories = categoriesTask.Result;
+            Sources = sourcesTask.Result.OrderBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
+            Stats = statsTask.Result;
+            RecentJobs = jobsTask.Result.Items;
 
             var effectiveCategoryKey = SelectedCategoryKey;
             if (string.IsNullOrWhiteSpace(effectiveCategoryKey))
             {
-                effectiveCategoryKey = Categories.FirstOrDefault()?.CategoryKey;
+                effectiveCategoryKey = Categories.FirstOrDefault(category => category.IsEnabled)?.CategoryKey
+                    ?? Categories.FirstOrDefault()?.CategoryKey;
             }
 
             if (!string.IsNullOrWhiteSpace(effectiveCategoryKey))
             {
                 SelectedCategory = await adminApiClient.GetCategoryDetailAsync(effectiveCategoryKey, cancellationToken);
                 SelectedCategoryKey = SelectedCategory?.Metadata.CategoryKey ?? effectiveCategoryKey;
+            }
+
+            if (string.IsNullOrWhiteSpace(QuickCrawl.CategoryKey) && !string.IsNullOrWhiteSpace(SelectedCategoryKey))
+            {
+                QuickCrawl.CategoryKey = SelectedCategoryKey;
             }
 
             if (RegisterSource.SelectedCategoryKeys.Count == 0 && !string.IsNullOrWhiteSpace(SelectedCategoryKey))
@@ -136,6 +183,8 @@ public sealed class IndexModel(
             Categories = [];
             Sources = [];
             SelectedCategory = null;
+            RecentJobs = [];
+            Stats = new StatsDto();
         }
     }
 
@@ -149,7 +198,6 @@ public sealed class IndexModel(
                 "displayName" => nameof(RegisterSource.DisplayName),
                 "baseUrl" => nameof(RegisterSource.BaseUrl),
                 "supportedCategoryKeys" or "categoryKeys" => nameof(RegisterSource.SelectedCategoryKeys),
-                "policy" => string.Empty,
                 _ => string.Empty
             };
 
@@ -191,6 +239,11 @@ public sealed class IndexModel(
         public int RequestsPerMinute { get; set; } = 30;
 
         public bool RespectRobotsTxt { get; set; } = true;
+    }
 
+    public sealed class QuickCrawlInput
+    {
+        [Required]
+        public string CategoryKey { get; set; } = string.Empty;
     }
 }

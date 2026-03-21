@@ -1,4 +1,5 @@
 using ProductNormaliser.Application.Categories;
+using ProductNormaliser.Application.Crawls;
 using ProductNormaliser.Application.Sources;
 using ProductNormaliser.AdminApi.Services;
 using ProductNormaliser.AdminApi.OpenApi;
@@ -14,6 +15,7 @@ builder.Services.AddOpenApi(options =>
 builder.Services.AddProductNormaliserMongo(builder.Configuration);
 builder.Services.AddSingleton<ICategoryMetadataService, CategoryMetadataService>();
 builder.Services.AddSingleton<ICategoryManagementService, CategoryManagementService>();
+builder.Services.AddSingleton<ICrawlJobService, CrawlJobService>();
 builder.Services.AddSingleton<ISourceManagementService, SourceManagementService>();
 builder.Services.AddSingleton<IAdminQueryService, AdminQueryService>();
 builder.Services.AddSingleton<IDataIntelligenceService, DataIntelligenceService>();

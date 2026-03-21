@@ -1,0 +1,245 @@
+@page
+@model ProductNormaliser.Web.Pages.CrawlJobs.IndexModel
+@{
+    ViewData["Title"] = "Crawl Jobs";
+}
+
+<section class="dashboard-shell">
+    <partial name="_PageHero" model="Model.Hero" />
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="notice success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="notice error">@Model.ErrorMessage</div>
+    }
+
+    <div asp-validation-summary="ModelOnly" class="notice error" role="alert"></div>
+
+    <div class="overview-grid">
+        <section class="panel">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Launch Crawl</p>
+                    <h2>Create a targeted job</h2>
+                </div>
+            </div>
+
+            <form method="post" asp-page-handler="Launch" class="source-form">
+                <div>
+                    <label asp-for="Launch.RequestType" class="form-label">Request type</label>
+                    <select asp-for="Launch.RequestType" class="form-select">
+                        <option value="category">Category crawl</option>
+                        <option value="source">Source crawl</option>
+                        <option value="product_selection">Product recrawl</option>
+                    </select>
+                </div>
+
+                <div>
+                    <partial name="_CategorySelector" model="Model.CategorySelector" />
+                    <span asp-validation-for="Launch.SelectedCategoryKeys" class="text-danger small"></span>
+                </div>
+
+                <div>
+                    <p class="form-label mb-2">Sources</p>
+                    <div class="check-grid">
+                    @foreach (var source in Model.Sources)
+                    {
+                        <label class="check-card">
+                            <input type="checkbox" name="Launch.SelectedSourceIds" value="@source.SourceId" checked="@Model.Launch.SelectedSourceIds.Contains(source.SourceId)" />
+                            <span>@source.DisplayName</span>
+                        </label>
+                    }
+                    </div>
+                    <span asp-validation-for="Launch.SelectedSourceIds" class="text-danger small"></span>
+                </div>
+
+                <div>
+                    <label asp-for="Launch.ProductIdsText" class="form-label">Canonical product ids</label>
+                    <textarea asp-for="Launch.ProductIdsText" class="form-control" rows="4" placeholder="One product id per line, or comma-separated"></textarea>
+                    <span asp-validation-for="Launch.ProductIdsText" class="text-danger small"></span>
+                </div>
+
+                <div class="actions-bar">
+                    <button type="submit" class="btn btn-dark">Queue Crawl Job</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="panel">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Selected Job</p>
+                    <h2>@(Model.SelectedJob?.JobId ?? "Choose a job")</h2>
+                </div>
+            </div>
+
+            @if (Model.SelectedJob is null)
+            {
+                <div class="empty-panel">
+                    <p class="empty-state">Select a job from the history table to inspect its live progress.</p>
+                </div>
+            }
+            else
+            {
+                <div class="detail-stack">
+                    <partial name="_StatusBadge" model="Model.GetStatusBadge(Model.SelectedJob.Status)" />
+                    <div class="progress-shell">
+                        <div class="progress-bar-shell">
+                            <div class="progress-bar-fill" style="width: @ProductNormaliser.Web.Pages.CrawlJobs.IndexModel.GetProgressPercent(Model.SelectedJob)%"></div>
+                        </div>
+                        <div class="subtle-copy">@Model.SelectedJob.ProcessedTargets / @Model.SelectedJob.TotalTargets targets processed</div>
+                    </div>
+
+                    <dl class="detail-grid">
+                        <div>
+                            <dt>Scope</dt>
+                            <dd>@ProductNormaliser.Web.Pages.CrawlJobs.IndexModel.GetScopeSummary(Model.SelectedJob)</dd>
+                        </div>
+                        <div>
+                            <dt>Started</dt>
+                            <dd>@Model.SelectedJob.StartedAt.ToString("u")</dd>
+                        </div>
+                        <div>
+                            <dt>Updated</dt>
+                            <dd>@Model.SelectedJob.LastUpdatedAt.ToString("u")</dd>
+                        </div>
+                        <div>
+                            <dt>Estimated completion</dt>
+                            <dd>@(Model.SelectedJob.EstimatedCompletion?.ToString("u") ?? "-")</dd>
+                        </div>
+                        <div>
+                            <dt>Cancelled targets</dt>
+                            <dd>@Model.SelectedJob.CancelledCount</dd>
+                        </div>
+                    </dl>
+
+                    @if (Model.ShouldAutoRefresh)
+                    {
+                        <form method="post" asp-page-handler="Cancel" class="actions-bar inline-actions">
+                            <input type="hidden" name="jobId" value="@Model.SelectedJob.JobId" />
+                            <button type="submit" class="btn btn-outline-danger">Stop crawl job</button>
+                        </form>
+                    }
+
+                    <div class="job-breakdown-grid">
+                    @foreach (var breakdown in Model.SelectedJob.PerCategoryBreakdown)
+                    {
+                        <article>
+                            <strong>@breakdown.CategoryKey</strong>
+                            <div class="subtle-copy">Processed @breakdown.ProcessedTargets / @breakdown.TotalTargets</div>
+                            <div class="subtle-copy">Success @breakdown.SuccessCount, skipped @breakdown.SkippedCount, failed @breakdown.FailedCount, cancelled @breakdown.CancelledCount</div>
+                        </article>
+                    }
+                    </div>
+                </div>
+            }
+        </section>
+    </div>
+
+    <section class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">History</p>
+                <h2>Filter and page crawl jobs</h2>
+            </div>
+        </div>
+
+        <form method="get" class="filters-bar">
+            <div>
+                <label asp-for="Status" class="form-label">Status</label>
+                <select asp-for="Status" class="form-select">
+                    <option value="">Any status</option>
+                    <option value="pending">Pending</option>
+                    <option value="running">Running</option>
+                    <option value="cancel_requested">Cancel requested</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="completed">Completed</option>
+                    <option value="completed_with_failures">Completed with failures</option>
+                    <option value="failed">Failed</option>
+                </select>
+            </div>
+            <div>
+                <label asp-for="RequestType" class="form-label">Request type</label>
+                <select asp-for="RequestType" class="form-select">
+                    <option value="">Any type</option>
+                    <option value="category">Category</option>
+                    <option value="source">Source</option>
+                    <option value="product_selection">Product selection</option>
+                </select>
+            </div>
+            <div>
+                <label asp-for="CategoryKey" class="form-label">Category</label>
+                <select asp-for="CategoryKey" class="form-select">
+                    <option value="">Any category</option>
+                    @foreach (var category in Model.Categories)
+                    {
+                        <option value="@category.CategoryKey">@category.DisplayName</option>
+                    }
+                </select>
+            </div>
+            <div class="actions-bar">
+                <button type="submit" class="btn btn-dark">Apply Filters</button>
+            </div>
+        </form>
+
+        @if (Model.Jobs.Items.Count == 0)
+        {
+            <div class="empty-panel">
+                <p class="empty-state">No crawl jobs match the current filters.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table dashboard-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Job</th>
+                            <th>Type</th>
+                            <th>Scope</th>
+                            <th>Status</th>
+                            <th>Progress</th>
+                            <th>Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var job in Model.Jobs.Items)
+                    {
+                        <tr>
+                            <td>
+                                <a class="mono" asp-page="/CrawlJobs/Index" asp-route-jobId="@job.JobId" asp-route-status="@Model.Status" asp-route-requestType="@Model.RequestType" asp-route-category="@Model.CategoryKey">@job.JobId</a>
+                            </td>
+                            <td>@job.RequestType</td>
+                            <td>@ProductNormaliser.Web.Pages.CrawlJobs.IndexModel.GetScopeSummary(job)</td>
+                            <td>
+                                <partial name="_StatusBadge" model="Model.GetStatusBadge(job.Status)" />
+                            </td>
+                            <td>@job.ProcessedTargets / @job.TotalTargets</td>
+                            <td>@job.LastUpdatedAt.ToString("u")</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+
+            <partial name="_Pager" model="Model.Pagination" />
+        }
+    </section>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+
+    @if (Model.ShouldAutoRefresh)
+    {
+        <script>
+            window.setTimeout(function () {
+                window.location.reload();
+            }, 5000);
+        </script>
+    }
+}

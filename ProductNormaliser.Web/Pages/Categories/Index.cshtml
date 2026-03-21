@@ -1,0 +1,25 @@
+@page
+@model ProductNormaliser.Web.Pages.Categories.IndexModel
+@{
+    ViewData["Title"] = "Categories";
+}
+
+<section class="dashboard-shell">
+    <partial name="_PageHero" model="Model.Hero" />
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="notice error">@Model.ErrorMessage</div>
+    }
+
+    <form method="get" asp-page="/CrawlJobs/Index" class="stacked-panels">
+        <input type="hidden" name="requestType" value="category" />
+
+        <partial name="_CategorySelector" model="Model.Selector" />
+
+        <div class="actions-bar selector-actions-bar">
+            <a asp-page="/Categories/Index" class="btn btn-outline-dark">Reset selection</a>
+            <button type="submit" class="btn btn-dark" data-category-launch disabled="@(!Model.Selector.HasSelection)">Launch crawl with selected categories</button>
+        </div>
+    </form>
+</section>

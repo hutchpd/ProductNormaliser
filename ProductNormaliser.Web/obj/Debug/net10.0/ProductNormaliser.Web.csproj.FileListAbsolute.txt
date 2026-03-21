@@ -23,7 +23,6 @@ C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\scopedc
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\scopedcss\bundle\ProductNormaliser.Web.styles.css
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\scopedcss\projectbundle\ProductNormaliser.Web.bundle.scp.css
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\compressed\utcgvqzpkq-{0}-61n19gt1b8-61n19gt1b8.gz
-C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\compressed\i375wqfdvz-{0}-xtxxf3hu2r-xtxxf3hu2r.gz
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\compressed\asa17pyn61-{0}-bqjiyaj88i-bqjiyaj88i.gz
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\compressed\a4azz7wj5q-{0}-c2jlpeoesf-c2jlpeoesf.gz
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\compressed\ujegeb0bu1-{0}-erw9l3u2r3-erw9l3u2r3.gz
@@ -95,4 +94,5 @@ C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\refint\
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\ProductNormaliser.Web.pdb
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\ProductNormaliser.Web.genruntimeconfig.cache
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\ref\ProductNormaliser.Web.dll
-C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\compressed\pz0ooybwrp-{0}-44wva61tb6-44wva61tb6.gz
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\compressed\pz0ooybwrp-{0}-wbjd12v45f-wbjd12v45f.gz
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\compressed\i375wqfdvz-{0}-lofayulxxi-lofayulxxi.gz

@@ -1,9 +1,10 @@
 using MongoDB.Driver;
+using ProductNormaliser.Application.Crawls;
 using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Infrastructure.Mongo.Repositories;
 
-public sealed class CrawlQueueRepository(MongoDbContext context) : MongoRepositoryBase<CrawlQueueItem>(context.CrawlQueueItems), ICrawlQueueStore
+public sealed class CrawlQueueRepository(MongoDbContext context) : MongoRepositoryBase<CrawlQueueItem>(context.CrawlQueueItems), ICrawlQueueStore, ICrawlJobQueueWriter
 {
     public async Task<CrawlQueueItem?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
     {
@@ -17,6 +18,31 @@ public sealed class CrawlQueueRepository(MongoDbContext context) : MongoReposito
             item,
             new ReplaceOptions { IsUpsert = true },
             cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<CrawlQueueItem>> CancelQueuedItemsAsync(string jobId, string reason, CancellationToken cancellationToken = default)
+    {
+        var queuedItems = await Collection.Find(item => item.JobId == jobId && item.Status == "queued")
+            .ToListAsync(cancellationToken);
+
+        if (queuedItems.Count == 0)
+        {
+            return [];
+        }
+
+        foreach (var item in queuedItems)
+        {
+            item.Status = "cancelled";
+            item.LastError = reason;
+            item.NextAttemptUtc = null;
+        }
+
+        foreach (var item in queuedItems)
+        {
+            await UpsertAsync(item, cancellationToken);
+        }
+
+        return queuedItems;
     }
 
     public async Task<CrawlQueueItem?> GetNextQueuedAsync(DateTime utcNow, CancellationToken cancellationToken = default)

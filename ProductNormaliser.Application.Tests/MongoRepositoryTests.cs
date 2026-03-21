@@ -1,4 +1,5 @@
 using MongoDB.Driver;
+using ProductNormaliser.Application.Crawls;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Infrastructure.Mongo;
 using ProductNormaliser.Infrastructure.Mongo.Repositories;
@@ -7,6 +8,7 @@ namespace ProductNormaliser.Tests;
 
 public sealed class MongoRepositoryTests
 {
+    private CrawlJobRepository crawlJobRepository = default!;
     private CrawlSourceRepository crawlSourceRepository = default!;
     private RawPageRepository rawPageRepository = default!;
     private SourceProductRepository sourceProductRepository = default!;
@@ -19,6 +21,7 @@ public sealed class MongoRepositoryTests
     public async Task SetUpAsync()
     {
         var context = MongoIntegrationTestFixture.Context;
+        await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.CrawlJobs);
         await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.CrawlSources);
         await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.RawPages);
         await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.SourceProducts);
@@ -28,6 +31,7 @@ public sealed class MongoRepositoryTests
         await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.CrawlQueue);
         await context.EnsureIndexesAsync();
 
+        crawlJobRepository = new CrawlJobRepository(context);
         crawlSourceRepository = new CrawlSourceRepository(context);
         rawPageRepository = new RawPageRepository(context);
         sourceProductRepository = new SourceProductRepository(context);
@@ -35,6 +39,43 @@ public sealed class MongoRepositoryTests
         productOfferRepository = new ProductOfferRepository(context);
         mergeConflictRepository = new MergeConflictRepository(context);
         crawlQueueRepository = new CrawlQueueRepository(context);
+    }
+
+    [Test]
+    public async Task CrawlJobRepository_UpsertsAndListsMostRecentJobs()
+    {
+        await crawlJobRepository.UpsertAsync(new CrawlJob
+        {
+            JobId = "job-1",
+            RequestType = CrawlJobRequestTypes.Category,
+            RequestedCategories = ["tv"],
+            TotalTargets = 2,
+            StartedAt = new DateTime(2026, 03, 20, 10, 00, 00, DateTimeKind.Utc),
+            LastUpdatedAt = new DateTime(2026, 03, 20, 10, 05, 00, DateTimeKind.Utc),
+            Status = CrawlJobStatuses.Running,
+            PerCategoryBreakdown = [new CrawlJobCategoryBreakdown { CategoryKey = "tv", TotalTargets = 2 }]
+        });
+        await crawlJobRepository.UpsertAsync(new CrawlJob
+        {
+            JobId = "job-2",
+            RequestType = CrawlJobRequestTypes.Source,
+            RequestedSources = ["ao"],
+            TotalTargets = 1,
+            StartedAt = new DateTime(2026, 03, 20, 10, 10, 00, DateTimeKind.Utc),
+            LastUpdatedAt = new DateTime(2026, 03, 20, 10, 15, 00, DateTimeKind.Utc),
+            Status = CrawlJobStatuses.Pending,
+            PerCategoryBreakdown = [new CrawlJobCategoryBreakdown { CategoryKey = "tv", TotalTargets = 1 }]
+        });
+
+        var stored = await crawlJobRepository.GetAsync("job-1");
+        var listed = await crawlJobRepository.ListAsync(new CrawlJobQuery());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(stored, Is.Not.Null);
+            Assert.That(stored!.Status, Is.EqualTo(CrawlJobStatuses.Running));
+            Assert.That(listed.Items.Select(job => job.JobId), Is.EqualTo(new[] { "job-2", "job-1" }));
+        });
     }
 
     [Test]
@@ -290,12 +331,14 @@ public sealed class MongoRepositoryTests
     {
         var context = MongoIntegrationTestFixture.Context;
 
+        var crawlJobIndexes = await context.CrawlJobs.Indexes.ListAsync();
         var crawlSourceIndexes = await context.CrawlSources.Indexes.ListAsync();
         var canonicalIndexes = await context.CanonicalProducts.Indexes.ListAsync();
         var sourceIndexes = await context.SourceProducts.Indexes.ListAsync();
         var offerIndexes = await context.ProductOffers.Indexes.ListAsync();
         var conflictIndexes = await context.MergeConflicts.Indexes.ListAsync();
 
+        var crawlJobIndexDefinitions = await crawlJobIndexes.ToListAsync();
         var crawlSourceIndexDefinitions = await crawlSourceIndexes.ToListAsync();
         var canonicalIndexDefinitions = await canonicalIndexes.ToListAsync();
         var sourceIndexDefinitions = await sourceIndexes.ToListAsync();
@@ -304,6 +347,7 @@ public sealed class MongoRepositoryTests
 
         Assert.Multiple(() =>
         {
+            Assert.That(crawlJobIndexDefinitions.Count, Is.GreaterThanOrEqualTo(3));
             Assert.That(crawlSourceIndexDefinitions.Count, Is.GreaterThanOrEqualTo(2));
             Assert.That(canonicalIndexDefinitions.Count, Is.GreaterThanOrEqualTo(3));
             Assert.That(sourceIndexDefinitions.Count, Is.GreaterThanOrEqualTo(2));

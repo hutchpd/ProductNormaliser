@@ -1,0 +1,21 @@
+@model PaginationModel
+
+@if (Model.TotalPages > 1)
+{
+    <nav class="pager-shell" aria-label="Pagination">
+        <span class="pager-meta">Page @Model.CurrentPage of @Model.TotalPages, @Model.TotalCount total results</span>
+        <div class="pager-links">
+            @if (Model.HasPrevious)
+            {
+                var previousValues = Model.BuildRouteValues(Model.CurrentPage - 1);
+                <a class="btn btn-outline-dark btn-sm" asp-page="@Model.PagePath" asp-all-route-data="previousValues">Previous</a>
+            }
+
+            @if (Model.HasNext)
+            {
+                var nextValues = Model.BuildRouteValues(Model.CurrentPage + 1);
+                <a class="btn btn-outline-dark btn-sm" asp-page="@Model.PagePath" asp-all-route-data="nextValues">Next</a>
+            }
+        </div>
+    </nav>
+}

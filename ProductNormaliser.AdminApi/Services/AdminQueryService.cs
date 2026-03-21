@@ -58,6 +58,58 @@ public sealed class AdminQueryService(
         }).ToArray();
     }
 
+    public async Task<ProductListResponse> ListProductsAsync(string? categoryKey, string? search, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var normalizedCategoryKey = string.IsNullOrWhiteSpace(categoryKey) ? null : categoryKey.Trim();
+        var normalizedSearch = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+        var effectivePage = Math.Max(1, page);
+        var effectivePageSize = Math.Clamp(pageSize, 1, 100);
+
+        var filter = Builders<CanonicalProduct>.Filter.Empty;
+        if (!string.IsNullOrWhiteSpace(normalizedCategoryKey))
+        {
+            filter &= Builders<CanonicalProduct>.Filter.Eq(product => product.CategoryKey, normalizedCategoryKey);
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedSearch))
+        {
+            var regex = new MongoDB.Bson.BsonRegularExpression(normalizedSearch, "i");
+            filter &= Builders<CanonicalProduct>.Filter.Or(
+                Builders<CanonicalProduct>.Filter.Eq(product => product.Id, normalizedSearch),
+                Builders<CanonicalProduct>.Filter.Regex(product => product.DisplayName, regex),
+                Builders<CanonicalProduct>.Filter.Regex(product => product.Brand, regex),
+                Builders<CanonicalProduct>.Filter.Regex(product => product.ModelNumber, regex),
+                Builders<CanonicalProduct>.Filter.Regex(product => product.Gtin, regex));
+        }
+
+        var totalCount = await mongoDbContext.CanonicalProducts.CountDocumentsAsync(filter, cancellationToken: cancellationToken);
+        var products = await mongoDbContext.CanonicalProducts.Find(filter)
+            .SortByDescending(product => product.UpdatedUtc)
+            .Skip((effectivePage - 1) * effectivePageSize)
+            .Limit(effectivePageSize)
+            .ToListAsync(cancellationToken);
+
+        return new ProductListResponse
+        {
+            Items = products.Select(product => new ProductSummaryResponse
+            {
+                Id = product.Id,
+                CategoryKey = product.CategoryKey,
+                Brand = product.Brand,
+                ModelNumber = product.ModelNumber,
+                Gtin = product.Gtin,
+                DisplayName = product.DisplayName,
+                SourceCount = product.Sources.Count,
+                AttributeCount = product.Attributes.Count,
+                UpdatedUtc = product.UpdatedUtc
+            }).ToArray(),
+            Page = effectivePage,
+            PageSize = effectivePageSize,
+            TotalCount = totalCount,
+            TotalPages = totalCount == 0 ? 0 : (int)Math.Ceiling((double)totalCount / effectivePageSize)
+        };
+    }
+
     public async Task<ProductDetailResponse?> GetProductAsync(string id, CancellationToken cancellationToken)
     {
         var canonicalProduct = await canonicalProductStore.GetByIdAsync(id, cancellationToken);

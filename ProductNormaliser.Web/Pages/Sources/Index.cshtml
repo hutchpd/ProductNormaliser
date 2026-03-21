@@ -1,0 +1,103 @@
+@page
+@model ProductNormaliser.Web.Pages.Sources.IndexModel
+@{
+    ViewData["Title"] = "Sources";
+}
+
+<section class="dashboard-shell">
+    <partial name="_PageHero" model="Model.Hero" />
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="notice error">@Model.ErrorMessage</div>
+    }
+
+    <section class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Filters</p>
+                <h2>Refine the source registry</h2>
+            </div>
+        </div>
+
+        <form method="get" class="filters-bar">
+            <div>
+                <label asp-for="Search" class="form-label">Search</label>
+                <input asp-for="Search" class="form-control" placeholder="Source id, name, or host" />
+            </div>
+            <div>
+                <label asp-for="CategoryKey" class="form-label">Category</label>
+                <select asp-for="CategoryKey" class="form-select">
+                    <option value="">All categories</option>
+                    @foreach (var category in Model.Categories)
+                    {
+                        <option value="@category.CategoryKey">@category.DisplayName</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label asp-for="Enabled" class="form-label">Status</label>
+                <select asp-for="Enabled" class="form-select">
+                    <option value="">Any</option>
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                </select>
+            </div>
+            <div class="actions-bar">
+                <button type="submit" class="btn btn-dark">Apply Filters</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Sources</p>
+                <h2>Managed source hosts</h2>
+            </div>
+        </div>
+
+        @if (Model.Sources.Count == 0)
+        {
+            <div class="empty-panel">
+                <p class="empty-state">No sources match the current filters.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table dashboard-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Source</th>
+                            <th>Categories</th>
+                            <th>Throttling</th>
+                            <th>Status</th>
+                            <th class="actions-col">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var source in Model.Sources)
+                    {
+                        <tr>
+                            <td>
+                                <strong>@source.DisplayName</strong>
+                                <div class="text-muted small mono">@source.SourceId</div>
+                                <div class="text-muted small">@source.Host</div>
+                            </td>
+                            <td>@string.Join(", ", source.SupportedCategoryKeys)</td>
+                            <td>@source.ThrottlingPolicy.RequestsPerMinute rpm, @source.ThrottlingPolicy.MaxConcurrentRequests concurrent</td>
+                            <td>
+                                <partial name="_StatusBadge" model='new StatusBadgeModel { Text = source.IsEnabled ? "Enabled" : "Disabled", Tone = source.IsEnabled ? "completed" : "danger" }' />
+                            </td>
+                            <td class="actions-col">
+                                <a class="btn btn-outline-dark btn-sm" asp-page="/Sources/Details" asp-route-sourceId="@source.SourceId">Manage</a>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+</section>

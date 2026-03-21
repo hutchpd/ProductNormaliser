@@ -1,4 +1,5 @@
 using MongoDB.Driver;
+using ProductNormaliser.Application.Crawls;
 using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Infrastructure.Mongo;
@@ -10,6 +11,7 @@ public sealed class CrawlQueueService(
     ICrawlQueueStore crawlQueueStore,
     ICrawlPriorityService crawlPriorityService,
     ICrawlBackoffService crawlBackoffService,
+    ICrawlJobService crawlJobService,
     MongoDbContext mongoDbContext) : ICrawlQueueService
 {
     public async Task<CrawlQueueLease?> DequeueAsync(CancellationToken cancellationToken)
@@ -28,6 +30,11 @@ public sealed class CrawlQueueService(
         queueItem.NextAttemptUtc = null;
         queueItem.LastError = null;
         await crawlQueueStore.UpsertAsync(queueItem, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(queueItem.JobId))
+        {
+            await crawlJobService.MarkStartedAsync(queueItem.JobId, cancellationToken);
+        }
 
         return new CrawlQueueLease
         {
@@ -53,6 +60,16 @@ public sealed class CrawlQueueService(
             return;
         }
 
+        if (!string.IsNullOrWhiteSpace(queueItem.JobId))
+        {
+            queueItem.Status = "completed";
+            queueItem.LastError = null;
+            queueItem.NextAttemptUtc = null;
+            await crawlQueueStore.UpsertAsync(queueItem, cancellationToken);
+            await crawlJobService.RecordTargetOutcomeAsync(queueItem.JobId, queueItem.CategoryKey, "completed", cancellationToken);
+            return;
+        }
+
         queueItem.Status = "queued";
         queueItem.ConsecutiveFailureCount = 0;
         queueItem.LastError = null;
@@ -68,6 +85,16 @@ public sealed class CrawlQueueService(
             return;
         }
 
+        if (!string.IsNullOrWhiteSpace(queueItem.JobId))
+        {
+            queueItem.Status = "skipped";
+            queueItem.LastError = reason;
+            queueItem.NextAttemptUtc = null;
+            await crawlQueueStore.UpsertAsync(queueItem, cancellationToken);
+            await crawlJobService.RecordTargetOutcomeAsync(queueItem.JobId, queueItem.CategoryKey, "skipped", cancellationToken);
+            return;
+        }
+
         queueItem.Status = "queued";
         queueItem.ConsecutiveFailureCount = 0;
         queueItem.LastError = reason;
@@ -80,6 +107,16 @@ public sealed class CrawlQueueService(
         var queueItem = await crawlQueueStore.GetByIdAsync(queueItemId, cancellationToken);
         if (queueItem is null)
         {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(queueItem.JobId))
+        {
+            queueItem.Status = "failed";
+            queueItem.LastError = reason;
+            queueItem.NextAttemptUtc = null;
+            await crawlQueueStore.UpsertAsync(queueItem, cancellationToken);
+            await crawlJobService.RecordTargetOutcomeAsync(queueItem.JobId, queueItem.CategoryKey, "failed", cancellationToken);
             return;
         }
 

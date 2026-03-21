@@ -18,6 +18,7 @@ public static class MongoMappingRegistry
         RegisterObjectSerializer();
         RegisterClassMap<RawPage>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<CategoryMetadata>(map => map.MapIdMember(model => model.CategoryKey));
+        RegisterClassMap<CrawlJob>(map => map.MapIdMember(model => model.JobId));
         RegisterClassMap<CrawlSource>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<SourceProduct>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<CanonicalProduct>(map => map.MapIdMember(model => model.Id));
@@ -32,6 +33,7 @@ public static class MongoMappingRegistry
         RegisterClassMap<SourceAttributeDisagreement>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<CanonicalAttributeValue>();
         RegisterClassMap<AttributeEvidence>();
+        RegisterClassMap<CrawlJobCategoryBreakdown>();
         RegisterClassMap<ProductSourceLink>();
         RegisterClassMap<SourceAttributeValue>();
         RegisterClassMap<NormalisedAttributeValue>();

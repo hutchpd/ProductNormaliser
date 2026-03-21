@@ -3,6 +3,7 @@ namespace ProductNormaliser.Infrastructure.Mongo;
 public static class MongoCollectionNames
 {
     public const string Categories = "category_metadata";
+    public const string CrawlJobs = "crawl_jobs";
     public const string CrawlSources = "crawl_sources";
     public const string RawPages = "raw_pages";
     public const string SourceProducts = "source_products";

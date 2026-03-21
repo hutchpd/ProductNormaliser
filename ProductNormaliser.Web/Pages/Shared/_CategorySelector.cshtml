@@ -1,0 +1,137 @@
+@model ProductNormaliser.Web.Models.CategorySelectorState
+
+@if (Model.State == CategorySelectorViewState.Loading)
+{
+    <section class="panel">
+        <div class="empty-panel">
+            <p class="empty-state">Loading categories...</p>
+        </div>
+    </section>
+}
+else if (Model.State == CategorySelectorViewState.Error)
+{
+    <section class="panel">
+        <div class="notice error">@Model.ErrorMessage</div>
+    </section>
+}
+else if (Model.State == CategorySelectorViewState.Empty)
+{
+    <section class="panel">
+        <div class="empty-panel">
+            <p class="empty-state">@Model.EmptyMessage</p>
+        </div>
+    </section>
+}
+else
+{
+    <div class="selector-layout" data-category-selector>
+        <section class="panel">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Category Families</p>
+                    <h2>Select one or more categories</h2>
+                </div>
+            </div>
+
+            <div class="family-stack">
+            @foreach (var family in Model.Families)
+            {
+                <section class="family-panel" data-family-key="@family.FamilyKey">
+                    <div class="family-panel-header">
+                        <div>
+                            <h3>@family.FamilyDisplayName</h3>
+                            <p class="subtle-copy">@family.Categories.Count categories, @family.SelectableCount selectable</p>
+                        </div>
+
+                        @if (family.SelectableCount > 0)
+                        {
+                            <button type="button"
+                                    class="btn btn-outline-dark btn-sm"
+                                    data-family-toggle
+                                    data-family-key="@family.FamilyKey"
+                                    data-select-label="Select family"
+                                    data-clear-label="Clear family">
+                                @(family.AllSelected ? "Clear family" : "Select family")
+                            </button>
+                        }
+                    </div>
+
+                    <div class="category-card-grid">
+                    @foreach (var category in family.Categories)
+                    {
+                        <label class="category-card @(category.IsSelected ? "selected" : string.Empty) @(!category.IsSelectable ? "disabled" : string.Empty)" data-category-card data-family-key="@family.FamilyKey">
+                            <input type="checkbox"
+                                   name="@Model.InputName"
+                                   value="@category.CategoryKey"
+                                   data-category-checkbox
+                                   data-display-name="@category.DisplayName"
+                                   data-family-display-name="@category.FamilyDisplayName"
+                                   data-score="@category.SchemaCompletenessScore"
+                                   checked="@category.IsSelected"
+                                   disabled="@(!category.IsSelectable)" />
+
+                            <div class="category-card-top">
+                                <div>
+                                    <strong>@category.DisplayName</strong>
+                                    <div class="subtle-copy mono">@category.CategoryKey</div>
+                                </div>
+                                <div class="category-score">@category.SchemaCompletenessLabel</div>
+                            </div>
+
+                            <div class="category-card-meta">
+                                <partial name="_StatusBadge" model='new StatusBadgeModel { Text = category.IsEnabled ? "Enabled" : "Disabled", Tone = category.SelectionTone }' />
+                                <partial name="_StatusBadge" model='new StatusBadgeModel { Text = category.CrawlSupportStatus, Tone = category.CrawlSupportTone }' />
+                            </div>
+
+                            <div class="category-card-footer">
+                                <span>Schema completeness</span>
+                                <div class="mini-progress-shell" aria-hidden="true">
+                                    <div class="mini-progress-fill" style="width: @category.SchemaCompletenessLabel"></div>
+                                </div>
+                            </div>
+                        </label>
+                    }
+                    </div>
+                </section>
+            }
+            </div>
+        </section>
+
+        <aside class="panel panel-muted selected-summary" data-category-summary>
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Selected Categories</p>
+                    <h2>Selection summary</h2>
+                </div>
+            </div>
+
+            <div class="metric-strip selector-summary-metrics">
+                <article>
+                    <span>Selected</span>
+                    <strong data-selected-count>@Model.SelectedCount</strong>
+                </article>
+                <article>
+                    <span>Families</span>
+                    <strong data-selected-family-count>@Model.SelectedFamilyCount</strong>
+                </article>
+                <article>
+                    <span>Average completeness</span>
+                    <strong data-selected-average>@Model.AverageSchemaCompletenessScore.ToString("0.0")%</strong>
+                </article>
+                <article>
+                    <span>Enabled</span>
+                    <strong data-selected-enabled>@Model.SelectedCategories.Count(category => category.IsEnabled)</strong>
+                </article>
+            </div>
+
+            <p class="empty-state" data-selected-empty hidden="@Model.HasSelection">No categories selected yet. Pick a family or a few individual categories to prepare the next crawl run.</p>
+
+            <div class="chip-row" data-selected-list>
+            @foreach (var category in Model.SelectedCategories)
+            {
+                <span class="chip" data-selected-chip>@category.DisplayName</span>
+            }
+            </div>
+        </aside>
+    </div>
+}

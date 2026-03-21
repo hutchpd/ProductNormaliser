@@ -1,6 +1,7 @@
 using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Merging;
 using ProductNormaliser.Core.Normalisation;
+using ProductNormaliser.Application.Crawls;
 using ProductNormaliser.Infrastructure.Crawling;
 using ProductNormaliser.Infrastructure.Mongo;
 using ProductNormaliser.Infrastructure.StructuredData;
@@ -13,6 +14,7 @@ builder.Services.AddSingleton<IProductIdentityResolver, ProductIdentityResolver>
 builder.Services.AddSingleton<MergeWeightCalculator>();
 builder.Services.AddSingleton<ICanonicalMergeService, CanonicalMergeService>();
 builder.Services.AddSingleton<IConflictDetector, ConflictDetector>();
+builder.Services.AddSingleton<ICrawlJobService, CrawlJobService>();
 builder.Services.AddSingleton<CrawlOrchestrator>();
 builder.Services.AddHttpClient<IHttpFetcher, HttpFetcher>();
 builder.Services.AddHttpClient<IRobotsPolicyService, RobotsPolicyService>();

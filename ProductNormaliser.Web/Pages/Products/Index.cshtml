@@ -1,0 +1,206 @@
+@page
+@model ProductNormaliser.Web.Pages.Products.IndexModel
+@{
+    ViewData["Title"] = "Products";
+}
+
+<section class="dashboard-shell">
+    <partial name="_PageHero" model="Model.Hero" />
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="notice error">@Model.ErrorMessage</div>
+    }
+
+    <section class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Filters</p>
+                <h2>Page through canonical products</h2>
+            </div>
+        </div>
+
+        <form method="get" class="filters-bar">
+            <div>
+                <label asp-for="Search" class="form-label">Search</label>
+                <input asp-for="Search" class="form-control" placeholder="Display name, brand, model, GTIN, or id" />
+            </div>
+            <div>
+                <label asp-for="CategoryKey" class="form-label">Category</label>
+                <select asp-for="CategoryKey" class="form-select">
+                    <option value="">All categories</option>
+                    @foreach (var category in Model.Categories)
+                    {
+                        <option value="@category.CategoryKey">@category.DisplayName</option>
+                    }
+                </select>
+            </div>
+            <div class="actions-bar">
+                <button type="submit" class="btn btn-dark">Apply Filters</button>
+            </div>
+        </form>
+    </section>
+
+    <div class="split-layout">
+        <section class="panel">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Catalogue</p>
+                    <h2>Canonical product summaries</h2>
+                </div>
+            </div>
+
+            @if (Model.Products.Items.Count == 0)
+            {
+                <div class="empty-panel">
+                    <p class="empty-state">No products match the current filters.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table dashboard-table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Category</th>
+                                <th>Sources</th>
+                                <th>Attributes</th>
+                                <th>Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var product in Model.Products.Items)
+                        {
+                            <tr>
+                                <td>
+                                    <a asp-page="/Products/Index" asp-route-productId="@product.Id" asp-route-category="@Model.CategoryKey" asp-route-search="@Model.Search">@product.DisplayName</a>
+                                    <div class="text-muted small mono">@product.Id</div>
+                                    <div class="text-muted small">@product.Brand @(string.IsNullOrWhiteSpace(product.ModelNumber) ? string.Empty : $"/ {product.ModelNumber}")</div>
+                                </td>
+                                <td>@product.CategoryKey</td>
+                                <td>@product.SourceCount</td>
+                                <td>@product.AttributeCount</td>
+                                <td>@product.UpdatedUtc.ToString("u")</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+
+                <partial name="_Pager" model="Model.Pagination" />
+            }
+        </section>
+
+        <section class="panel">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Selected Product</p>
+                    <h2>@(Model.SelectedProduct?.DisplayName ?? "Choose a product")</h2>
+                </div>
+            </div>
+
+            @if (Model.SelectedProduct is null)
+            {
+                <div class="empty-panel">
+                    <p class="empty-state">Select a product to inspect merged attributes, raw source evidence, and change history.</p>
+                </div>
+            }
+            else
+            {
+                <div class="detail-stack">
+                    <dl class="detail-grid">
+                        <div>
+                            <dt>Category</dt>
+                            <dd>@Model.SelectedProduct.CategoryKey</dd>
+                        </div>
+                        <div>
+                            <dt>Brand</dt>
+                            <dd>@Model.SelectedProduct.Brand</dd>
+                        </div>
+                        <div>
+                            <dt>Model</dt>
+                            <dd>@(Model.SelectedProduct.ModelNumber ?? "-")</dd>
+                        </div>
+                        <div>
+                            <dt>GTIN</dt>
+                            <dd>@(Model.SelectedProduct.Gtin ?? "-")</dd>
+                        </div>
+                    </dl>
+
+                    <div class="table-wrap">
+                        <table class="table dashboard-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Attribute</th>
+                                    <th>Value</th>
+                                    <th>Confidence</th>
+                                    <th>Conflict</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            @foreach (var productAttribute in Model.SelectedProduct.Attributes.OrderBy(value => value.AttributeKey, StringComparer.OrdinalIgnoreCase))
+                            {
+                                <tr>
+                                    <td class="mono">@productAttribute.AttributeKey</td>
+                                    <td>@(productAttribute.Value ?? "-")</td>
+                                    <td>@productAttribute.Confidence</td>
+                                    <td>@(productAttribute.HasConflict ? "Yes" : "No")</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table class="table dashboard-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Source</th>
+                                    <th>Title</th>
+                                    <th>Model</th>
+                                    <th>GTIN</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            @foreach (var sourceProduct in Model.SelectedProduct.SourceProducts)
+                            {
+                                <tr>
+                                    <td>@sourceProduct.SourceName</td>
+                                    <td>@sourceProduct.Title</td>
+                                    <td>@(sourceProduct.ModelNumber ?? "-")</td>
+                                    <td>@(sourceProduct.Gtin ?? "-")</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table class="table dashboard-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Changed</th>
+                                    <th>Attribute</th>
+                                    <th>Source</th>
+                                    <th>New value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            @foreach (var change in Model.ProductHistory)
+                            {
+                                <tr>
+                                    <td>@change.TimestampUtc.ToString("u")</td>
+                                    <td class="mono">@change.AttributeKey</td>
+                                    <td>@change.SourceName</td>
+                                    <td>@(change.NewValue ?? "-")</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        </section>
+    </div>
+</section>

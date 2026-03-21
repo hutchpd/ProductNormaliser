@@ -1,0 +1,22 @@
+@model PageHeroModel
+
+<div class="hero-panel">
+    <div>
+        <p class="eyebrow">@Model.Eyebrow</p>
+        <h1>@Model.Title</h1>
+        <p class="hero-copy">@Model.Description</p>
+    </div>
+
+    @if (Model.Metrics.Count > 0)
+    {
+        <div class="hero-metrics">
+            @foreach (var metric in Model.Metrics)
+            {
+                <article>
+                    <span>@metric.Label</span>
+                    <strong>@metric.Value</strong>
+                </article>
+            }
+        </div>
+    }
+</div>

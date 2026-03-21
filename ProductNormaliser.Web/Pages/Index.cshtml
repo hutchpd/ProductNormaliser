@@ -5,27 +5,7 @@
 }
 
 <section class="dashboard-shell">
-    <div class="hero-panel">
-        <div>
-            <p class="eyebrow">Operations Dashboard</p>
-            <h1>Category-aware product intelligence for electrical goods</h1>
-            <p class="hero-copy">The web layer now reads category detail and managed crawl sources directly from the Admin API, so the dashboard can inspect schema shape and control source availability without touching persistence.</p>
-        </div>
-        <div class="hero-metrics">
-            <article>
-                <span>Enabled categories</span>
-                <strong>@Model.Categories.Count</strong>
-            </article>
-            <article>
-                <span>Managed sources</span>
-                <strong>@Model.Sources.Count</strong>
-            </article>
-            <article>
-                <span>Selected category</span>
-                <strong>@(Model.SelectedCategory?.Metadata.DisplayName ?? "None")</strong>
-            </article>
-        </div>
-    </div>
+    <partial name="_PageHero" model="Model.Hero" />
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
@@ -39,12 +19,39 @@
 
     <div asp-validation-summary="ModelOnly" class="notice error" role="alert"></div>
 
-    <div class="dashboard-grid">
-        <section class="panel panel-category">
+    <section class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Quick Navigation</p>
+                <h2>Jump into the dashboard areas</h2>
+            </div>
+        </div>
+        <div class="quick-links">
+            <a class="card-link" asp-page="/Categories/Index">
+                <strong>Categories</strong>
+                <span class="subtle-copy">Review enabled families and schemas.</span>
+            </a>
+            <a class="card-link" asp-page="/CrawlJobs/Index">
+                <strong>Crawl Jobs</strong>
+                <span class="subtle-copy">Launch and monitor job batches.</span>
+            </a>
+            <a class="card-link" asp-page="/Products/Index">
+                <strong>Products</strong>
+                <span class="subtle-copy">Inspect canonical product merges.</span>
+            </a>
+            <a class="card-link" asp-page="/Sources/Index">
+                <strong>Sources</strong>
+                <span class="subtle-copy">Check registry coverage and health.</span>
+            </a>
+        </div>
+    </section>
+
+    <div class="overview-grid">
+        <section class="panel">
             <div class="panel-heading">
                 <div>
-                    <p class="eyebrow">Category Detail</p>
-                    <h2>Schema and metadata in one request</h2>
+                    <p class="eyebrow">Selected Category</p>
+                    <h2>Schema detail and launch controls</h2>
                 </div>
                 <form method="get" class="category-picker">
                     <label asp-for="SelectedCategoryKey" class="form-label">Category</label>
@@ -59,7 +66,9 @@
 
             @if (Model.SelectedCategory is null)
             {
-                <p class="empty-state">No enabled categories are currently available from the Admin API.</p>
+                <div class="empty-panel">
+                    <p class="empty-state">No category detail is currently available from the Admin API.</p>
+                </div>
             }
             else
             {
@@ -75,20 +84,28 @@
                         <dd>@Model.SelectedCategory.Metadata.CategoryKey</dd>
                     </div>
                     <div>
-                        <dt>Icon key</dt>
-                        <dd>@Model.SelectedCategory.Metadata.IconKey</dd>
+                        <dt>Attributes</dt>
+                        <dd>@Model.SelectedCategory.Schema.Attributes.Count</dd>
                     </div>
                     <div>
                         <dt>Enabled</dt>
                         <dd>@(Model.SelectedCategory.Metadata.IsEnabled ? "Yes" : "No")</dd>
                     </div>
                     <div>
-                        <dt>Attributes</dt>
-                        <dd>@Model.SelectedCategory.Schema.Attributes.Count</dd>
+                        <dt>Icon key</dt>
+                        <dd>@Model.SelectedCategory.Metadata.IconKey</dd>
                     </div>
                 </dl>
 
-                <div class="table-wrap">
+                <form method="post" asp-page-handler="LaunchCategoryCrawl" class="source-form">
+                    <input asp-for="QuickCrawl.CategoryKey" type="hidden" value="@Model.SelectedCategory.Metadata.CategoryKey" />
+                    <div class="actions-bar">
+                        <button type="submit" class="btn btn-dark">Launch Category Crawl</button>
+                    </div>
+                    <span asp-validation-for="QuickCrawl.CategoryKey" class="text-danger small"></span>
+                </form>
+
+                <div class="table-wrap mt-3">
                     <table class="table dashboard-table align-middle mb-0">
                         <thead>
                             <tr>
@@ -96,21 +113,19 @@
                                 <th>Type</th>
                                 <th>Unit</th>
                                 <th>Required</th>
-                                <th>Description</th>
                             </tr>
                         </thead>
                         <tbody>
-                        @foreach (var schemaAttribute in Model.SelectedCategory.Schema.Attributes)
+                        @foreach (var schemaField in Model.SelectedCategory.Schema.Attributes.Take(8))
                         {
                             <tr>
                                 <td>
-                                    <strong>@schemaAttribute.DisplayName</strong>
-                                    <div class="text-muted small">@schemaAttribute.Key</div>
+                                    <strong>@schemaField.DisplayName</strong>
+                                    <div class="text-muted small">@schemaField.Key</div>
                                 </td>
-                                <td>@schemaAttribute.ValueType</td>
-                                <td>@(schemaAttribute.Unit ?? "-")</td>
-                                <td>@(schemaAttribute.IsRequired ? "Required" : "Optional")</td>
-                                <td>@schemaAttribute.Description</td>
+                                <td>@schemaField.ValueType</td>
+                                <td>@(schemaField.Unit ?? "-")</td>
+                                <td>@(schemaField.IsRequired ? "Required" : "Optional")</td>
                             </tr>
                         }
                         </tbody>
@@ -119,64 +134,79 @@
             }
         </section>
 
-        <section class="panel panel-sources">
-            <div class="panel-heading">
-                <div>
-                    <p class="eyebrow">Managed Sources</p>
-                    <h2>Live source registry</h2>
+        <div class="stacked-panels">
+            <section class="panel panel-muted">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Catalogue Health</p>
+                        <h2>Current product metrics</h2>
+                    </div>
                 </div>
-            </div>
+                <div class="metric-strip">
+                    <article>
+                        <span>Source products</span>
+                        <strong>@Model.Stats.TotalSourceProducts</strong>
+                    </article>
+                    <article>
+                        <span>Avg attributes</span>
+                        <strong>@Model.Stats.AverageAttributesPerProduct</strong>
+                    </article>
+                    <article>
+                        <span>Conflict rate</span>
+                        <strong>@Model.Stats.PercentProductsWithConflicts%</strong>
+                    </article>
+                    <article>
+                        <span>Missing key fields</span>
+                        <strong>@Model.Stats.PercentProductsMissingKeyAttributes%</strong>
+                    </article>
+                </div>
+            </section>
 
-            @if (Model.Sources.Count == 0)
-            {
-                <p class="empty-state">No managed crawl sources have been registered yet.</p>
-            }
-            else
-            {
-                <div class="table-wrap">
-                    <table class="table dashboard-table align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th>Source</th>
-                                <th>Categories</th>
-                                <th>Rate limits</th>
-                                <th>Status</th>
-                                <th class="actions-col">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        @foreach (var source in Model.Sources)
-                        {
-                            <tr>
-                                <td>
-                                    <strong>@source.DisplayName</strong>
-                                    <div class="text-muted small">@source.Host</div>
-                                </td>
-                                <td>@string.Join(", ", source.SupportedCategoryKeys)</td>
-                                <td>@source.ThrottlingPolicy.RequestsPerMinute rpm, @source.ThrottlingPolicy.MaxConcurrentRequests concurrent</td>
-                                <td>
-                                    <span class="status-pill @(source.IsEnabled ? "enabled" : "disabled")">
-                                        @(source.IsEnabled ? "Enabled" : "Disabled")
-                                    </span>
-                                </td>
-                                <td class="actions-col">
-                                    <a class="btn btn-outline-dark btn-sm" asp-page="/Sources/Details" asp-route-sourceId="@source.SourceId">Manage</a>
-                                    <form method="post" asp-page-handler="ToggleSource" class="inline-form">
-                                        <input type="hidden" name="sourceId" value="@source.SourceId" />
-                                        <input type="hidden" name="currentlyEnabled" value="@source.IsEnabled" />
-                                        <input type="hidden" name="category" value="@Model.SelectedCategoryKey" />
-                                        <button type="submit" class="btn btn-sm @(source.IsEnabled ? "btn-outline-danger" : "btn-outline-success")">
-                                            @(source.IsEnabled ? "Disable" : "Enable")
-                                        </button>
-                                    </form>
-                                </td>
-                            </tr>
-                        }
-                        </tbody>
-                    </table>
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Recent Crawl Jobs</p>
+                        <h2>Latest activity</h2>
+                    </div>
+                    <a class="btn btn-outline-dark btn-sm" asp-page="/CrawlJobs/Index">Open job history</a>
                 </div>
-            }
-        </section>
+
+                @if (Model.RecentJobs.Count == 0)
+                {
+                    <div class="empty-panel">
+                        <p class="empty-state">No crawl jobs have been created yet.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-wrap">
+                        <table class="table dashboard-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Job</th>
+                                    <th>Scope</th>
+                                    <th>Status</th>
+                                    <th>Progress</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            @foreach (var job in Model.RecentJobs)
+                            {
+                                <tr>
+                                    <td>
+                                        <a class="mono" asp-page="/CrawlJobs/Index" asp-route-jobId="@job.JobId">@job.JobId</a>
+                                    </td>
+                                    <td>@job.RequestType</td>
+                                    <td>@job.Status</td>
+                                    <td>@job.ProcessedTargets / @job.TotalTargets</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+        </div>
     </div>
 
     <section class="panel panel-register">
@@ -185,6 +215,7 @@
                 <p class="eyebrow">Register Source</p>
                 <h2>Seed a managed crawl source</h2>
             </div>
+            <a class="btn btn-outline-dark btn-sm" asp-page="/Sources/Index">View all sources</a>
         </div>
 
         <form method="post" asp-page-handler="RegisterSource" class="source-form">
@@ -245,7 +276,7 @@
             <div>
                 <p class="form-label mb-2">Supported categories</p>
                 <div class="check-grid">
-                @foreach (var category in Model.Categories)
+                @foreach (var category in Model.Categories.Where(category => category.IsEnabled))
                 {
                     <label class="check-card">
                         <input type="checkbox" name="RegisterSource.SelectedCategoryKeys" value="@category.CategoryKey" checked="@Model.RegisterSource.SelectedCategoryKeys.Contains(category.CategoryKey)" />

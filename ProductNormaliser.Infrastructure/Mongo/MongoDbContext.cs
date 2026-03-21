@@ -20,6 +20,7 @@ public sealed class MongoDbContext
         Client = mongoClient;
         Database = mongoClient.GetDatabase(databaseName);
         Categories = Database.GetCollection<CategoryMetadata>(MongoCollectionNames.Categories);
+        CrawlJobs = Database.GetCollection<CrawlJob>(MongoCollectionNames.CrawlJobs);
         CrawlSources = Database.GetCollection<CrawlSource>(MongoCollectionNames.CrawlSources);
         RawPages = Database.GetCollection<RawPage>(MongoCollectionNames.RawPages);
         SourceProducts = Database.GetCollection<SourceProduct>(MongoCollectionNames.SourceProducts);
@@ -40,6 +41,8 @@ public sealed class MongoDbContext
     public IMongoDatabase Database { get; }
 
     public IMongoCollection<CategoryMetadata> Categories { get; }
+
+    public IMongoCollection<CrawlJob> CrawlJobs { get; }
 
     public IMongoCollection<CrawlSource> CrawlSources { get; }
 
@@ -74,6 +77,16 @@ public sealed class MongoDbContext
                 .Ascending(category => category.FamilyKey)
                 .Ascending(category => category.IsEnabled)
                 .Ascending(category => category.CrawlSupportStatus)),
+            cancellationToken: cancellationToken);
+
+        await CrawlJobs.Indexes.CreateManyAsync(
+            [
+                new CreateIndexModel<CrawlJob>(Builders<CrawlJob>.IndexKeys
+                    .Ascending(job => job.Status)
+                    .Descending(job => job.LastUpdatedAt)),
+                new CreateIndexModel<CrawlJob>(Builders<CrawlJob>.IndexKeys
+                    .Descending(job => job.StartedAt))
+            ],
             cancellationToken: cancellationToken);
 
         await CrawlSources.Indexes.CreateOneAsync(
