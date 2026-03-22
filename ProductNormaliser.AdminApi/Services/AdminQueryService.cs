@@ -58,7 +58,7 @@ public sealed class AdminQueryService(
         }).ToArray();
     }
 
-    public async Task<ProductListResponse> ListProductsAsync(string? categoryKey, string? search, int page, int pageSize, CancellationToken cancellationToken)
+    public async Task<ProductListResponse> ListProductsAsync(string? categoryKey, string? search, int? minSourceCount, string? freshness, string? conflictStatus, string? completenessStatus, int page, int pageSize, CancellationToken cancellationToken)
     {
         var normalizedCategoryKey = string.IsNullOrWhiteSpace(categoryKey) ? null : categoryKey.Trim();
         var normalizedSearch = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
@@ -82,26 +82,48 @@ public sealed class AdminQueryService(
                 Builders<CanonicalProduct>.Filter.Regex(product => product.Gtin, regex));
         }
 
-        var totalCount = await mongoDbContext.CanonicalProducts.CountDocumentsAsync(filter, cancellationToken: cancellationToken);
         var products = await mongoDbContext.CanonicalProducts.Find(filter)
             .SortByDescending(product => product.UpdatedUtc)
-            .Skip((effectivePage - 1) * effectivePageSize)
-            .Limit(effectivePageSize)
             .ToListAsync(cancellationToken);
+
+        var summaries = products
+            .Select(product => new
+            {
+                Product = product,
+                Analysis = ProductAnalysisProjection.BuildSummary(product, categorySchemaRegistry, categoryAttributeNormaliserRegistry)
+            })
+            .Where(entry => ProductAnalysisProjection.MatchesFilters(entry.Analysis, minSourceCount, freshness, conflictStatus, completenessStatus))
+            .ToArray();
+
+        var totalCount = summaries.LongLength;
+        var pagedItems = summaries
+            .Skip((effectivePage - 1) * effectivePageSize)
+            .Take(effectivePageSize)
+            .ToArray();
 
         return new ProductListResponse
         {
-            Items = products.Select(product => new ProductSummaryResponse
+            Items = pagedItems.Select(entry => new ProductSummaryResponse
             {
-                Id = product.Id,
-                CategoryKey = product.CategoryKey,
-                Brand = product.Brand,
-                ModelNumber = product.ModelNumber,
-                Gtin = product.Gtin,
-                DisplayName = product.DisplayName,
-                SourceCount = product.Sources.Count,
-                AttributeCount = product.Attributes.Count,
-                UpdatedUtc = product.UpdatedUtc
+                Id = entry.Product.Id,
+                CategoryKey = entry.Product.CategoryKey,
+                Brand = entry.Product.Brand,
+                ModelNumber = entry.Product.ModelNumber,
+                Gtin = entry.Product.Gtin,
+                DisplayName = entry.Product.DisplayName,
+                SourceCount = entry.Analysis.SourceCount,
+                AttributeCount = entry.Product.Attributes.Count,
+                EvidenceCount = entry.Analysis.EvidenceCount,
+                ConflictAttributeCount = entry.Analysis.ConflictAttributeCount,
+                HasConflict = entry.Analysis.HasConflict,
+                CompletenessScore = entry.Analysis.CompletenessScore,
+                CompletenessStatus = entry.Analysis.CompletenessStatus,
+                PopulatedKeyAttributeCount = entry.Analysis.PopulatedKeyAttributeCount,
+                ExpectedKeyAttributeCount = entry.Analysis.ExpectedKeyAttributeCount,
+                FreshnessStatus = entry.Analysis.FreshnessStatus,
+                FreshnessAgeDays = entry.Analysis.FreshnessAgeDays,
+                KeyAttributes = entry.Analysis.KeyAttributes,
+                UpdatedUtc = entry.Product.UpdatedUtc
             }).ToArray(),
             Page = effectivePage,
             PageSize = effectivePageSize,
@@ -130,6 +152,8 @@ public sealed class AdminQueryService(
             }
         }
 
+        var analysis = ProductAnalysisProjection.BuildSummary(canonicalProduct, categorySchemaRegistry, categoryAttributeNormaliserRegistry);
+
         return new ProductDetailResponse
         {
             Id = canonicalProduct.Id,
@@ -140,6 +164,17 @@ public sealed class AdminQueryService(
             DisplayName = canonicalProduct.DisplayName,
             CreatedUtc = canonicalProduct.CreatedUtc,
             UpdatedUtc = canonicalProduct.UpdatedUtc,
+            SourceCount = analysis.SourceCount,
+            EvidenceCount = analysis.EvidenceCount,
+            ConflictAttributeCount = analysis.ConflictAttributeCount,
+            HasConflict = analysis.HasConflict,
+            CompletenessScore = analysis.CompletenessScore,
+            CompletenessStatus = analysis.CompletenessStatus,
+            PopulatedKeyAttributeCount = analysis.PopulatedKeyAttributeCount,
+            ExpectedKeyAttributeCount = analysis.ExpectedKeyAttributeCount,
+            FreshnessStatus = analysis.FreshnessStatus,
+            FreshnessAgeDays = analysis.FreshnessAgeDays,
+            KeyAttributes = analysis.KeyAttributes,
             Attributes = canonicalProduct.Attributes.Values.Select(attribute => new ProductAttributeDetailDto
             {
                 AttributeKey = attribute.AttributeKey,

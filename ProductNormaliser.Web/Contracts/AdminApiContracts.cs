@@ -167,6 +167,10 @@ public sealed class ProductListQueryDto
 {
     public string? CategoryKey { get; init; }
     public string? Search { get; init; }
+    public int? MinSourceCount { get; init; }
+    public string? Freshness { get; init; }
+    public string? ConflictStatus { get; init; }
+    public string? CompletenessStatus { get; init; }
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 12;
 }
@@ -190,6 +194,16 @@ public sealed class ProductSummaryDto
     public string DisplayName { get; init; } = string.Empty;
     public int SourceCount { get; init; }
     public int AttributeCount { get; init; }
+    public int EvidenceCount { get; init; }
+    public int ConflictAttributeCount { get; init; }
+    public bool HasConflict { get; init; }
+    public decimal CompletenessScore { get; init; }
+    public string CompletenessStatus { get; init; } = string.Empty;
+    public int PopulatedKeyAttributeCount { get; init; }
+    public int ExpectedKeyAttributeCount { get; init; }
+    public string FreshnessStatus { get; init; } = string.Empty;
+    public int FreshnessAgeDays { get; init; }
+    public IReadOnlyCollection<ProductKeyAttributeDto> KeyAttributes { get; init; } = [];
     public DateTime UpdatedUtc { get; init; }
 }
 
@@ -203,8 +217,28 @@ public sealed class ProductDetailDto
     public string DisplayName { get; init; } = string.Empty;
     public DateTime CreatedUtc { get; init; }
     public DateTime UpdatedUtc { get; init; }
+    public int SourceCount { get; init; }
+    public int EvidenceCount { get; init; }
+    public int ConflictAttributeCount { get; init; }
+    public bool HasConflict { get; init; }
+    public decimal CompletenessScore { get; init; }
+    public string CompletenessStatus { get; init; } = string.Empty;
+    public int PopulatedKeyAttributeCount { get; init; }
+    public int ExpectedKeyAttributeCount { get; init; }
+    public string FreshnessStatus { get; init; } = string.Empty;
+    public int FreshnessAgeDays { get; init; }
+    public IReadOnlyCollection<ProductKeyAttributeDto> KeyAttributes { get; init; } = [];
     public IReadOnlyCollection<ProductAttributeDetailDto> Attributes { get; init; } = [];
     public IReadOnlyCollection<SourceProductDetailDto> SourceProducts { get; init; } = [];
+}
+
+public sealed class ProductKeyAttributeDto
+{
+    public string AttributeKey { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public string Value { get; init; } = string.Empty;
+    public bool HasConflict { get; init; }
+    public decimal Confidence { get; init; }
 }
 
 public sealed class ProductAttributeDetailDto

@@ -747,6 +747,125 @@ h3,
   margin-bottom: 0.85rem;
 }
 
+.product-filter-grid,
+.product-result-grid,
+.product-key-attribute-list,
+.product-jump-nav,
+.product-analysis-strip {
+  display: grid;
+  gap: 1rem;
+}
+
+.product-filter-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+}
+
+.product-filter-actions {
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.product-filter-actions .btn {
+  width: 100%;
+}
+
+.product-analysis-strip {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.product-result-grid {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.product-result-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1.15rem;
+  border-radius: 1.2rem;
+  border: 1px solid rgba(20, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.product-result-card.attention,
+.product-key-attribute.attention {
+  border-color: rgba(217, 119, 6, 0.2);
+}
+
+.product-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 1rem;
+}
+
+.product-result-header h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.35rem;
+}
+
+.product-result-badges {
+  justify-content: flex-end;
+}
+
+.product-result-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.product-key-attribute-list {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.product-key-attribute {
+  padding: 0.85rem 0.9rem;
+  border-radius: 0.95rem;
+  border: 1px solid rgba(20, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.product-key-attribute dt {
+  margin-bottom: 0.3rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.product-key-attribute dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.product-jump-nav-panel {
+  position: sticky;
+  top: 1rem;
+  z-index: 1;
+}
+
+.product-jump-nav {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.product-jump-nav a {
+  display: block;
+  padding: 0.8rem 0.9rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(20, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.product-jump-nav a:hover,
+.product-jump-nav a:focus {
+  border-color: rgba(15, 118, 110, 0.24);
+  color: var(--teal);
+}
+
+.product-summary-grid {
+  margin-bottom: 0;
+}
+
 @media (max-width: 991.98px) {
   .overview-grid,
   .split-layout,
@@ -967,6 +1086,9 @@ h3,
   .overview-grid,
   .split-layout,
   .source-detail-grid,
+  .product-filter-grid,
+  .product-analysis-strip,
+  .product-result-metrics,
   .compact-grid,
   .quick-links,
   .filters-bar,
@@ -982,6 +1104,7 @@ h3,
   .job-card-header,
   .job-card-actions,
   .footer-inner,
+  .product-result-header,
   .conflict-card-header,
   .evidence-card-header,
   .timeline-card-header,
@@ -996,6 +1119,10 @@ h3,
   .evidence-meta-grid,
   .timeline-value-grid {
     grid-template-columns: 1fr;
+  }
+
+  .product-jump-nav-panel {
+    position: static;
   }
 
   .form-grid .wide {

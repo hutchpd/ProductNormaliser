@@ -8,9 +8,9 @@ namespace ProductNormaliser.AdminApi.Controllers;
 public sealed class ProductsController(IAdminQueryService adminQueryService) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> GetProducts([FromQuery] string? category, [FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetProducts([FromQuery] string? category, [FromQuery] string? search, [FromQuery] int? minSourceCount, [FromQuery] string? freshness, [FromQuery] string? conflictStatus, [FromQuery] string? completeness, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken cancellationToken = default)
     {
-        return Ok(await adminQueryService.ListProductsAsync(category, search, page, pageSize, cancellationToken));
+        return Ok(await adminQueryService.ListProductsAsync(category, search, minSourceCount, freshness, conflictStatus, completeness, page, pageSize, cancellationToken));
     }
 
     [HttpGet("{id}")]

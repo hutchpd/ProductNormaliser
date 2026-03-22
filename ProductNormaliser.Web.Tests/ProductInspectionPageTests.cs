@@ -7,7 +7,7 @@ namespace ProductNormaliser.Web.Tests;
 public sealed class ProductInspectionPageTests
 {
     [Test]
-    public async Task ProductsPage_OnGetAsync_LoadsSelectedProductAndBuildsTimeline()
+    public async Task ProductDetails_OnGetAsync_LoadsProductAndBuildsTimeline()
     {
         var client = new FakeAdminApiClient
         {
@@ -36,16 +36,16 @@ public sealed class ProductInspectionPageTests
             ]
         };
 
-        var model = new ProductNormaliser.Web.Pages.Products.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Products.IndexModel>.Instance)
+        var model = new ProductNormaliser.Web.Pages.Products.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Products.DetailsModel>.Instance)
         {
-            SelectedProductId = "canon-1"
+            ProductId = "canon-1"
         };
 
         await model.OnGetAsync(CancellationToken.None);
 
         Assert.Multiple(() =>
         {
-            Assert.That(model.SelectedProduct, Is.Not.Null);
+            Assert.That(model.Product, Is.Not.Null);
             Assert.That(model.SourceComparisonRows, Has.Count.EqualTo(2));
             Assert.That(model.ConflictRows.Select(row => row.AttributeKey), Is.EqualTo(new[] { "screen_size" }));
             Assert.That(model.Timeline, Has.Count.EqualTo(1));
@@ -112,6 +112,17 @@ public sealed class ProductInspectionPageTests
             DisplayName = "Sony Bravia XR 55",
             CreatedUtc = new DateTime(2026, 03, 21, 09, 00, 00, DateTimeKind.Utc),
             UpdatedUtc = new DateTime(2026, 03, 22, 10, 10, 00, DateTimeKind.Utc),
+            SourceCount = 2,
+            EvidenceCount = 3,
+            ConflictAttributeCount = 1,
+            HasConflict = true,
+            CompletenessScore = 0.75m,
+            CompletenessStatus = "partial",
+            PopulatedKeyAttributeCount = 3,
+            ExpectedKeyAttributeCount = 4,
+            FreshnessStatus = "fresh",
+            FreshnessAgeDays = 1,
+            KeyAttributes = [new ProductKeyAttributeDto { AttributeKey = "panel_type", DisplayName = "Panel Type", Value = "OLED" }],
             Attributes =
             [
                 new ProductAttributeDetailDto

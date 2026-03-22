@@ -137,37 +137,63 @@ public sealed class AdminApiClientTests
     }
 
     [Test]
-    public async Task GetProductsAsync_DeserialisesProductPage()
+    public async Task GetProductsAsync_DeserialisesProductPageAndPreservesExplorerFilters()
     {
-        var client = CreateClient(HttpStatusCode.OK, new ProductListResponseDto
+        var requestUri = string.Empty;
+        var client = CreateClient((request, _) =>
         {
-            Items =
-            [
-                new ProductSummaryDto
-                {
-                    Id = "canon-1",
-                    CategoryKey = "tv",
-                    Brand = "Sony",
-                    ModelNumber = "XR-55A80L",
-                    DisplayName = "Sony Bravia XR",
-                    SourceCount = 3,
-                    AttributeCount = 12,
-                    UpdatedUtc = new DateTime(2026, 03, 20, 10, 10, 00, DateTimeKind.Utc)
-                }
-            ],
-            Page = 1,
-            PageSize = 12,
-            TotalCount = 1,
-            TotalPages = 1
+            requestUri = request.RequestUri!.ToString();
+            return Task.FromResult(CreateJsonResponse(HttpStatusCode.OK, new ProductListResponseDto
+            {
+                Items =
+                [
+                    new ProductSummaryDto
+                    {
+                        Id = "canon-1",
+                        CategoryKey = "tv",
+                        Brand = "Sony",
+                        ModelNumber = "XR-55A80L",
+                        DisplayName = "Sony Bravia XR",
+                        SourceCount = 3,
+                        EvidenceCount = 8,
+                        AttributeCount = 12,
+                        HasConflict = true,
+                        ConflictAttributeCount = 2,
+                        CompletenessScore = 0.75m,
+                        CompletenessStatus = "partial",
+                        FreshnessStatus = "stale",
+                        FreshnessAgeDays = 40,
+                        UpdatedUtc = new DateTime(2026, 03, 20, 10, 10, 00, DateTimeKind.Utc)
+                    }
+                ],
+                Page = 1,
+                PageSize = 12,
+                TotalCount = 1,
+                TotalPages = 1
+            }));
         });
 
-        var products = await client.GetProductsAsync();
+        var products = await client.GetProductsAsync(new ProductListQueryDto
+        {
+            CategoryKey = "tv",
+            Search = "sony",
+            MinSourceCount = 3,
+            Freshness = "stale",
+            ConflictStatus = "with_conflicts",
+            CompletenessStatus = "partial"
+        });
 
         Assert.Multiple(() =>
         {
+            Assert.That(requestUri, Does.Contain("category=tv"));
+            Assert.That(requestUri, Does.Contain("search=sony"));
+            Assert.That(requestUri, Does.Contain("minSourceCount=3"));
+            Assert.That(requestUri, Does.Contain("freshness=stale"));
+            Assert.That(requestUri, Does.Contain("conflictStatus=with_conflicts"));
+            Assert.That(requestUri, Does.Contain("completeness=partial"));
             Assert.That(products.Items, Has.Count.EqualTo(1));
-            Assert.That(products.Items[0].Brand, Is.EqualTo("Sony"));
-            Assert.That(products.TotalCount, Is.EqualTo(1));
+            Assert.That(products.Items[0].HasConflict, Is.True);
+            Assert.That(products.Items[0].CompletenessStatus, Is.EqualTo("partial"));
         });
     }
 

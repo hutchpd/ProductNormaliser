@@ -22,6 +22,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public ProductListResponseDto ProductPage { get; set; } = new();
     public ProductDetailDto? Product { get; set; }
     public IReadOnlyList<ProductChangeEventDto> ProductHistory { get; set; } = [];
+    public ProductListQueryDto? LastProductQuery { get; private set; }
 
     public Task<StatsDto> GetStatsAsync(CancellationToken cancellationToken = default) => Task.FromResult(Stats);
     public Task<IReadOnlyList<CategoryMetadataDto>> GetCategoriesAsync(CancellationToken cancellationToken = default) => Task.FromResult(Categories);
@@ -55,7 +56,11 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         return Task.FromResult(CancelledJob ?? new CrawlJobDto { JobId = jobId, Status = "cancel_requested" });
     }
 
-    public Task<ProductListResponseDto> GetProductsAsync(ProductListQueryDto? query = null, CancellationToken cancellationToken = default) => Task.FromResult(ProductPage);
+    public Task<ProductListResponseDto> GetProductsAsync(ProductListQueryDto? query = null, CancellationToken cancellationToken = default)
+    {
+        LastProductQuery = query;
+        return Task.FromResult(ProductPage);
+    }
     public Task<ProductDetailDto?> GetProductAsync(string productId, CancellationToken cancellationToken = default) => Task.FromResult(Product);
     public Task<IReadOnlyList<ProductChangeEventDto>> GetProductHistoryAsync(string productId, CancellationToken cancellationToken = default) => Task.FromResult(ProductHistory);
 }

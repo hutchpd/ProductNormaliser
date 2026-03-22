@@ -16,11 +16,20 @@ public sealed class IndexModel(
     [BindProperty(SupportsGet = true, Name = "search")]
     public string? Search { get; set; }
 
+    [BindProperty(SupportsGet = true, Name = "minSourceCount")]
+    public int? MinSourceCount { get; set; }
+
+    [BindProperty(SupportsGet = true, Name = "freshness")]
+    public string? Freshness { get; set; }
+
+    [BindProperty(SupportsGet = true, Name = "conflictStatus")]
+    public string? ConflictStatus { get; set; }
+
+    [BindProperty(SupportsGet = true, Name = "completeness")]
+    public string? CompletenessStatus { get; set; }
+
     [BindProperty(SupportsGet = true, Name = "page")]
     public int PageNumber { get; set; } = 1;
-
-    [BindProperty(SupportsGet = true, Name = "productId")]
-    public string? SelectedProductId { get; set; }
 
     public string? ErrorMessage { get; private set; }
 
@@ -28,27 +37,13 @@ public sealed class IndexModel(
 
     public ProductListResponseDto Products { get; private set; } = new() { Page = 1, PageSize = 12 };
 
-    public ProductDetailDto? SelectedProduct { get; private set; }
+    public int StaleProducts => Products.Items.Count(product => string.Equals(product.FreshnessStatus, "stale", StringComparison.OrdinalIgnoreCase));
 
-    public IReadOnlyList<ProductChangeEventDto> ProductHistory { get; private set; } = [];
+    public int ProductsWithConflicts => Products.Items.Count(product => product.HasConflict);
 
-    public IReadOnlyList<ProductSourceComparisonColumnModel> SourceComparisonColumns => SelectedProduct is null
-        ? []
-        : ProductInspectionPresentation.GetSourceComparisonColumns(SelectedProduct);
-
-    public IReadOnlyList<ProductSourceComparisonRowModel> SourceComparisonRows => SelectedProduct is null
-        ? []
-        : ProductInspectionPresentation.GetSourceComparisonRows(SelectedProduct);
-
-    public IReadOnlyList<ProductEvidenceInspectorRowModel> EvidenceInspectorRows => SelectedProduct is null
-        ? []
-        : ProductInspectionPresentation.GetEvidenceInspectorRows(SelectedProduct);
-
-    public IReadOnlyList<ProductConflictPanelRowModel> ConflictRows => SelectedProduct is null
-        ? []
-        : ProductInspectionPresentation.GetConflictRows(SelectedProduct);
-
-    public IReadOnlyList<ProductHistoryTimelineEntryModel> Timeline => ProductInspectionPresentation.GetHistoryTimeline(ProductHistory);
+    public decimal AverageCompleteness => Products.Items.Count == 0
+        ? 0m
+        : decimal.Round(Products.Items.Average(product => product.CompletenessScore), 2, MidpointRounding.AwayFromZero);
 
     public PaginationModel Pagination => new()
     {
@@ -60,22 +55,32 @@ public sealed class IndexModel(
         {
             ["category"] = CategoryKey,
             ["search"] = Search,
-            ["productId"] = SelectedProductId
+            ["minSourceCount"] = MinSourceCount?.ToString(),
+            ["freshness"] = Freshness,
+            ["conflictStatus"] = ConflictStatus,
+            ["completeness"] = CompletenessStatus
         }
     };
 
     public PageHeroModel Hero => new()
     {
-        Eyebrow = "Product Catalogue",
-        Title = "Browse canonical products and inspect merge history",
-        Description = "This is a lightweight internal catalogue rather than a full consumer search experience: paged product summaries on the left, detailed merged evidence and change history on demand.",
+        Eyebrow = "Product Explorer",
+        Title = "Search canonical products by quality signals",
+        Description = "Use category, source coverage, freshness, conflict, and completeness filters to find products that need attention or products strong enough for downstream analysis.",
         Metrics =
         [
             new HeroMetricModel { Label = "Visible products", Value = Products.Items.Count.ToString() },
             new HeroMetricModel { Label = "Total matches", Value = Products.TotalCount.ToString() },
-            new HeroMetricModel { Label = "History events", Value = ProductHistory.Count.ToString() }
+            new HeroMetricModel { Label = "Stale in view", Value = StaleProducts.ToString() },
+            new HeroMetricModel { Label = "Avg completeness", Value = ProductExplorerPresentation.FormatPercent(AverageCompleteness) }
         ]
     };
+
+    public StatusBadgeModel GetFreshnessBadge(ProductSummaryDto product) => ProductExplorerPresentation.GetFreshnessBadge(product.FreshnessStatus, product.FreshnessAgeDays);
+
+    public StatusBadgeModel GetCompletenessBadge(ProductSummaryDto product) => ProductExplorerPresentation.GetCompletenessBadge(product.CompletenessScore, product.CompletenessStatus);
+
+    public StatusBadgeModel GetConflictBadge(ProductSummaryDto product) => ProductExplorerPresentation.GetConflictBadge(product.HasConflict, product.ConflictAttributeCount);
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
@@ -86,6 +91,10 @@ public sealed class IndexModel(
             {
                 CategoryKey = CategoryKey,
                 Search = Search,
+                MinSourceCount = MinSourceCount,
+                Freshness = Freshness,
+                ConflictStatus = ConflictStatus,
+                CompletenessStatus = CompletenessStatus,
                 Page = Math.Max(1, PageNumber),
                 PageSize = 12
             }, cancellationToken);
@@ -94,21 +103,6 @@ public sealed class IndexModel(
 
             Categories = categoriesTask.Result.OrderBy(category => category.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
             Products = productsTask.Result;
-
-            if (!string.IsNullOrWhiteSpace(SelectedProductId))
-            {
-                var productTask = adminApiClient.GetProductAsync(SelectedProductId, cancellationToken);
-                var historyTask = adminApiClient.GetProductHistoryAsync(SelectedProductId, cancellationToken);
-                await Task.WhenAll(productTask, historyTask);
-
-                SelectedProduct = productTask.Result;
-                ProductHistory = historyTask.Result;
-
-                if (SelectedProduct is null)
-                {
-                    ErrorMessage = $"Product '{SelectedProductId}' was not found.";
-                }
-            }
         }
         catch (AdminApiException exception)
         {

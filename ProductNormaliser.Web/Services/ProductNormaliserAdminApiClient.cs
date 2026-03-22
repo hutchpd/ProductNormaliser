@@ -114,6 +114,10 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
         {
             ["category"] = query?.CategoryKey,
             ["search"] = query?.Search,
+            ["minSourceCount"] = query?.MinSourceCount?.ToString(CultureInfo.InvariantCulture),
+            ["freshness"] = query?.Freshness,
+            ["conflictStatus"] = query?.ConflictStatus,
+            ["completeness"] = query?.CompletenessStatus,
             ["page"] = query?.Page.ToString(CultureInfo.InvariantCulture),
             ["pageSize"] = query?.PageSize.ToString(CultureInfo.InvariantCulture)
         });

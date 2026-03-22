@@ -15,12 +15,13 @@
     <section class="panel">
         <div class="panel-heading">
             <div>
-                <p class="eyebrow">Filters</p>
-                <h2>Page through canonical products</h2>
+                <p class="eyebrow">Explorer Filters</p>
+                <h2>Find products by quality signals</h2>
+                <p class="subtle-copy">Mix search with category, source coverage, freshness, disagreement, and completeness to surface the products you actually need to inspect.</p>
             </div>
         </div>
 
-        <form method="get" class="filters-bar">
+        <form method="get" class="product-filter-grid">
             <div>
                 <label asp-for="Search" class="form-label">Search</label>
                 <input asp-for="Search" class="form-control" placeholder="Display name, brand, model, GTIN, or id" />
@@ -35,382 +36,157 @@
                     }
                 </select>
             </div>
-            <div class="actions-bar">
+            <div>
+                <label asp-for="MinSourceCount" class="form-label">Source count</label>
+                <select asp-for="MinSourceCount" class="form-select">
+                    <option value="">Any source count</option>
+                    <option value="1">1+ sources</option>
+                    <option value="2">2+ sources</option>
+                    <option value="3">3+ sources</option>
+                    <option value="5">5+ sources</option>
+                </select>
+            </div>
+            <div>
+                <label asp-for="Freshness" class="form-label">Freshness</label>
+                <select asp-for="Freshness" class="form-select">
+                    <option value="">Any freshness</option>
+                    <option value="fresh">Fresh</option>
+                    <option value="aging">Aging</option>
+                    <option value="stale">Stale</option>
+                </select>
+            </div>
+            <div>
+                <label asp-for="ConflictStatus" class="form-label">Disagreement</label>
+                <select asp-for="ConflictStatus" class="form-select">
+                    <option value="">Any conflict state</option>
+                    <option value="with_conflicts">With conflicts</option>
+                    <option value="without_conflicts">Without conflicts</option>
+                </select>
+            </div>
+            <div>
+                <label asp-for="CompletenessStatus" class="form-label">Completeness</label>
+                <select asp-for="CompletenessStatus" class="form-select">
+                    <option value="">Any completeness</option>
+                    <option value="complete">Complete</option>
+                    <option value="partial">Partial</option>
+                    <option value="sparse">Sparse</option>
+                </select>
+            </div>
+            <div class="actions-bar product-filter-actions">
                 <button type="submit" class="btn btn-dark">Apply Filters</button>
+                <a asp-page="/Products/Index" class="btn btn-outline-secondary">Reset</a>
             </div>
         </form>
     </section>
 
-    <div class="split-layout">
-        <section class="panel">
-            <div class="panel-heading">
-                <div>
-                    <p class="eyebrow">Catalogue</p>
-                    <h2>Canonical product summaries</h2>
-                </div>
+    <section class="panel panel-muted">
+        <div class="metric-strip product-analysis-strip">
+            <article>
+                <span>Products with conflicts</span>
+                <strong>@Model.ProductsWithConflicts</strong>
+            </article>
+            <article>
+                <span>Stale products in view</span>
+                <strong>@Model.StaleProducts</strong>
+            </article>
+            <article>
+                <span>Average completeness</span>
+                <strong>@ProductNormaliser.Web.Models.ProductExplorerPresentation.FormatPercent(Model.AverageCompleteness)</strong>
+            </article>
+            <article>
+                <span>Current page</span>
+                <strong>@Model.Products.Page / @Math.Max(Model.Products.TotalPages, 1)</strong>
+            </article>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Results</p>
+                <h2>Analysis-ready product explorer</h2>
+            </div>
+        </div>
+
+        @if (Model.Products.Items.Count == 0)
+        {
+            <div class="empty-panel">
+                <p class="empty-state">No products match the current filter combination.</p>
+            </div>
+        }
+        else
+        {
+            <div class="product-result-grid">
+                @foreach (var product in Model.Products.Items)
+                {
+                    var freshnessBadge = Model.GetFreshnessBadge(product);
+                    var completenessBadge = Model.GetCompletenessBadge(product);
+                    var conflictBadge = Model.GetConflictBadge(product);
+
+                    <article class="product-result-card @(product.HasConflict ? "attention" : string.Empty)">
+                        <div class="product-result-header">
+                            <div>
+                                <h3>
+                                    <a asp-page="/Products/Details"
+                                       asp-route-productId="@product.Id"
+                                       asp-route-category="@Model.CategoryKey"
+                                       asp-route-search="@Model.Search"
+                                       asp-route-page="@Model.PageNumber"
+                                       asp-route-minSourceCount="@Model.MinSourceCount"
+                                       asp-route-freshness="@Model.Freshness"
+                                       asp-route-conflictStatus="@Model.ConflictStatus"
+                                       asp-route-completeness="@Model.CompletenessStatus">@product.DisplayName</a>
+                                </h3>
+                                <p class="subtle-copy mono">@product.Id</p>
+                                <p class="subtle-copy">@product.Brand @(string.IsNullOrWhiteSpace(product.ModelNumber) ? string.Empty : $"/ {product.ModelNumber}")</p>
+                            </div>
+                            <div class="chip-row product-result-badges">
+                                <span class="status-pill @freshnessBadge.Tone">@freshnessBadge.Text</span>
+                                <span class="status-pill @completenessBadge.Tone">@completenessBadge.Text</span>
+                                <span class="status-pill @conflictBadge.Tone">@conflictBadge.Text</span>
+                            </div>
+                        </div>
+
+                        <dl class="job-meta-grid compact product-result-metrics">
+                            <div>
+                                <dt>Category</dt>
+                                <dd>@product.CategoryKey</dd>
+                            </div>
+                            <div>
+                                <dt>Sources</dt>
+                                <dd>@product.SourceCount</dd>
+                            </div>
+                            <div>
+                                <dt>Evidence</dt>
+                                <dd>@product.EvidenceCount</dd>
+                            </div>
+                            <div>
+                                <dt>Updated</dt>
+                                <dd>@product.UpdatedUtc.ToString("u")</dd>
+                            </div>
+                        </dl>
+
+                        <div class="product-key-attribute-list">
+                            @if (product.KeyAttributes.Count == 0)
+                            {
+                                <p class="empty-state">No key attributes were projected for this product.</p>
+                            }
+                            else
+                            {
+                                @foreach (var keyAttribute in product.KeyAttributes)
+                                {
+                                    <div class="product-key-attribute @(keyAttribute.HasConflict ? "attention" : string.Empty)">
+                                        <dt>@keyAttribute.DisplayName</dt>
+                                        <dd>@keyAttribute.Value</dd>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </article>
+                }
             </div>
 
-            @if (Model.Products.Items.Count == 0)
-            {
-                <div class="empty-panel">
-                    <p class="empty-state">No products match the current filters.</p>
-                </div>
-            }
-            else
-            {
-                <div class="table-wrap">
-                    <table class="table dashboard-table align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th>Product</th>
-                                <th>Category</th>
-                                <th>Sources</th>
-                                <th>Attributes</th>
-                                <th>Updated</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        @foreach (var product in Model.Products.Items)
-                        {
-                            <tr>
-                                <td>
-                                    <a asp-page="/Products/Index" asp-route-productId="@product.Id" asp-route-category="@Model.CategoryKey" asp-route-search="@Model.Search">@product.DisplayName</a>
-                                    <div class="text-muted small mono">@product.Id</div>
-                                    <div class="text-muted small">@product.Brand @(string.IsNullOrWhiteSpace(product.ModelNumber) ? string.Empty : $"/ {product.ModelNumber}")</div>
-                                </td>
-                                <td>@product.CategoryKey</td>
-                                <td>@product.SourceCount</td>
-                                <td>@product.AttributeCount</td>
-                                <td>@product.UpdatedUtc.ToString("u")</td>
-                            </tr>
-                        }
-                        </tbody>
-                    </table>
-                </div>
-
-                <partial name="_Pager" model="Model.Pagination" />
-            }
-        </section>
-
-        <section class="panel">
-            <div class="panel-heading">
-                <div>
-                    <p class="eyebrow">Selected Product</p>
-                    <h2>@(Model.SelectedProduct?.DisplayName ?? "Choose a product")</h2>
-                </div>
-            </div>
-
-            @if (Model.SelectedProduct is null)
-            {
-                <div class="empty-panel">
-                    <p class="empty-state">Select a product to inspect merged attributes, raw source evidence, and change history.</p>
-                </div>
-            }
-            else
-            {
-                <div class="detail-stack">
-                    <div class="chip-row">
-                        <span class="status-pill neutral">Canonical product</span>
-                        <span class="status-pill @(Model.ConflictRows.Count > 0 ? "warning" : "completed")">@Model.ConflictRows.Count disagreement@(Model.ConflictRows.Count == 1 ? string.Empty : "s")</span>
-                        <span class="status-pill neutral">@Model.SourceComparisonColumns.Count source record@(Model.SourceComparisonColumns.Count == 1 ? string.Empty : "s")</span>
-                        <span class="status-pill neutral">@Model.EvidenceInspectorRows.Count attributed field@(Model.EvidenceInspectorRows.Count == 1 ? string.Empty : "s")</span>
-                    </div>
-
-                    <dl class="detail-grid">
-                        <div>
-                            <dt>Category</dt>
-                            <dd>@Model.SelectedProduct.CategoryKey</dd>
-                        </div>
-                        <div>
-                            <dt>Brand</dt>
-                            <dd>@Model.SelectedProduct.Brand</dd>
-                        </div>
-                        <div>
-                            <dt>Model</dt>
-                            <dd>@(Model.SelectedProduct.ModelNumber ?? "-")</dd>
-                        </div>
-                        <div>
-                            <dt>GTIN</dt>
-                            <dd>@(Model.SelectedProduct.Gtin ?? "-")</dd>
-                        </div>
-                        <div>
-                            <dt>Created</dt>
-                            <dd>@Model.SelectedProduct.CreatedUtc.ToString("u")</dd>
-                        </div>
-                        <div>
-                            <dt>Updated</dt>
-                            <dd>@Model.SelectedProduct.UpdatedUtc.ToString("u")</dd>
-                        </div>
-                    </dl>
-
-                    <section class="panel-muted inspector-section">
-                        <div class="panel-heading">
-                            <div>
-                                <p class="eyebrow">Disagreement</p>
-                                <h3>Conflict panel</h3>
-                                <p class="subtle-copy">Canonical values stay visible, but every conflicting claim is grouped by the sources that made it.</p>
-                            </div>
-                        </div>
-
-                        @if (Model.ConflictRows.Count == 0)
-                        {
-                            <div class="empty-panel">
-                                <p class="empty-state">No disagreement is recorded for the selected product.</p>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="conflict-stack">
-                                @foreach (var conflict in Model.ConflictRows)
-                                {
-                                    <article class="conflict-card">
-                                        <div class="conflict-card-header">
-                                            <div>
-                                                <h4 class="mono">@conflict.AttributeKey</h4>
-                                                <p class="subtle-copy">Canonical value: <strong>@conflict.CanonicalValue</strong></p>
-                                            </div>
-                                            <span class="status-pill warning">@conflict.Groups.Count distinct claim@(conflict.Groups.Count == 1 ? string.Empty : "s")</span>
-                                        </div>
-
-                                        <div class="conflict-group-list">
-                                            @foreach (var group in conflict.Groups)
-                                            {
-                                                <div class="conflict-group @(group.IsCanonical ? "canonical" : "disagreement")">
-                                                    <strong>@group.DisplayValue</strong>
-                                                    <span>@string.Join(", ", group.Sources)</span>
-                                                    @if (group.IsCanonical)
-                                                    {
-                                                        <span class="status-pill completed">Canonical</span>
-                                                    }
-                                                </div>
-                                            }
-                                        </div>
-                                    </article>
-                                }
-                            </div>
-                        }
-                    </section>
-
-                    <section class="panel-muted inspector-section">
-                        <div class="panel-heading">
-                            <div>
-                                <p class="eyebrow">Side By Side</p>
-                                <h3>Source comparison</h3>
-                                <p class="subtle-copy">The canonical column stays pinned beside every source claim so operators can spot agreement and drift without opening each source separately.</p>
-                            </div>
-                        </div>
-
-                        @if (Model.SourceComparisonRows.Count == 0)
-                        {
-                            <div class="empty-panel">
-                                <p class="empty-state">This product does not have comparable attribute evidence yet.</p>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="comparison-table-wrap">
-                                <table class="comparison-table">
-                                    <thead>
-                                        <tr>
-                                            <th class="sticky-col">Attribute</th>
-                                            <th class="canonical-col">Canonical</th>
-                                            @foreach (var source in Model.SourceComparisonColumns)
-                                            {
-                                                <th>
-                                                    <div class="comparison-source-heading">
-                                                        <strong>@source.SourceName</strong>
-                                                        <span>@source.Title</span>
-                                                        <span>@(source.ModelNumber ?? source.Gtin ?? "No model metadata")</span>
-                                                    </div>
-                                                </th>
-                                            }
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach (var row in Model.SourceComparisonRows)
-                                        {
-                                            <tr class="@(row.HasConflict ? "comparison-row-conflict" : string.Empty)">
-                                                <th class="sticky-col" scope="row">
-                                                    <div class="comparison-attribute">
-                                                        <span class="mono">@row.AttributeKey</span>
-                                                        <span class="subtle-copy">@row.EvidenceCount evidence item@(row.EvidenceCount == 1 ? string.Empty : "s")</span>
-                                                    </div>
-                                                </th>
-                                                <td class="comparison-canonical @(row.HasConflict ? "attention" : string.Empty)">
-                                                    <strong>@row.CanonicalValue</strong>
-                                                    <span class="status-pill @(row.HasConflict ? "warning" : "completed")">@(row.HasConflict ? "Conflict" : "Canonical")</span>
-                                                </td>
-                                                @foreach (var cell in row.Cells)
-                                                {
-                                                    <td class="@(cell.HasClaim ? (cell.HasDisagreement ? "comparison-cell disagreement" : cell.MatchesCanonical ? "comparison-cell canonical-match" : "comparison-cell claimed") : "comparison-cell missing")">
-                                                        @if (!cell.HasClaim)
-                                                        {
-                                                            <span class="subtle-copy">No claim</span>
-                                                        }
-                                                        else
-                                                        {
-                                                            <div class="claim-stack">
-                                                                @foreach (var claim in cell.Claims)
-                                                                {
-                                                                    <div class="claim-card @(claim.MatchesCanonical ? "canonical" : "disagreement")">
-                                                                        <strong>@claim.DisplayValue</strong>
-                                                                        <span class="subtle-copy">@claim.SourceAttributeKey</span>
-                                                                        @if (!string.IsNullOrWhiteSpace(claim.SelectorOrPath))
-                                                                        {
-                                                                            <span class="subtle-copy">@claim.SelectorOrPath</span>
-                                                                        }
-                                                                    </div>
-                                                                }
-                                                            </div>
-                                                        }
-                                                    </td>
-                                                }
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </table>
-                            </div>
-                        }
-                    </section>
-
-                    <section class="panel-muted inspector-section">
-                        <div class="panel-heading">
-                            <div>
-                                <p class="eyebrow">Evidence Inspector</p>
-                                <h3>Attribute evidence</h3>
-                                <p class="subtle-copy">Each canonical attribute expands into the raw claims, selectors, timestamps, and source product ids that support it.</p>
-                            </div>
-                        </div>
-
-                        @if (Model.EvidenceInspectorRows.Count == 0)
-                        {
-                            <div class="empty-panel">
-                                <p class="empty-state">No attribute evidence is available for the selected product.</p>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="evidence-stack">
-                                @foreach (var row in Model.EvidenceInspectorRows)
-                                {
-                                    <details class="evidence-item @(row.HasConflict ? "attention" : string.Empty)">
-                                        <summary>
-                                            <div>
-                                                <strong class="mono">@row.AttributeKey</strong>
-                                                <span class="subtle-copy">Canonical: @row.CanonicalValue</span>
-                                            </div>
-                                            <div class="chip-row">
-                                                <span class="status-pill @(row.HasConflict ? "warning" : "completed")">@(row.HasConflict ? "Conflict" : "Aligned")</span>
-                                                <span class="status-pill neutral">@row.Evidence.Count evidence item@(row.Evidence.Count == 1 ? string.Empty : "s")</span>
-                                            </div>
-                                        </summary>
-
-                                        @if (row.Evidence.Count == 0)
-                                        {
-                                            <div class="empty-panel">
-                                                <p class="empty-state">No evidence items were returned for this attribute.</p>
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            <div class="evidence-card-grid">
-                                                @foreach (var evidence in row.Evidence)
-                                                {
-                                                    <article class="evidence-card @(evidence.MatchesCanonical ? "canonical" : "disagreement")">
-                                                        <div class="evidence-card-header">
-                                                            <strong>@evidence.SourceName</strong>
-                                                            <span class="status-pill @(evidence.MatchesCanonical ? "completed" : "warning")">@(evidence.MatchesCanonical ? "Matches canonical" : "Differs")</span>
-                                                        </div>
-                                                        <div class="evidence-meta-grid">
-                                                            <div>
-                                                                <dt>Claimed value</dt>
-                                                                <dd>@evidence.DisplayValue</dd>
-                                                            </div>
-                                                            <div>
-                                                                <dt>Source product</dt>
-                                                                <dd class="mono">@evidence.SourceProductId</dd>
-                                                            </div>
-                                                            <div>
-                                                                <dt>Source field</dt>
-                                                                <dd class="mono">@evidence.SourceAttributeKey</dd>
-                                                            </div>
-                                                            <div>
-                                                                <dt>Observed</dt>
-                                                                <dd>@evidence.ObservedUtc.ToString("u")</dd>
-                                                            </div>
-                                                        </div>
-                                                        @if (!string.IsNullOrWhiteSpace(evidence.SelectorOrPath) || !string.IsNullOrWhiteSpace(evidence.SourceUrl))
-                                                        {
-                                                            <div class="evidence-footnotes">
-                                                                @if (!string.IsNullOrWhiteSpace(evidence.SelectorOrPath))
-                                                                {
-                                                                    <p class="subtle-copy"><span class="mono">@evidence.SelectorOrPath</span></p>
-                                                                }
-                                                                @if (!string.IsNullOrWhiteSpace(evidence.SourceUrl))
-                                                                {
-                                                                    <p><a href="@evidence.SourceUrl" target="_blank" rel="noreferrer">Open source page</a></p>
-                                                                }
-                                                            </div>
-                                                        }
-                                                    </article>
-                                                }
-                                            </div>
-                                        }
-                                    </details>
-                                }
-                            </div>
-                        }
-                    </section>
-
-                    <section class="panel-muted inspector-section">
-                        <div class="panel-heading">
-                            <div>
-                                <p class="eyebrow">Timeline</p>
-                                <h3>Product history</h3>
-                                <p class="subtle-copy">The API already returns history, so the UI exposes it as a timeline instead of burying it in another generic table.</p>
-                            </div>
-                        </div>
-
-                        @if (Model.Timeline.Count == 0)
-                        {
-                            <div class="empty-panel">
-                                <p class="empty-state">No history events are recorded for this product yet.</p>
-                            </div>
-                        }
-                        else
-                        {
-                            <ol class="timeline-list">
-                                @foreach (var change in Model.Timeline)
-                                {
-                                    <li class="timeline-item">
-                                        <div class="timeline-marker"></div>
-                                        <article class="timeline-card">
-                                            <div class="timeline-card-header">
-                                                <div>
-                                                    <strong class="mono">@change.AttributeKey</strong>
-                                                    <p class="subtle-copy">@change.SourceName</p>
-                                                </div>
-                                                <time>@change.TimestampUtc.ToString("u")</time>
-                                            </div>
-                                            <p>@change.ChangeSummary</p>
-                                            <div class="timeline-value-grid">
-                                                <div>
-                                                    <dt>Old</dt>
-                                                    <dd>@change.OldValue</dd>
-                                                </div>
-                                                <div>
-                                                    <dt>New</dt>
-                                                    <dd>@change.NewValue</dd>
-                                                </div>
-                                            </div>
-                                        </article>
-                                    </li>
-                                }
-                            </ol>
-                        }
-                    </section>
-                </div>
-            }
-        </section>
-    </div>
+            <partial name="_Pager" model="Model.Pagination" />
+        }
+    </section>
 </section>
