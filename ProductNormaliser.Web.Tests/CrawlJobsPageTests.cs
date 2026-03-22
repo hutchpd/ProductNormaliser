@@ -77,6 +77,47 @@ public sealed class CrawlJobsPageTests
     }
 
     [Test]
+    public async Task CrawlJobsIndex_OnPostLaunchAsync_RejectsIncompatiblePostedSourceSelection()
+    {
+        var client = CreateClient();
+        client.Sources =
+        [
+            new SourceDto
+            {
+                SourceId = "ao_uk",
+                DisplayName = "AO UK",
+                IsEnabled = true,
+                SupportedCategoryKeys = ["tv"]
+            },
+            new SourceDto
+            {
+                SourceId = "fridge_world",
+                DisplayName = "Fridge World",
+                IsEnabled = true,
+                SupportedCategoryKeys = ["refrigerator"]
+            }
+        ];
+
+        var model = new ProductNormaliser.Web.Pages.CrawlJobs.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.CrawlJobs.IndexModel>.Instance)
+        {
+            Launch = new ProductNormaliser.Web.Pages.CrawlJobs.IndexModel.LaunchCrawlJobInput
+            {
+                SelectedCategoryKeys = ["tv"],
+                SelectedSourceIds = ["fridge_world"]
+            }
+        };
+
+        var result = await model.OnPostLaunchAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<PageResult>());
+            Assert.That(client.LastCreatedJobRequest, Is.Null);
+            Assert.That(model.ModelState[$"{nameof(model.Launch)}.{nameof(model.Launch.SelectedSourceIds)}"]?.Errors.Select(error => error.ErrorMessage), Does.Contain("Selected sources do not support the chosen categories: Fridge World."));
+        });
+    }
+
+    [Test]
     public async Task CrawlJobsIndex_OnGetAsync_GroupsProgressStatesAndEnablesPollingForActiveJobs()
     {
         var client = CreateClient();

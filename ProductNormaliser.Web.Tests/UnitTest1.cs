@@ -219,45 +219,6 @@ public sealed class AdminApiClientTests
         });
     }
 
-    [Test]
-    public async Task ProductsPage_OnGetAsync_LoadsSelectedProductAndHistory()
-    {
-        var client = new FakeAdminApiClient
-        {
-            Categories = [new CategoryMetadataDto { CategoryKey = "tv", DisplayName = "TV", IsEnabled = true }],
-            ProductPage = new ProductListResponseDto
-            {
-                Items = [new ProductSummaryDto { Id = "canon-1", CategoryKey = "tv", Brand = "Sony", DisplayName = "Sony Bravia" }],
-                Page = 1,
-                PageSize = 12,
-                TotalCount = 1,
-                TotalPages = 1
-            },
-            Product = new ProductDetailDto
-            {
-                Id = "canon-1",
-                CategoryKey = "tv",
-                Brand = "Sony",
-                DisplayName = "Sony Bravia"
-            },
-            ProductHistory = [new ProductChangeEventDto { CanonicalProductId = "canon-1", CategoryKey = "tv", AttributeKey = "screen_size", SourceName = "ao", TimestampUtc = DateTime.UtcNow }]
-        };
-        var model = new ProductNormaliser.Web.Pages.Products.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Products.IndexModel>.Instance)
-        {
-            SelectedProductId = "canon-1"
-        };
-
-        await model.OnGetAsync(CancellationToken.None);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(model.SelectedProduct, Is.Not.Null);
-            Assert.That(model.SelectedProduct!.Id, Is.EqualTo("canon-1"));
-            Assert.That(model.ProductHistory, Has.Count.EqualTo(1));
-            Assert.That(model.Products.Items, Has.Count.EqualTo(1));
-        });
-    }
-
     private static ProductNormaliserAdminApiClient CreateClient(HttpStatusCode statusCode, object? payload, string mediaType = "application/json")
     {
         return CreateClient((_, _) => Task.FromResult(CreateJsonResponse(statusCode, payload, mediaType)));

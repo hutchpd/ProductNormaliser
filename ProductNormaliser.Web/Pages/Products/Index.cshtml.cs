@@ -32,6 +32,24 @@ public sealed class IndexModel(
 
     public IReadOnlyList<ProductChangeEventDto> ProductHistory { get; private set; } = [];
 
+    public IReadOnlyList<ProductSourceComparisonColumnModel> SourceComparisonColumns => SelectedProduct is null
+        ? []
+        : ProductInspectionPresentation.GetSourceComparisonColumns(SelectedProduct);
+
+    public IReadOnlyList<ProductSourceComparisonRowModel> SourceComparisonRows => SelectedProduct is null
+        ? []
+        : ProductInspectionPresentation.GetSourceComparisonRows(SelectedProduct);
+
+    public IReadOnlyList<ProductEvidenceInspectorRowModel> EvidenceInspectorRows => SelectedProduct is null
+        ? []
+        : ProductInspectionPresentation.GetEvidenceInspectorRows(SelectedProduct);
+
+    public IReadOnlyList<ProductConflictPanelRowModel> ConflictRows => SelectedProduct is null
+        ? []
+        : ProductInspectionPresentation.GetConflictRows(SelectedProduct);
+
+    public IReadOnlyList<ProductHistoryTimelineEntryModel> Timeline => ProductInspectionPresentation.GetHistoryTimeline(ProductHistory);
+
     public PaginationModel Pagination => new()
     {
         PagePath = "/Products/Index",

@@ -73,9 +73,20 @@ public sealed class IndexModel(
 
     public async Task<IActionResult> OnPostLaunchAsync(CancellationToken cancellationToken)
     {
+        try
+        {
+            await PopulateLaunchMetadataAsync(cancellationToken);
+            await LoadJobsAsync(cancellationToken);
+        }
+        catch (AdminApiException exception)
+        {
+            logger.LogWarning(exception, "Failed to load crawl job launch data before validation.");
+            ErrorMessage = exception.Message;
+            return Page();
+        }
+
         if (!TryBuildRequest(out var request))
         {
-            await LoadAsync(cancellationToken);
             return Page();
         }
 
@@ -105,7 +116,6 @@ public sealed class IndexModel(
             ErrorMessage = exception.Message;
         }
 
-        await LoadAsync(cancellationToken);
         return Page();
     }
 
@@ -183,38 +193,8 @@ public sealed class IndexModel(
     {
         try
         {
-            var categoriesTask = adminApiClient.GetCategoriesAsync(cancellationToken);
-            var sourcesTask = adminApiClient.GetSourcesAsync(cancellationToken);
-            var jobsTask = adminApiClient.GetCrawlJobsAsync(new CrawlJobQueryDto
-            {
-                RequestType = "category",
-                Page = 1,
-                PageSize = 30
-            }, cancellationToken);
-
-            await Task.WhenAll(categoriesTask, sourcesTask, jobsTask);
-
-            Categories = categoriesTask.Result.OrderBy(category => category.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
-            Sources = sourcesTask.Result.OrderBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
-            Jobs = jobsTask.Result;
-
-            Launch.RequestType = "category";
-
-            if (Launch.SelectedCategoryKeys.Count == 0 && SeedSelectedCategoryKeys.Count > 0)
-            {
-                Launch.SelectedCategoryKeys = CategorySelectorStateFactory.NormalizeSelection(Categories, SeedSelectedCategoryKeys).ToList();
-            }
-
-            if (Launch.SelectedCategoryKeys.Count == 0 && !string.IsNullOrWhiteSpace(CategoryKey))
-            {
-                Launch.SelectedCategoryKeys = [CategoryKey];
-            }
-
-            CategorySelector = CategorySelectorStateFactory.Create(
-                Categories,
-                Launch.SelectedCategoryKeys,
-                inputName: $"{nameof(Launch)}.{nameof(LaunchCrawlJobInput.SelectedCategoryKeys)}",
-                emptyMessage: "No categories are available for category-targeted crawls.");
+            await PopulateLaunchMetadataAsync(cancellationToken);
+            await LoadJobsAsync(cancellationToken);
         }
         catch (AdminApiException exception)
         {
@@ -231,6 +211,45 @@ public sealed class IndexModel(
         }
     }
 
+    private async Task PopulateLaunchMetadataAsync(CancellationToken cancellationToken)
+    {
+        var categoriesTask = adminApiClient.GetCategoriesAsync(cancellationToken);
+        var sourcesTask = adminApiClient.GetSourcesAsync(cancellationToken);
+
+        await Task.WhenAll(categoriesTask, sourcesTask);
+
+        Categories = categoriesTask.Result.OrderBy(category => category.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
+        Sources = sourcesTask.Result.OrderBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
+
+        Launch.RequestType = "category";
+
+        if (Launch.SelectedCategoryKeys.Count == 0 && SeedSelectedCategoryKeys.Count > 0)
+        {
+            Launch.SelectedCategoryKeys = CategorySelectorStateFactory.NormalizeSelection(Categories, SeedSelectedCategoryKeys).ToList();
+        }
+
+        if (Launch.SelectedCategoryKeys.Count == 0 && !string.IsNullOrWhiteSpace(CategoryKey))
+        {
+            Launch.SelectedCategoryKeys = [CategoryKey];
+        }
+
+        CategorySelector = CategorySelectorStateFactory.Create(
+            Categories,
+            Launch.SelectedCategoryKeys,
+            inputName: $"{nameof(Launch)}.{nameof(LaunchCrawlJobInput.SelectedCategoryKeys)}",
+            emptyMessage: "No categories are available for category-targeted crawls.");
+    }
+
+    private async Task LoadJobsAsync(CancellationToken cancellationToken)
+    {
+        Jobs = await adminApiClient.GetCrawlJobsAsync(new CrawlJobQueryDto
+        {
+            RequestType = "category",
+            Page = 1,
+            PageSize = 30
+        }, cancellationToken);
+    }
+
     private bool TryBuildRequest(out CreateCrawlJobRequest request)
     {
         request = new CreateCrawlJobRequest();
@@ -240,6 +259,29 @@ public sealed class IndexModel(
         if (categories.Count == 0)
         {
             ModelState.AddModelError($"{nameof(Launch)}.{nameof(Launch.SelectedCategoryKeys)}", "Choose at least one category before launching a crawl.");
+            return false;
+        }
+
+        var sourcesById = Sources.ToDictionary(source => source.SourceId, StringComparer.OrdinalIgnoreCase);
+        var unknownSourceIds = sources
+            .Where(sourceId => !sourcesById.ContainsKey(sourceId))
+            .ToArray();
+
+        if (unknownSourceIds.Length > 0)
+        {
+            ModelState.AddModelError($"{nameof(Launch)}.{nameof(Launch.SelectedSourceIds)}", $"Unknown source selections were posted: {string.Join(", ", unknownSourceIds)}.");
+            return false;
+        }
+
+        var incompatibleSources = sources
+            .Select(sourceId => sourcesById[sourceId])
+            .Where(source => categories.All(category => !source.SupportedCategoryKeys.Contains(category, StringComparer.OrdinalIgnoreCase)))
+            .Select(source => source.DisplayName)
+            .ToArray();
+
+        if (incompatibleSources.Length > 0)
+        {
+            ModelState.AddModelError($"{nameof(Launch)}.{nameof(Launch.SelectedSourceIds)}", $"Selected sources do not support the chosen categories: {string.Join(", ", incompatibleSources)}.");
             return false;
         }
 

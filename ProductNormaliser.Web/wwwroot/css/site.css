@@ -489,6 +489,264 @@ h3,
   background: rgba(255, 255, 255, 0.58);
 }
 
+.inspector-section {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid rgba(20, 32, 51, 0.08);
+  border-radius: 1.2rem;
+}
+
+.inspector-section h3,
+.conflict-card h4 {
+  margin: 0;
+}
+
+.conflict-stack,
+.evidence-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.conflict-card,
+.timeline-card,
+.evidence-card {
+  padding: 1rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(20, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.conflict-card-header,
+.evidence-card-header,
+.timeline-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 0.75rem;
+}
+
+.conflict-group-list,
+.claim-stack,
+.evidence-footnotes {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.conflict-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  padding: 0.8rem 0.9rem;
+  border-radius: 0.95rem;
+  border: 1px solid rgba(20, 32, 51, 0.08);
+}
+
+.conflict-group.canonical,
+.claim-card.canonical,
+.evidence-card.canonical,
+.comparison-cell.canonical-match {
+  background: rgba(15, 118, 110, 0.08);
+  border-color: rgba(15, 118, 110, 0.18);
+}
+
+.conflict-group.disagreement,
+.claim-card.disagreement,
+.evidence-card.disagreement,
+.comparison-cell.disagreement,
+.comparison-canonical.attention,
+.evidence-item.attention {
+  background: rgba(217, 119, 6, 0.09);
+  border-color: rgba(217, 119, 6, 0.2);
+}
+
+.comparison-table-wrap {
+  overflow: auto;
+  border: 1px solid rgba(20, 32, 51, 0.08);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.comparison-table {
+  width: 100%;
+  min-width: 54rem;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.comparison-table th,
+.comparison-table td {
+  vertical-align: top;
+  padding: 0.95rem;
+  border-bottom: 1px solid rgba(20, 32, 51, 0.08);
+  border-right: 1px solid rgba(20, 32, 51, 0.08);
+}
+
+.comparison-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(250, 247, 241, 0.98);
+}
+
+.comparison-table tr:last-child th,
+.comparison-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.comparison-table th:last-child,
+.comparison-table td:last-child {
+  border-right: 0;
+}
+
+.sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: rgba(255, 253, 248, 0.98);
+}
+
+.comparison-table thead .sticky-col {
+  z-index: 3;
+}
+
+.comparison-table .canonical-col,
+.comparison-canonical {
+  background: rgba(15, 118, 110, 0.05);
+}
+
+.comparison-source-heading,
+.comparison-attribute {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.comparison-source-heading span,
+.comparison-attribute span:last-child {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.comparison-row-conflict .sticky-col {
+  background: rgba(255, 247, 235, 0.98);
+}
+
+.comparison-cell.missing {
+  background: rgba(20, 32, 51, 0.03);
+}
+
+.comparison-cell.claimed,
+.claim-card {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(20, 32, 51, 0.08);
+  border-radius: 0.85rem;
+  padding: 0.75rem;
+}
+
+.comparison-canonical {
+  min-width: 12rem;
+}
+
+.comparison-canonical strong,
+.claim-card strong,
+.evidence-meta-grid dd,
+.timeline-value-grid dd {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.evidence-item {
+  border: 1px solid rgba(20, 32, 51, 0.08);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.evidence-item summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.evidence-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.evidence-item[open] summary {
+  border-bottom: 1px solid rgba(20, 32, 51, 0.08);
+}
+
+.evidence-card-grid,
+.evidence-meta-grid,
+.timeline-value-grid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.evidence-card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  padding: 1rem;
+}
+
+.evidence-meta-grid,
+.timeline-value-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.evidence-meta-grid div,
+.timeline-value-grid div {
+  padding: 0.75rem 0.8rem;
+  border-radius: 0.85rem;
+  background: rgba(20, 32, 51, 0.04);
+}
+
+.evidence-meta-grid dt,
+.timeline-value-grid dt {
+  margin-bottom: 0.25rem;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.evidence-meta-grid dd,
+.timeline-value-grid dd {
+  margin: 0;
+}
+
+.timeline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.timeline-item {
+  display: grid;
+  grid-template-columns: 0.8rem minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: start;
+}
+
+.timeline-marker {
+  width: 0.8rem;
+  height: 0.8rem;
+  margin-top: 1rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--teal), #2f9f92);
+  box-shadow: 0 0 0 0.25rem rgba(15, 118, 110, 0.12);
+}
+
+.timeline-card p {
+  margin-top: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
 @media (max-width: 991.98px) {
   .overview-grid,
   .split-layout,
@@ -723,14 +981,20 @@ h3,
   .pager-shell,
   .job-card-header,
   .job-card-actions,
-  .footer-inner {
+  .footer-inner,
+  .conflict-card-header,
+  .evidence-card-header,
+  .timeline-card-header,
+  .evidence-item summary {
     flex-direction: column;
     align-items: stretch;
   }
 
   .form-grid,
   .form-grid .wide,
-  .detail-grid {
+  .detail-grid,
+  .evidence-meta-grid,
+  .timeline-value-grid {
     grid-template-columns: 1fr;
   }
 
