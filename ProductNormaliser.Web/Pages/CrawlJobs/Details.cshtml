@@ -1,0 +1,181 @@
+@page
+@model ProductNormaliser.Web.Pages.CrawlJobs.DetailsModel
+@{
+    ViewData["Title"] = "Crawl Job Details";
+}
+
+<section class="dashboard-shell">
+    <partial name="_PageHero" model="Model.Hero" />
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="notice success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="notice error">@Model.ErrorMessage</div>
+    }
+
+    @if (Model.Job is null)
+    {
+        <section class="panel">
+            <div class="empty-panel">
+                <p class="empty-state">No crawl job details are available yet.</p>
+                <div class="actions-bar inline-actions">
+                    <a asp-page="/CrawlJobs/Index" class="btn btn-outline-dark">Back to crawl jobs</a>
+                </div>
+            </div>
+        </section>
+    }
+    else
+    {
+        @if (Model.ShouldAutoRefresh)
+        {
+            <div class="notice success">This job is active. The page refreshes every 5 seconds while progress is changing.</div>
+        }
+
+        <div class="split-layout">
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Overall Status</p>
+                        <h2>@Model.Job.JobId</h2>
+                    </div>
+                    <partial name="_StatusBadge" model="Model.StatusBadge" />
+                </div>
+
+                <div class="progress-shell">
+                    <div class="progress-bar-shell">
+                        <div class="progress-bar-fill" style="width: @Model.ProgressPercent%"></div>
+                    </div>
+                    <div class="subtle-copy">@Model.Job.ProcessedTargets of @Model.Job.TotalTargets targets processed</div>
+                </div>
+
+                <dl class="detail-grid">
+                    <div>
+                        <dt>Total targets</dt>
+                        <dd>@Model.Job.TotalTargets</dd>
+                    </div>
+                    <div>
+                        <dt>Processed</dt>
+                        <dd>@Model.Job.ProcessedTargets</dd>
+                    </div>
+                    <div>
+                        <dt>Success</dt>
+                        <dd>@Model.Job.SuccessCount</dd>
+                    </div>
+                    <div>
+                        <dt>Skipped</dt>
+                        <dd>@Model.Job.SkippedCount</dd>
+                    </div>
+                    <div>
+                        <dt>Failed</dt>
+                        <dd>@Model.Job.FailedCount</dd>
+                    </div>
+                    <div>
+                        <dt>Cancelled</dt>
+                        <dd>@Model.Job.CancelledCount</dd>
+                    </div>
+                    <div>
+                        <dt>Requested categories</dt>
+                        <dd>@ProductNormaliser.Web.Models.CrawlJobPresentation.GetRequestedCategoriesSummary(Model.Job)</dd>
+                    </div>
+                    <div>
+                        <dt>Requested sources</dt>
+                        <dd>@ProductNormaliser.Web.Models.CrawlJobPresentation.GetRequestedSourcesSummary(Model.Job)</dd>
+                    </div>
+                    <div>
+                        <dt>Started</dt>
+                        <dd>@Model.Job.StartedAt.ToString("u")</dd>
+                    </div>
+                    <div>
+                        <dt>Last updated</dt>
+                        <dd>@Model.Job.LastUpdatedAt.ToString("u")</dd>
+                    </div>
+                </dl>
+
+                <div class="actions-bar inline-actions">
+                    <a asp-page="/CrawlJobs/Index" class="btn btn-outline-dark">Back to crawl jobs</a>
+                    @if (Model.ShouldAutoRefresh)
+                    {
+                        <form method="post" asp-page-handler="Cancel" class="inline-form">
+                            <input type="hidden" asp-for="JobId" />
+                            <button type="submit" class="btn btn-outline-danger">Stop crawl job</button>
+                        </form>
+                    }
+                </div>
+            </section>
+
+            <aside class="panel panel-muted">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Scope</p>
+                        <h2>Requested targets</h2>
+                    </div>
+                </div>
+
+                <div class="chip-row">
+                @foreach (var category in Model.Job.RequestedCategories)
+                {
+                    <span class="chip">@category</span>
+                }
+                </div>
+
+                @if (Model.Job.RequestedSources.Count == 0)
+                {
+                    <p class="empty-state">All matching sources are included for this crawl job.</p>
+                }
+                else
+                {
+                    <div class="chip-row">
+                    @foreach (var source in Model.Job.RequestedSources)
+                    {
+                        <span class="chip">@source</span>
+                    }
+                    </div>
+                }
+            </aside>
+        </div>
+
+        <section class="panel">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Per-Category Breakdown</p>
+                    <h2>Progress by category</h2>
+                </div>
+            </div>
+
+            @if (Model.Job.PerCategoryBreakdown.Count == 0)
+            {
+                <div class="empty-panel">
+                    <p class="empty-state">No category-level breakdown is available for this job yet.</p>
+                </div>
+            }
+            else
+            {
+                <div class="job-breakdown-grid">
+                @foreach (var breakdown in Model.Job.PerCategoryBreakdown)
+                {
+                    <article>
+                        <strong>@breakdown.CategoryKey</strong>
+                        <div class="subtle-copy">Processed @breakdown.ProcessedTargets / @breakdown.TotalTargets</div>
+                        <div class="subtle-copy">Success @breakdown.SuccessCount, skipped @breakdown.SkippedCount, failed @breakdown.FailedCount, cancelled @breakdown.CancelledCount</div>
+                    </article>
+                }
+                </div>
+            }
+        </section>
+    }
+</section>
+
+@section Scripts {
+    @if (Model.ShouldAutoRefresh)
+    {
+        <script>
+            window.setTimeout(function () {
+                window.location.reload();
+            }, 5000);
+        </script>
+    }
+}

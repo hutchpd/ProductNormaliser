@@ -14,20 +14,8 @@ public sealed class IndexModel(
     [BindProperty(SupportsGet = true, Name = "selectedCategory")]
     public List<string> SeedSelectedCategoryKeys { get; set; } = [];
 
-    [BindProperty(SupportsGet = true, Name = "status")]
-    public string? Status { get; set; }
-
-    [BindProperty(SupportsGet = true, Name = "requestType")]
-    public string? RequestType { get; set; }
-
     [BindProperty(SupportsGet = true, Name = "category")]
     public string? CategoryKey { get; set; }
-
-    [BindProperty(SupportsGet = true, Name = "page")]
-    public int PageNumber { get; set; } = 1;
-
-    [BindProperty(SupportsGet = true, Name = "jobId")]
-    public string? SelectedJobId { get; set; }
 
     [BindProperty]
     public LaunchCrawlJobInput Launch { get; set; } = new();
@@ -39,30 +27,30 @@ public sealed class IndexModel(
 
     public CrawlJobListResponseDto Jobs { get; private set; } = new() { Page = 1, PageSize = 10 };
 
-    public CrawlJobDto? SelectedJob { get; private set; }
-
     public IReadOnlyList<CategoryMetadataDto> Categories { get; private set; } = [];
 
     public CategorySelectorState CategorySelector { get; private set; } = CategorySelectorStateFactory.Create([], [], $"{nameof(Launch)}.{nameof(LaunchCrawlJobInput.SelectedCategoryKeys)}", isLoading: true);
 
     public IReadOnlyList<SourceDto> Sources { get; private set; } = [];
 
-    public bool ShouldAutoRefresh => SelectedJob is not null && IsActiveJob(SelectedJob.Status);
+    public bool SupportsRecrawlMode => false;
 
-    public PaginationModel Pagination => new()
-    {
-        PagePath = "/CrawlJobs/Index",
-        CurrentPage = Jobs.Page,
-        TotalPages = Jobs.TotalPages,
-        TotalCount = Jobs.TotalCount,
-        RouteValues = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["status"] = Status,
-            ["requestType"] = RequestType,
-            ["category"] = CategoryKey,
-            ["jobId"] = SelectedJobId
-        }
-    };
+    public IReadOnlyList<CrawlJobDto> ActiveJobs => Jobs.Items
+        .Where(job => CrawlJobPresentation.IsActiveStatus(job.Status))
+        .OrderByDescending(job => job.LastUpdatedAt)
+        .ToArray();
+
+    public IReadOnlyList<CrawlJobDto> CompletedJobs => Jobs.Items
+        .Where(job => CrawlJobPresentation.IsCompletedStatus(job.Status))
+        .OrderByDescending(job => job.LastUpdatedAt)
+        .ToArray();
+
+    public IReadOnlyList<CrawlJobDto> FailedJobs => Jobs.Items
+        .Where(job => CrawlJobPresentation.IsFailedStatus(job.Status))
+        .OrderByDescending(job => job.LastUpdatedAt)
+        .ToArray();
+
+    public bool ShouldAutoRefresh => ActiveJobs.Count > 0;
 
     public PageHeroModel Hero => new()
     {
@@ -72,8 +60,9 @@ public sealed class IndexModel(
         Metrics =
         [
             new HeroMetricModel { Label = "Visible jobs", Value = Jobs.Items.Count.ToString() },
-            new HeroMetricModel { Label = "Running", Value = Jobs.Items.Count(job => string.Equals(job.Status, "running", StringComparison.OrdinalIgnoreCase)).ToString() },
-            new HeroMetricModel { Label = "Pending", Value = Jobs.Items.Count(job => string.Equals(job.Status, "pending", StringComparison.OrdinalIgnoreCase)).ToString() }
+            new HeroMetricModel { Label = "Active", Value = ActiveJobs.Count.ToString() },
+            new HeroMetricModel { Label = "Completed", Value = CompletedJobs.Count.ToString() },
+            new HeroMetricModel { Label = "Failed", Value = FailedJobs.Count.ToString() }
         ]
     };
 
@@ -93,14 +82,10 @@ public sealed class IndexModel(
         try
         {
             var job = await adminApiClient.CreateCrawlJobAsync(request, cancellationToken);
-            StatusMessage = $"Queued crawl job '{job.JobId}'.";
-            return RedirectToPage(new
+            StatusMessage = $"Queued crawl job '{job.JobId}' for {request.RequestedCategories.Count} categories{(request.RequestedSources.Count == 0 ? string.Empty : $" across {request.RequestedSources.Count} selected sources")}.";
+            return RedirectToPage("/CrawlJobs/Details", new
             {
                 jobId = job.JobId,
-                category = CategoryKey,
-                requestType = RequestType,
-                status = Status,
-                page = 1,
                 selectedCategory = Launch.SelectedCategoryKeys.ToArray()
             });
         }
@@ -140,10 +125,6 @@ public sealed class IndexModel(
             return RedirectToPage(new
             {
                 jobId = job.JobId,
-                category = CategoryKey,
-                requestType = RequestType,
-                status = Status,
-                page = PageNumber,
                 selectedCategory = Launch.SelectedCategoryKeys.ToArray()
             });
         }
@@ -206,11 +187,9 @@ public sealed class IndexModel(
             var sourcesTask = adminApiClient.GetSourcesAsync(cancellationToken);
             var jobsTask = adminApiClient.GetCrawlJobsAsync(new CrawlJobQueryDto
             {
-                Status = Status,
-                RequestType = RequestType,
-                CategoryKey = CategoryKey,
-                Page = Math.Max(1, PageNumber),
-                PageSize = 10
+                RequestType = "category",
+                Page = 1,
+                PageSize = 30
             }, cancellationToken);
 
             await Task.WhenAll(categoriesTask, sourcesTask, jobsTask);
@@ -219,10 +198,7 @@ public sealed class IndexModel(
             Sources = sourcesTask.Result.OrderBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
             Jobs = jobsTask.Result;
 
-            if (string.IsNullOrWhiteSpace(Launch.RequestType))
-            {
-                Launch.RequestType = "category";
-            }
+            Launch.RequestType = "category";
 
             if (Launch.SelectedCategoryKeys.Count == 0 && SeedSelectedCategoryKeys.Count > 0)
             {
@@ -239,11 +215,6 @@ public sealed class IndexModel(
                 Launch.SelectedCategoryKeys,
                 inputName: $"{nameof(Launch)}.{nameof(LaunchCrawlJobInput.SelectedCategoryKeys)}",
                 emptyMessage: "No categories are available for category-targeted crawls.");
-
-            if (!string.IsNullOrWhiteSpace(SelectedJobId))
-            {
-                SelectedJob = await adminApiClient.GetCrawlJobAsync(SelectedJobId, cancellationToken);
-            }
         }
         catch (AdminApiException exception)
         {
@@ -263,52 +234,23 @@ public sealed class IndexModel(
     private bool TryBuildRequest(out CreateCrawlJobRequest request)
     {
         request = new CreateCrawlJobRequest();
-        var requestType = NormalizeRequestType(Launch.RequestType);
-        if (requestType is null)
-        {
-            ModelState.AddModelError($"{nameof(Launch)}.{nameof(Launch.RequestType)}", "Select a supported crawl scope.");
-            return false;
-        }
-
         var categories = NormalizeValues(Launch.SelectedCategoryKeys);
         var sources = NormalizeValues(Launch.SelectedSourceIds);
-        var productIds = ParseLines(Launch.ProductIdsText);
 
-        switch (requestType)
+        if (categories.Count == 0)
         {
-            case "category" when categories.Count == 0:
-                ModelState.AddModelError($"{nameof(Launch)}.{nameof(Launch.SelectedCategoryKeys)}", "Choose at least one category for a category crawl.");
-                return false;
-            case "source" when sources.Count == 0:
-                ModelState.AddModelError($"{nameof(Launch)}.{nameof(Launch.SelectedSourceIds)}", "Choose at least one source for a source crawl.");
-                return false;
-            case "product_selection" when productIds.Count == 0:
-                ModelState.AddModelError($"{nameof(Launch)}.{nameof(Launch.ProductIdsText)}", "Enter at least one canonical product id for a product recrawl.");
-                return false;
+            ModelState.AddModelError($"{nameof(Launch)}.{nameof(Launch.SelectedCategoryKeys)}", "Choose at least one category before launching a crawl.");
+            return false;
         }
 
         request = new CreateCrawlJobRequest
         {
-            RequestType = requestType,
+            RequestType = "category",
             RequestedCategories = categories,
-            RequestedSources = sources,
-            RequestedProductIds = productIds
+            RequestedSources = sources
         };
 
         return true;
-    }
-
-    private static string? NormalizeRequestType(string? requestType)
-    {
-        if (string.IsNullOrWhiteSpace(requestType))
-        {
-            return null;
-        }
-
-        var normalized = requestType.Trim().Replace('-', '_').ToLowerInvariant();
-        return normalized is "category" or "source" or "product_selection"
-            ? normalized
-            : null;
     }
 
     private static List<string> NormalizeValues(IEnumerable<string> values)
@@ -321,36 +263,12 @@ public sealed class IndexModel(
             .ToList();
     }
 
-    private static List<string> ParseLines(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return [];
-        }
-
-        return text
-            .Split([',', '\r', '\n', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
-
-    private static bool IsActiveJob(string status)
-    {
-        return string.Equals(status, "pending", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(status, "running", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(status, "cancel_requested", StringComparison.OrdinalIgnoreCase);
-    }
-
     public sealed class LaunchCrawlJobInput
     {
-        [Required]
         public string RequestType { get; set; } = "category";
 
         public List<string> SelectedCategoryKeys { get; set; } = [];
 
         public List<string> SelectedSourceIds { get; set; } = [];
-
-        public string? ProductIdsText { get; set; }
     }
 }

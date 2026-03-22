@@ -95,10 +95,40 @@
 			}
 		}
 
+		function updateSourceFiltering() {
+			var selectedCategories = new Set(getSelectedCheckboxes().map(function (checkbox) {
+				return checkbox.value.toLowerCase();
+			}));
+
+			Array.from(selectorRoot.closest("form")?.querySelectorAll("[data-source-checkbox]") || []).forEach(function (sourceCheckbox) {
+				var sourceCard = sourceCheckbox.closest("[data-source-card]");
+				var isBaseEnabled = sourceCheckbox.getAttribute("data-source-enabled") === "true";
+				var supportedCategories = (sourceCheckbox.getAttribute("data-supported-categories") || "")
+					.split(",")
+					.map(function (value) { return value.trim().toLowerCase(); })
+					.filter(function (value) { return value.length > 0; });
+
+				var matchesSelection = selectedCategories.size === 0 || supportedCategories.some(function (categoryKey) {
+					return selectedCategories.has(categoryKey);
+				});
+
+				var isEnabled = isBaseEnabled && matchesSelection;
+				sourceCheckbox.disabled = !isEnabled;
+				if (!isEnabled) {
+					sourceCheckbox.checked = false;
+				}
+
+				if (sourceCard) {
+					sourceCard.classList.toggle("disabled", !isEnabled);
+				}
+			});
+		}
+
 		function syncUi() {
 			updateCardState();
 			updateFamilyButtons();
 			updateSummary();
+			updateSourceFiltering();
 		}
 
 		selectorRoot.querySelectorAll("[data-family-toggle]").forEach(function (button) {

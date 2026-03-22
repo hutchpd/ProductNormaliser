@@ -29,13 +29,10 @@
             </div>
 
             <form method="post" asp-page-handler="Launch" class="source-form">
-                <div>
-                    <label asp-for="Launch.RequestType" class="form-label">Request type</label>
-                    <select asp-for="Launch.RequestType" class="form-select">
-                        <option value="category">Category crawl</option>
-                        <option value="source">Source crawl</option>
-                        <option value="product_selection">Product recrawl</option>
-                    </select>
+                <input asp-for="Launch.RequestType" type="hidden" value="category" />
+
+                <div class="empty-panel">
+                    <p class="empty-state">Launch a category-targeted crawl from the dashboard. Category selection is required, source filtering is optional, and the newly created job will open immediately after submission.</p>
                 </div>
 
                 <div>
@@ -44,189 +41,223 @@
                 </div>
 
                 <div>
-                    <p class="form-label mb-2">Sources</p>
-                    <div class="check-grid">
-                    @foreach (var source in Model.Sources)
-                    {
-                        <label class="check-card">
-                            <input type="checkbox" name="Launch.SelectedSourceIds" value="@source.SourceId" checked="@Model.Launch.SelectedSourceIds.Contains(source.SourceId)" />
-                            <span>@source.DisplayName</span>
-                        </label>
-                    }
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">Source Filter</p>
+                            <h2>Optionally limit the crawl to selected sources</h2>
+                        </div>
                     </div>
+
+                    @if (Model.Sources.Count == 0)
+                    {
+                        <div class="empty-panel">
+                            <p class="empty-state">No sources are registered yet. Launching without a source filter will use every crawlable source for the selected categories.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="subtle-copy">Leave this empty to crawl every supported source for the selected categories.</p>
+                        <div class="check-grid">
+                        @foreach (var source in Model.Sources)
+                        {
+                            <label class="check-card @(!source.IsEnabled ? "disabled" : string.Empty)" data-source-card>
+                                <input type="checkbox"
+                                       name="Launch.SelectedSourceIds"
+                                       value="@source.SourceId"
+                                       checked="@Model.Launch.SelectedSourceIds.Contains(source.SourceId)"
+                                       data-source-checkbox
+                                       data-supported-categories="@string.Join(',', source.SupportedCategoryKeys)"
+                                       data-source-enabled="@source.IsEnabled.ToString().ToLowerInvariant()"
+                                       disabled="@(!source.IsEnabled)" />
+                                <span>
+                                    <strong>@source.DisplayName</strong>
+                                    <span class="subtle-copy d-block">@((source.SupportedCategoryKeys.Count == 0 ? "No category metadata" : string.Join(", ", source.SupportedCategoryKeys)))</span>
+                                </span>
+                            </label>
+                        }
+                        </div>
+                    }
                     <span asp-validation-for="Launch.SelectedSourceIds" class="text-danger small"></span>
                 </div>
 
-                <div>
-                    <label asp-for="Launch.ProductIdsText" class="form-label">Canonical product ids</label>
-                    <textarea asp-for="Launch.ProductIdsText" class="form-control" rows="4" placeholder="One product id per line, or comma-separated"></textarea>
-                    <span asp-validation-for="Launch.ProductIdsText" class="text-danger small"></span>
+                <div class="empty-panel">
+                    <p class="eyebrow">Recrawl Mode</p>
+                    <p class="empty-state">The current Admin API does not expose a separate recrawl mode for category launches, so this panel submits standard category jobs with optional source filtering only.</p>
                 </div>
 
                 <div class="actions-bar">
-                    <button type="submit" class="btn btn-dark">Queue Crawl Job</button>
+                    <button type="submit" class="btn btn-dark" data-category-launch disabled="@(!Model.CategorySelector.HasSelection)">Launch crawl</button>
                 </div>
             </form>
         </section>
 
-        <section class="panel">
+        <section class="panel panel-muted">
             <div class="panel-heading">
                 <div>
-                    <p class="eyebrow">Selected Job</p>
-                    <h2>@(Model.SelectedJob?.JobId ?? "Choose a job")</h2>
+                    <p class="eyebrow">Visible Jobs</p>
+                    <h2>Progress overview</h2>
                 </div>
             </div>
 
-            @if (Model.SelectedJob is null)
-            {
-                <div class="empty-panel">
-                    <p class="empty-state">Select a job from the history table to inspect its live progress.</p>
-                </div>
-            }
-            else
-            {
-                <div class="detail-stack">
-                    <partial name="_StatusBadge" model="Model.GetStatusBadge(Model.SelectedJob.Status)" />
-                    <div class="progress-shell">
-                        <div class="progress-bar-shell">
-                            <div class="progress-bar-fill" style="width: @ProductNormaliser.Web.Pages.CrawlJobs.IndexModel.GetProgressPercent(Model.SelectedJob)%"></div>
-                        </div>
-                        <div class="subtle-copy">@Model.SelectedJob.ProcessedTargets / @Model.SelectedJob.TotalTargets targets processed</div>
-                    </div>
+            <div class="metric-strip">
+                <article>
+                    <span>Active jobs</span>
+                    <strong>@Model.ActiveJobs.Count</strong>
+                </article>
+                <article>
+                    <span>Completed jobs</span>
+                    <strong>@Model.CompletedJobs.Count</strong>
+                </article>
+                <article>
+                    <span>Failed jobs</span>
+                    <strong>@Model.FailedJobs.Count</strong>
+                </article>
+                <article>
+                    <span>Visible jobs</span>
+                    <strong>@Model.Jobs.Items.Count</strong>
+                </article>
+            </div>
 
-                    <dl class="detail-grid">
-                        <div>
-                            <dt>Scope</dt>
-                            <dd>@ProductNormaliser.Web.Pages.CrawlJobs.IndexModel.GetScopeSummary(Model.SelectedJob)</dd>
-                        </div>
-                        <div>
-                            <dt>Started</dt>
-                            <dd>@Model.SelectedJob.StartedAt.ToString("u")</dd>
-                        </div>
-                        <div>
-                            <dt>Updated</dt>
-                            <dd>@Model.SelectedJob.LastUpdatedAt.ToString("u")</dd>
-                        </div>
-                        <div>
-                            <dt>Estimated completion</dt>
-                            <dd>@(Model.SelectedJob.EstimatedCompletion?.ToString("u") ?? "-")</dd>
-                        </div>
-                        <div>
-                            <dt>Cancelled targets</dt>
-                            <dd>@Model.SelectedJob.CancelledCount</dd>
-                        </div>
-                    </dl>
-
-                    @if (Model.ShouldAutoRefresh)
-                    {
-                        <form method="post" asp-page-handler="Cancel" class="actions-bar inline-actions">
-                            <input type="hidden" name="jobId" value="@Model.SelectedJob.JobId" />
-                            <button type="submit" class="btn btn-outline-danger">Stop crawl job</button>
-                        </form>
-                    }
-
-                    <div class="job-breakdown-grid">
-                    @foreach (var breakdown in Model.SelectedJob.PerCategoryBreakdown)
-                    {
-                        <article>
-                            <strong>@breakdown.CategoryKey</strong>
-                            <div class="subtle-copy">Processed @breakdown.ProcessedTargets / @breakdown.TotalTargets</div>
-                            <div class="subtle-copy">Success @breakdown.SuccessCount, skipped @breakdown.SkippedCount, failed @breakdown.FailedCount, cancelled @breakdown.CancelledCount</div>
-                        </article>
-                    }
-                    </div>
-                </div>
-            }
+            <p class="subtle-copy">The list view groups crawl jobs by progress state so operators can separate active work from successful and failed runs at a glance.</p>
         </section>
     </div>
 
     <section class="panel">
         <div class="panel-heading">
             <div>
-                <p class="eyebrow">History</p>
-                <h2>Filter and page crawl jobs</h2>
+                <p class="eyebrow">Active Jobs</p>
+                <h2>Currently progressing or awaiting cancellation</h2>
             </div>
         </div>
 
-        <form method="get" class="filters-bar">
-            <div>
-                <label asp-for="Status" class="form-label">Status</label>
-                <select asp-for="Status" class="form-select">
-                    <option value="">Any status</option>
-                    <option value="pending">Pending</option>
-                    <option value="running">Running</option>
-                    <option value="cancel_requested">Cancel requested</option>
-                    <option value="cancelled">Cancelled</option>
-                    <option value="completed">Completed</option>
-                    <option value="completed_with_failures">Completed with failures</option>
-                    <option value="failed">Failed</option>
-                </select>
-            </div>
-            <div>
-                <label asp-for="RequestType" class="form-label">Request type</label>
-                <select asp-for="RequestType" class="form-select">
-                    <option value="">Any type</option>
-                    <option value="category">Category</option>
-                    <option value="source">Source</option>
-                    <option value="product_selection">Product selection</option>
-                </select>
-            </div>
-            <div>
-                <label asp-for="CategoryKey" class="form-label">Category</label>
-                <select asp-for="CategoryKey" class="form-select">
-                    <option value="">Any category</option>
-                    @foreach (var category in Model.Categories)
-                    {
-                        <option value="@category.CategoryKey">@category.DisplayName</option>
-                    }
-                </select>
-            </div>
-            <div class="actions-bar">
-                <button type="submit" class="btn btn-dark">Apply Filters</button>
-            </div>
-        </form>
-
-        @if (Model.Jobs.Items.Count == 0)
+        @if (Model.ActiveJobs.Count == 0)
         {
             <div class="empty-panel">
-                <p class="empty-state">No crawl jobs match the current filters.</p>
+                <p class="empty-state">No active crawl jobs are currently running.</p>
             </div>
         }
         else
         {
-            <div class="table-wrap">
-                <table class="table dashboard-table align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th>Job</th>
-                            <th>Type</th>
-                            <th>Scope</th>
-                            <th>Status</th>
-                            <th>Progress</th>
-                            <th>Updated</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    @foreach (var job in Model.Jobs.Items)
-                    {
-                        <tr>
-                            <td>
-                                <a class="mono" asp-page="/CrawlJobs/Index" asp-route-jobId="@job.JobId" asp-route-status="@Model.Status" asp-route-requestType="@Model.RequestType" asp-route-category="@Model.CategoryKey">@job.JobId</a>
-                            </td>
-                            <td>@job.RequestType</td>
-                            <td>@ProductNormaliser.Web.Pages.CrawlJobs.IndexModel.GetScopeSummary(job)</td>
-                            <td>
-                                <partial name="_StatusBadge" model="Model.GetStatusBadge(job.Status)" />
-                            </td>
-                            <td>@job.ProcessedTargets / @job.TotalTargets</td>
-                            <td>@job.LastUpdatedAt.ToString("u")</td>
-                        </tr>
-                    }
-                    </tbody>
-                </table>
-            </div>
+            <div class="job-card-grid">
+            @foreach (var job in Model.ActiveJobs)
+            {
+                <article class="job-card">
+                    <div class="job-card-header">
+                        <div>
+                            <a class="mono" asp-page="/CrawlJobs/Details" asp-route-jobId="@job.JobId">@job.JobId</a>
+                            <div class="subtle-copy">@ProductNormaliser.Web.Models.CrawlJobPresentation.GetScopeSummary(job)</div>
+                        </div>
+                        <partial name="_StatusBadge" model="ProductNormaliser.Web.Models.CrawlJobPresentation.GetStatusBadge(job.Status)" />
+                    </div>
 
-            <partial name="_Pager" model="Model.Pagination" />
+                    <div class="progress-shell">
+                        <div class="progress-bar-shell">
+                            <div class="progress-bar-fill" style="width: @ProductNormaliser.Web.Models.CrawlJobPresentation.GetProgressPercent(job)%"></div>
+                        </div>
+                        <div class="subtle-copy">@job.ProcessedTargets / @job.TotalTargets processed</div>
+                    </div>
+
+                    <dl class="job-meta-grid">
+                        <div><dt>Success</dt><dd>@job.SuccessCount</dd></div>
+                        <div><dt>Failed</dt><dd>@job.FailedCount</dd></div>
+                        <div><dt>Skipped</dt><dd>@job.SkippedCount</dd></div>
+                        <div><dt>Updated</dt><dd>@job.LastUpdatedAt.ToString("u")</dd></div>
+                    </dl>
+
+                    <div class="job-card-actions">
+                        <a asp-page="/CrawlJobs/Details" asp-route-jobId="@job.JobId" class="btn btn-outline-dark">View details</a>
+                        <form method="post" asp-page-handler="Cancel" class="inline-form">
+                            <input type="hidden" name="jobId" value="@job.JobId" />
+                            <button type="submit" class="btn btn-outline-danger">Stop job</button>
+                        </form>
+                    </div>
+                </article>
+            }
+            </div>
+        }
+    </section>
+
+    <section class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Completed Jobs</p>
+                <h2>Finished successfully</h2>
+            </div>
+        </div>
+
+        @if (Model.CompletedJobs.Count == 0)
+        {
+            <div class="empty-panel">
+                <p class="empty-state">No completed crawl jobs are visible yet.</p>
+            </div>
+        }
+        else
+        {
+            <div class="job-card-grid">
+            @foreach (var job in Model.CompletedJobs)
+            {
+                <article class="job-card">
+                    <div class="job-card-header">
+                        <div>
+                            <a class="mono" asp-page="/CrawlJobs/Details" asp-route-jobId="@job.JobId">@job.JobId</a>
+                            <div class="subtle-copy">@ProductNormaliser.Web.Models.CrawlJobPresentation.GetScopeSummary(job)</div>
+                        </div>
+                        <partial name="_StatusBadge" model="ProductNormaliser.Web.Models.CrawlJobPresentation.GetStatusBadge(job.Status)" />
+                    </div>
+                    <dl class="job-meta-grid compact">
+                        <div><dt>Targets</dt><dd>@job.TotalTargets</dd></div>
+                        <div><dt>Success</dt><dd>@job.SuccessCount</dd></div>
+                        <div><dt>Skipped</dt><dd>@job.SkippedCount</dd></div>
+                        <div><dt>Updated</dt><dd>@job.LastUpdatedAt.ToString("u")</dd></div>
+                    </dl>
+                    <div class="job-card-actions">
+                        <a asp-page="/CrawlJobs/Details" asp-route-jobId="@job.JobId" class="btn btn-outline-dark">View details</a>
+                    </div>
+                </article>
+            }
+            </div>
+        }
+    </section>
+
+    <section class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Failed Jobs</p>
+                <h2>Runs that need attention</h2>
+            </div>
+        </div>
+
+        @if (Model.FailedJobs.Count == 0)
+        {
+            <div class="empty-panel">
+                <p class="empty-state">No failed or cancelled crawl jobs are visible right now.</p>
+            </div>
+        }
+        else
+        {
+            <div class="job-card-grid">
+            @foreach (var job in Model.FailedJobs)
+            {
+                <article class="job-card attention">
+                    <div class="job-card-header">
+                        <div>
+                            <a class="mono" asp-page="/CrawlJobs/Details" asp-route-jobId="@job.JobId">@job.JobId</a>
+                            <div class="subtle-copy">@ProductNormaliser.Web.Models.CrawlJobPresentation.GetScopeSummary(job)</div>
+                        </div>
+                        <partial name="_StatusBadge" model="ProductNormaliser.Web.Models.CrawlJobPresentation.GetStatusBadge(job.Status)" />
+                    </div>
+                    <dl class="job-meta-grid compact">
+                        <div><dt>Processed</dt><dd>@job.ProcessedTargets</dd></div>
+                        <div><dt>Failed</dt><dd>@job.FailedCount</dd></div>
+                        <div><dt>Cancelled</dt><dd>@job.CancelledCount</dd></div>
+                        <div><dt>Updated</dt><dd>@job.LastUpdatedAt.ToString("u")</dd></div>
+                    </dl>
+                    <div class="job-card-actions">
+                        <a asp-page="/CrawlJobs/Details" asp-route-jobId="@job.JobId" class="btn btn-outline-dark">View details</a>
+                    </div>
+                </article>
+            }
+            </div>
         }
     </section>
 </section>
@@ -239,7 +270,7 @@
         <script>
             window.setTimeout(function () {
                 window.location.reload();
-            }, 5000);
+            }, 10000);
         </script>
     }
 }

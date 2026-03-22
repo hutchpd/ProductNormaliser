@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
@@ -171,6 +172,35 @@ public sealed class AdminApiClientTests
     }
 
     [Test]
+    public async Task CreateCrawlJobAsync_PostsToCreateEndpoint()
+    {
+        var requestUri = string.Empty;
+        CreateCrawlJobRequest? requestPayload = null;
+        var client = CreateClient(async (request, cancellationToken) =>
+        {
+            requestUri = request.RequestUri!.ToString();
+            requestPayload = await request.Content!.ReadFromJsonAsync<CreateCrawlJobRequest>(cancellationToken: cancellationToken);
+            return CreateJsonResponse(HttpStatusCode.Created, new CrawlJobDto { JobId = "job_22", Status = "pending" });
+        });
+
+        var result = await client.CreateCrawlJobAsync(new CreateCrawlJobRequest
+        {
+            RequestType = "category",
+            RequestedCategories = ["tv", "monitor"],
+            RequestedSources = ["ao_uk"]
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(requestUri, Does.Contain("api/crawl/jobs"));
+            Assert.That(requestPayload, Is.Not.Null);
+            Assert.That(requestPayload!.RequestedCategories, Is.EqualTo(new[] { "tv", "monitor" }));
+            Assert.That(requestPayload.RequestedSources, Is.EqualTo(new[] { "ao_uk" }));
+            Assert.That(result.JobId, Is.EqualTo("job_22"));
+        });
+    }
+
+    [Test]
     public async Task CancelCrawlJobAsync_PostsToCancelEndpoint()
     {
         var requestUri = string.Empty;
@@ -186,60 +216,6 @@ public sealed class AdminApiClientTests
         {
             Assert.That(requestUri, Does.Contain("api/crawl/jobs/job_1/cancel"));
             Assert.That(result.Status, Is.EqualTo("cancel_requested"));
-        });
-    }
-
-    [Test]
-    public async Task CrawlJobsPage_OnPostLaunchAsync_CreatesJobAndRedirects()
-    {
-        var client = new FakeAdminApiClient
-        {
-            CreatedJob = new CrawlJobDto { JobId = "job_123", Status = "pending" }
-        };
-        var model = new ProductNormaliser.Web.Pages.CrawlJobs.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.CrawlJobs.IndexModel>.Instance)
-        {
-            Launch = new ProductNormaliser.Web.Pages.CrawlJobs.IndexModel.LaunchCrawlJobInput
-            {
-                RequestType = "category",
-                SelectedCategoryKeys = ["tv"]
-            }
-        };
-
-        var result = await model.OnPostLaunchAsync(CancellationToken.None);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(client.LastCreatedJobRequest, Is.Not.Null);
-            Assert.That(client.LastCreatedJobRequest!.RequestedCategories, Is.EqualTo(new[] { "tv" }));
-            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
-            Assert.That(((RedirectToPageResult)result).RouteValues!["jobId"], Is.EqualTo("job_123"));
-        });
-    }
-
-    [Test]
-    public async Task CrawlJobsPage_OnPostCancelAsync_CancelsJobAndRedirects()
-    {
-        var client = new FakeAdminApiClient
-        {
-            CancelledJob = new CrawlJobDto { JobId = "job_123", Status = "cancel_requested" }
-        };
-        var model = new ProductNormaliser.Web.Pages.CrawlJobs.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.CrawlJobs.IndexModel>.Instance)
-        {
-            Launch = new ProductNormaliser.Web.Pages.CrawlJobs.IndexModel.LaunchCrawlJobInput
-            {
-                RequestType = "category",
-                SelectedCategoryKeys = ["tv", "monitor"]
-            },
-            PageNumber = 2
-        };
-
-        var result = await model.OnPostCancelAsync("job_123", CancellationToken.None);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(client.LastCancelledJobId, Is.EqualTo("job_123"));
-            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
-            Assert.That(((RedirectToPageResult)result).RouteValues!["jobId"], Is.EqualTo("job_123"));
         });
     }
 
@@ -315,52 +291,4 @@ public sealed class AdminApiClientTests
         }
     }
 
-    private sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
-    {
-        public StatsDto Stats { get; set; } = new();
-        public IReadOnlyList<CategoryMetadataDto> Categories { get; set; } = [];
-        public IReadOnlyList<CategoryFamilyDto> CategoryFamilies { get; set; } = [];
-        public IReadOnlyList<CategoryMetadataDto> EnabledCategories { get; set; } = [];
-        public CategoryDetailDto? CategoryDetail { get; set; }
-        public IReadOnlyList<SourceDto> Sources { get; set; } = [];
-        public SourceDto? Source { get; set; }
-        public CrawlJobListResponseDto CrawlJobsPage { get; set; } = new();
-        public CrawlJobDto? CrawlJob { get; set; }
-        public CrawlJobDto? CreatedJob { get; set; }
-        public CrawlJobDto? CancelledJob { get; set; }
-        public CreateCrawlJobRequest? LastCreatedJobRequest { get; private set; }
-        public string? LastCancelledJobId { get; private set; }
-        public ProductListResponseDto ProductPage { get; set; } = new();
-        public ProductDetailDto? Product { get; set; }
-        public IReadOnlyList<ProductChangeEventDto> ProductHistory { get; set; } = [];
-
-        public Task<StatsDto> GetStatsAsync(CancellationToken cancellationToken = default) => Task.FromResult(Stats);
-        public Task<IReadOnlyList<CategoryMetadataDto>> GetCategoriesAsync(CancellationToken cancellationToken = default) => Task.FromResult(Categories);
-        public Task<IReadOnlyList<CategoryFamilyDto>> GetCategoryFamiliesAsync(CancellationToken cancellationToken = default) => Task.FromResult(CategoryFamilies);
-        public Task<IReadOnlyList<CategoryMetadataDto>> GetEnabledCategoriesAsync(CancellationToken cancellationToken = default) => Task.FromResult(EnabledCategories);
-        public Task<CategoryDetailDto?> GetCategoryDetailAsync(string categoryKey, CancellationToken cancellationToken = default) => Task.FromResult(CategoryDetail);
-        public Task<IReadOnlyList<SourceDto>> GetSourcesAsync(CancellationToken cancellationToken = default) => Task.FromResult(Sources);
-        public Task<SourceDto?> GetSourceAsync(string sourceId, CancellationToken cancellationToken = default) => Task.FromResult(Source);
-        public Task<SourceDto> RegisterSourceAsync(RegisterSourceRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<SourceDto> UpdateSourceAsync(string sourceId, UpdateSourceRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<SourceDto> EnableSourceAsync(string sourceId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<SourceDto> DisableSourceAsync(string sourceId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<SourceDto> AssignCategoriesAsync(string sourceId, AssignSourceCategoriesRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<SourceDto> UpdateThrottlingAsync(string sourceId, UpdateSourceThrottlingRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<CrawlJobListResponseDto> GetCrawlJobsAsync(CrawlJobQueryDto? query = null, CancellationToken cancellationToken = default) => Task.FromResult(CrawlJobsPage);
-        public Task<CrawlJobDto?> GetCrawlJobAsync(string jobId, CancellationToken cancellationToken = default) => Task.FromResult(CrawlJob);
-        public Task<CrawlJobDto> CreateCrawlJobAsync(CreateCrawlJobRequest request, CancellationToken cancellationToken = default)
-        {
-            LastCreatedJobRequest = request;
-            return Task.FromResult(CreatedJob ?? new CrawlJobDto { JobId = "job_default" });
-        }
-        public Task<CrawlJobDto> CancelCrawlJobAsync(string jobId, CancellationToken cancellationToken = default)
-        {
-            LastCancelledJobId = jobId;
-            return Task.FromResult(CancelledJob ?? new CrawlJobDto { JobId = jobId, Status = "cancel_requested" });
-        }
-        public Task<ProductListResponseDto> GetProductsAsync(ProductListQueryDto? query = null, CancellationToken cancellationToken = default) => Task.FromResult(ProductPage);
-        public Task<ProductDetailDto?> GetProductAsync(string productId, CancellationToken cancellationToken = default) => Task.FromResult(Product);
-        public Task<IReadOnlyList<ProductChangeEventDto>> GetProductHistoryAsync(string productId, CancellationToken cancellationToken = default) => Task.FromResult(ProductHistory);
-    }
 }
