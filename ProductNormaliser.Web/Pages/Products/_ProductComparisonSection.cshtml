@@ -6,6 +6,7 @@
             <p class="eyebrow">Side By Side</p>
             <h2>Source comparison</h2>
         </div>
+        <a asp-page-handler="ExportComparison" asp-route-productId="@Model.ProductId" class="btn btn-outline-dark">Export comparison CSV</a>
     </div>
 
     @if (Model.SourceComparisonRows.Count == 0)

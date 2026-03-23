@@ -93,6 +93,7 @@
                 <h2>Choose a category lens</h2>
                 <p class="subtle-copy">Every panel below is recalculated for the selected category, so coverage and disagreement semantics follow the active schema instead of assuming one product family.</p>
             </div>
+            <a asp-page-handler="ExportSummary" asp-route-category="@Model.CategoryKey" class="btn btn-outline-dark">Export summary CSV</a>
         </div>
 
         <form method="get" class="analytics-filter-grid">

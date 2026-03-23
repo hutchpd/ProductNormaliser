@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.WebUtilities;
+using System.Globalization;
 using ProductNormaliser.Web.Contracts;
 using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
@@ -208,6 +209,49 @@ public sealed class IndexModel(
         }
     }
 
+    public async Task<FileContentResult> OnGetExportAsync(CancellationToken cancellationToken)
+    {
+        var products = await adminApiClient.GetProductsAsync(new ProductListQueryDto
+        {
+            CategoryKey = CategoryKey,
+            Search = Search,
+            MinSourceCount = MinSourceCount,
+            Freshness = Freshness,
+            ConflictStatus = ConflictStatus,
+            CompletenessStatus = CompletenessStatus,
+            Sort = Sort,
+            Page = Math.Max(1, PageNumber),
+            PageSize = 500
+        }, cancellationToken);
+
+        var rows = new List<IReadOnlyList<string>>
+        {
+            new string[] { "ProductId", "DisplayName", "CategoryKey", "Brand", "ModelNumber", "Gtin", "SourceCount", "EvidenceCount", "ConflictAttributeCount", "HasConflict", "CompletenessScore", "CompletenessStatus", "FreshnessStatus", "FreshnessAgeDays", "UpdatedUtc" }
+        };
+
+        rows.AddRange(products.Items.Select(product => (IReadOnlyList<string>)
+        new string[]
+        {
+            product.Id,
+            product.DisplayName,
+            product.CategoryKey,
+            product.Brand,
+            product.ModelNumber ?? string.Empty,
+            product.Gtin ?? string.Empty,
+            product.SourceCount.ToString(CultureInfo.InvariantCulture),
+            product.EvidenceCount.ToString(CultureInfo.InvariantCulture),
+            product.ConflictAttributeCount.ToString(CultureInfo.InvariantCulture),
+            product.HasConflict ? "true" : "false",
+            product.CompletenessScore.ToString(CultureInfo.InvariantCulture),
+            product.CompletenessStatus,
+            product.FreshnessStatus,
+            product.FreshnessAgeDays.ToString(CultureInfo.InvariantCulture),
+            product.UpdatedUtc.ToString("u", CultureInfo.InvariantCulture)
+        }));
+
+        return File(CsvExportBuilder.Build(rows), "text/csv", BuildExportFileName("products"));
+    }
+
     private async Task<AnalystWorkflowDto?> ResolveSavedWorkflowAsync(IReadOnlyList<AnalystWorkflowDto> workflows, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(SavedViewId))
@@ -295,5 +339,11 @@ public sealed class IndexModel(
             page = PageNumber,
             view = workflowId
         };
+    }
+
+    private string BuildExportFileName(string prefix)
+    {
+        var categorySegment = string.IsNullOrWhiteSpace(CategoryKey) ? "all-categories" : CategoryKey.Trim().ToLowerInvariant();
+        return $"{prefix}-{categorySegment}.csv";
     }
 }

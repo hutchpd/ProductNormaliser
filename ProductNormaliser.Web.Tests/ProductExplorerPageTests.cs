@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text;
 using ProductNormaliser.Web.Contracts;
 using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
@@ -336,6 +337,77 @@ public sealed class ProductExplorerPageTests
     }
 
     [Test]
+    public async Task ProductsIndex_OnGetExportAsync_ExportsFilteredProductsCsv()
+    {
+        var client = new FakeAdminApiClient
+        {
+            ProductPage = new ProductListResponseDto
+            {
+                Items =
+                [
+                    new ProductSummaryDto
+                    {
+                        Id = "canon-1",
+                        DisplayName = "Sony Bravia",
+                        CategoryKey = "tv",
+                        Brand = "Sony",
+                        ModelNumber = "A80L",
+                        Gtin = "123",
+                        SourceCount = 3,
+                        EvidenceCount = 12,
+                        ConflictAttributeCount = 2,
+                        HasConflict = true,
+                        CompletenessScore = 0.75m,
+                        CompletenessStatus = "partial",
+                        FreshnessStatus = "stale",
+                        FreshnessAgeDays = 42,
+                        UpdatedUtc = new DateTime(2026, 3, 23, 8, 0, 0, DateTimeKind.Utc)
+                    }
+                ],
+                Page = 1,
+                PageSize = 1,
+                TotalCount = 1,
+                TotalPages = 1
+            }
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Products.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Products.IndexModel>.Instance)
+        {
+            CategoryKey = "tv",
+            Search = "sony",
+            Freshness = "stale",
+            ConflictStatus = "with_conflicts"
+        };
+
+        var result = await model.OnGetExportAsync(CancellationToken.None);
+        var csv = Encoding.UTF8.GetString(result.FileContents);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(client.LastProductQuery, Is.Not.Null);
+            Assert.That(client.LastProductQuery!.Search, Is.EqualTo("sony"));
+            Assert.That(client.LastProductQuery.Freshness, Is.EqualTo("stale"));
+            Assert.That(csv, Does.Contain("ProductId,DisplayName,CategoryKey"));
+            Assert.That(csv, Does.Contain("canon-1,Sony Bravia,tv,Sony,A80L,123,3,12,2,true,0.75,partial,stale,42"));
+        });
+    }
+
+    [Test]
+    public async Task ProductsIndex_OnGetExportAsync_WhenEmpty_ReturnsHeaderOnlyCsv()
+    {
+        var client = new FakeAdminApiClient
+        {
+            ProductPage = new ProductListResponseDto { Items = [], Page = 1, PageSize = 12, TotalCount = 0, TotalPages = 0 }
+        };
+        var model = new ProductNormaliser.Web.Pages.Products.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Products.IndexModel>.Instance);
+
+        var result = await model.OnGetExportAsync(CancellationToken.None);
+        var csv = Encoding.UTF8.GetString(result.FileContents).Trim();
+
+        Assert.That(csv, Is.EqualTo("ProductId,DisplayName,CategoryKey,Brand,ModelNumber,Gtin,SourceCount,EvidenceCount,ConflictAttributeCount,HasConflict,CompletenessScore,CompletenessStatus,FreshnessStatus,FreshnessAgeDays,UpdatedUtc"));
+    }
+
+    [Test]
     public void ProductExplorerPresentation_ReturnsRenderingBadges()
     {
         var freshness = ProductExplorerPresentation.GetFreshnessBadge("stale", 42);
@@ -359,7 +431,7 @@ public sealed class ProductExplorerPageTests
         public Task<AnalystWorkflowDto?> GetAnalystWorkflowAsync(string workflowId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<AnalystWorkflowDto> SaveAnalystWorkflowAsync(UpsertAnalystWorkflowRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task DeleteAnalystWorkflowAsync(string workflowId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<AnalystNoteDto?> GetAnalystNoteAsync(string targetType, string targetId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<AnalystNoteDto?> GetAnalystNoteAsync(string targetType, string targetId, CancellationToken cancellationToken = default) => Task.FromResult<AnalystNoteDto?>(null);
         public Task<AnalystNoteDto> SaveAnalystNoteAsync(UpsertAnalystNoteRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task DeleteAnalystNoteAsync(string targetType, string targetId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<IReadOnlyList<CategoryFamilyDto>> GetCategoryFamiliesAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();

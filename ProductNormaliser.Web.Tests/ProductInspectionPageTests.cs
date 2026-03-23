@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.AspNetCore.Mvc;
+using System.Text;
 using ProductNormaliser.Web.Contracts;
 using ProductNormaliser.Web.Models;
 
@@ -155,6 +157,58 @@ public sealed class ProductInspectionPageTests
             Assert.That(screenSize.Cells.Single(cell => cell.SourceName == "Currys").HasDisagreement, Is.True);
             Assert.That(panelType.Cells.Single(cell => cell.SourceName == "Currys").HasClaim, Is.False);
         });
+    }
+
+    [Test]
+    public async Task ProductDetails_OnGetExportComparisonAsync_ExportsComparisonCsv()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Product = CreateProduct()
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Products.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Products.DetailsModel>.Instance)
+        {
+            ProductId = "canon-1"
+        };
+
+        var result = await model.OnGetExportComparisonAsync(CancellationToken.None);
+        Assert.That(result, Is.TypeOf<FileContentResult>());
+        var csv = Encoding.UTF8.GetString(((FileContentResult)result).FileContents);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(csv, Does.Contain("AttributeKey,CanonicalValue,HasConflict,EvidenceCount,SourceName"));
+            Assert.That(csv, Does.Contain("screen_size,55 in,true,2,AO UK,ao-1,true,true,false,55"));
+            Assert.That(csv, Does.Contain("screen_size,55 in,true,2,Currys,currys-1,true,false,true,54.6"));
+        });
+    }
+
+    [Test]
+    public async Task ProductDetails_OnGetExportComparisonAsync_WhenNoAttributes_ReturnsHeaderOnlyCsv()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Product = new ProductDetailDto
+            {
+                Id = "canon-empty",
+                CategoryKey = "tv",
+                Brand = "Northwind",
+                DisplayName = "Empty",
+                Attributes = [],
+                SourceProducts = []
+            }
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Products.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Products.DetailsModel>.Instance)
+        {
+            ProductId = "canon-empty"
+        };
+
+        var result = await model.OnGetExportComparisonAsync(CancellationToken.None);
+        var csv = Encoding.UTF8.GetString(((FileContentResult)result).FileContents).Trim();
+
+        Assert.That(csv, Is.EqualTo("AttributeKey,CanonicalValue,HasConflict,EvidenceCount,SourceName,SourceProductId,HasClaim,MatchesCanonical,HasDisagreement,ClaimValues"));
     }
 
     private static ProductDetailDto CreateProduct()

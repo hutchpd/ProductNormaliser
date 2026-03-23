@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using System.Globalization;
 using ProductNormaliser.Web.Contracts;
 using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
@@ -315,6 +316,36 @@ public sealed class IntelligenceModel(
             await OnGetAsync(cancellationToken);
             return Page();
         }
+    }
+
+    public async Task<FileContentResult> OnGetExportDisagreementsAsync(CancellationToken cancellationToken)
+    {
+        var rows = new List<IReadOnlyList<string>>
+        {
+            new string[] { "CategoryKey", "TimeRangeDays", "SourceName", "AttributeKey", "DisagreementRate", "WinRate", "TotalComparisons", "TimesDisagreed", "LastUpdatedUtc" }
+        };
+
+        if (!string.IsNullOrWhiteSpace(CategoryKey))
+        {
+            var timeRangeDays = NormalizeTimeRange(TimeRangeDays);
+            var disagreements = await adminApiClient.GetSourceDisagreementsAsync(CategoryKey!, null, timeRangeDays, cancellationToken);
+            rows.AddRange(disagreements.Select(item => (IReadOnlyList<string>)
+            new string[]
+            {
+                item.CategoryKey,
+                timeRangeDays.ToString(CultureInfo.InvariantCulture),
+                item.SourceName,
+                item.AttributeKey,
+                item.DisagreementRate.ToString(CultureInfo.InvariantCulture),
+                item.WinRate.ToString(CultureInfo.InvariantCulture),
+                item.TotalComparisons.ToString(CultureInfo.InvariantCulture),
+                item.TimesDisagreed.ToString(CultureInfo.InvariantCulture),
+                item.LastUpdatedUtc.ToString("u", CultureInfo.InvariantCulture)
+            }));
+        }
+
+        var categorySegment = string.IsNullOrWhiteSpace(CategoryKey) ? "all-categories" : CategoryKey.Trim().ToLowerInvariant();
+        return File(CsvExportBuilder.Build(rows), "text/csv", $"source-disagreements-{categorySegment}.csv");
     }
 
     private async Task<AnalystWorkflowDto?> ResolveSavedWorkflowAsync(IReadOnlyList<AnalystWorkflowDto> workflows, CancellationToken cancellationToken)

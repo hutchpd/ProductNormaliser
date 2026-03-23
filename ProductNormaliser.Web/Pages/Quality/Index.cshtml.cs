@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using System.Globalization;
 using ProductNormaliser.Web.Contracts;
 using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
@@ -202,6 +203,78 @@ public sealed class IndexModel(
             await OnGetAsync(cancellationToken);
             return Page();
         }
+    }
+
+    public async Task<FileContentResult> OnGetExportSummaryAsync(CancellationToken cancellationToken)
+    {
+        var rows = new List<IReadOnlyList<string>>
+        {
+            new string[] { "Section", "Key", "Label", "Metric", "Value", "Context" }
+        };
+
+        if (!string.IsNullOrWhiteSpace(CategoryKey))
+        {
+            var coverageTask = adminApiClient.GetDetailedCoverageAsync(CategoryKey!, cancellationToken);
+            var unmappedTask = adminApiClient.GetUnmappedAttributesAsync(CategoryKey!, cancellationToken);
+            var disagreementsTask = adminApiClient.GetSourceDisagreementsAsync(CategoryKey!, cancellationToken: cancellationToken);
+            var stabilityTask = adminApiClient.GetAttributeStabilityAsync(CategoryKey!, cancellationToken);
+            await Task.WhenAll(coverageTask, unmappedTask, disagreementsTask, stabilityTask);
+
+            var coverage = coverageTask.Result;
+            var unmapped = unmappedTask.Result;
+            var disagreements = disagreementsTask.Result;
+            var stability = stabilityTask.Result;
+
+            rows.Add(new string[] { "summary", coverage.CategoryKey, "Total canonical products", "count", coverage.TotalCanonicalProducts.ToString(CultureInfo.InvariantCulture), string.Empty });
+            rows.Add(new string[] { "summary", coverage.CategoryKey, "Total source products", "count", coverage.TotalSourceProducts.ToString(CultureInfo.InvariantCulture), string.Empty });
+
+            rows.AddRange(coverage.Attributes.Select(attribute => (IReadOnlyList<string>)
+            new string[]
+            {
+                "coverage",
+                attribute.AttributeKey,
+                attribute.DisplayName,
+                "coverage_percent",
+                attribute.CoveragePercent.ToString(CultureInfo.InvariantCulture),
+                $"reliability={attribute.ReliabilityScore.ToString(CultureInfo.InvariantCulture)};conflict={attribute.ConflictPercent.ToString(CultureInfo.InvariantCulture)}"
+            }));
+
+            rows.AddRange(unmapped.Select(item => (IReadOnlyList<string>)
+            new string[]
+            {
+                "unmapped",
+                item.RawAttributeKey,
+                item.CanonicalKey,
+                "occurrence_count",
+                item.OccurrenceCount.ToString(CultureInfo.InvariantCulture),
+                string.Join(" | ", item.SourceNames)
+            }));
+
+            rows.AddRange(disagreements.Select(item => (IReadOnlyList<string>)
+            new string[]
+            {
+                "disagreement",
+                item.AttributeKey,
+                item.SourceName,
+                "disagreement_rate",
+                item.DisagreementRate.ToString(CultureInfo.InvariantCulture),
+                $"comparisons={item.TotalComparisons.ToString(CultureInfo.InvariantCulture)}"
+            }));
+
+            rows.AddRange(stability.Select(item => (IReadOnlyList<string>)
+            new string[]
+            {
+                "stability",
+                item.AttributeKey,
+                item.AttributeKey,
+                "stability_score",
+                item.StabilityScore.ToString(CultureInfo.InvariantCulture),
+                item.SuspicionReason ?? string.Empty
+            }));
+        }
+
+        var categorySegment = string.IsNullOrWhiteSpace(CategoryKey) ? "all-categories" : CategoryKey.Trim().ToLowerInvariant();
+        return File(CsvExportBuilder.Build(rows), "text/csv", $"quality-summary-{categorySegment}.csv");
     }
 
     private async Task<AnalystWorkflowDto?> ResolveSavedWorkflowAsync(IReadOnlyList<AnalystWorkflowDto> workflows, CancellationToken cancellationToken)

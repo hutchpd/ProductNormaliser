@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text;
 using ProductNormaliser.Web.Contracts;
 using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
@@ -286,5 +287,60 @@ public sealed class SourceIntelligencePageTests
             Assert.That(client.LastSavedAnalystWorkflowRequest.State["range"], Is.EqualTo("90"));
             Assert.That(result, Is.TypeOf<RedirectToPageResult>());
         });
+    }
+
+    [Test]
+    public async Task SourceIntelligence_OnGetExportDisagreementsAsync_ExportsReportCsv()
+    {
+        var client = new FakeAdminApiClient
+        {
+            SourceDisagreements =
+            [
+                new SourceAttributeDisagreementDto
+                {
+                    CategoryKey = "monitor",
+                    SourceName = "Northwind",
+                    AttributeKey = "refresh_rate_hz",
+                    DisagreementRate = 20m,
+                    WinRate = 80m,
+                    TotalComparisons = 10,
+                    TimesDisagreed = 2,
+                    LastUpdatedUtc = new DateTime(2026, 3, 23, 10, 0, 0, DateTimeKind.Utc)
+                }
+            ]
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.IntelligenceModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IntelligenceModel>.Instance)
+        {
+            CategoryKey = "monitor",
+            TimeRangeDays = 90
+        };
+
+        var result = await model.OnGetExportDisagreementsAsync(CancellationToken.None);
+        var csv = Encoding.UTF8.GetString(result.FileContents);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(client.LastSourceDisagreementsCategoryKey, Is.EqualTo("monitor"));
+            Assert.That(client.LastSourceDisagreementsTimeRangeDays, Is.EqualTo(90));
+            Assert.That(csv, Does.Contain("CategoryKey,TimeRangeDays,SourceName,AttributeKey,DisagreementRate,WinRate,TotalComparisons,TimesDisagreed,LastUpdatedUtc"));
+            Assert.That(csv, Does.Contain("monitor,90,Northwind,refresh_rate_hz,20,80,10,2"));
+        });
+    }
+
+    [Test]
+    public async Task SourceIntelligence_OnGetExportDisagreementsAsync_WhenEmpty_ReturnsHeaderOnlyCsv()
+    {
+        var client = new FakeAdminApiClient();
+        var model = new ProductNormaliser.Web.Pages.Sources.IntelligenceModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IntelligenceModel>.Instance)
+        {
+            CategoryKey = "monitor",
+            TimeRangeDays = 30
+        };
+
+        var result = await model.OnGetExportDisagreementsAsync(CancellationToken.None);
+        var csv = Encoding.UTF8.GetString(result.FileContents).Trim();
+
+        Assert.That(csv, Is.EqualTo("CategoryKey,TimeRangeDays,SourceName,AttributeKey,DisagreementRate,WinRate,TotalComparisons,TimesDisagreed,LastUpdatedUtc"));
     }
 }

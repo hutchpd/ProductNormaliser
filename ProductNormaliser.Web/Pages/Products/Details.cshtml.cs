@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.WebUtilities;
+using System.Globalization;
 using ProductNormaliser.Web.Contracts;
 using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
@@ -249,6 +250,51 @@ public sealed class DetailsModel(
             await OnGetAsync(cancellationToken);
             return Page();
         }
+    }
+
+    public async Task<IActionResult> OnGetExportComparisonAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(ProductId))
+        {
+            return BadRequest("A product id is required.");
+        }
+
+        var product = await adminApiClient.GetProductAsync(ProductId, cancellationToken);
+        if (product is null)
+        {
+            return NotFound();
+        }
+
+        var rows = new List<IReadOnlyList<string>>
+        {
+            new string[] { "AttributeKey", "CanonicalValue", "HasConflict", "EvidenceCount", "SourceName", "SourceProductId", "HasClaim", "MatchesCanonical", "HasDisagreement", "ClaimValues" }
+        };
+
+        foreach (var row in ProductInspectionPresentation.GetSourceComparisonRows(product))
+        {
+            var columns = ProductInspectionPresentation.GetSourceComparisonColumns(product);
+            for (var index = 0; index < row.Cells.Count; index++)
+            {
+                var cell = row.Cells[index];
+                var column = columns[index];
+                rows.Add(
+                new string[]
+                {
+                    row.AttributeKey,
+                    row.CanonicalValue,
+                    row.HasConflict ? "true" : "false",
+                    row.EvidenceCount.ToString(CultureInfo.InvariantCulture),
+                    column.SourceName,
+                    column.SourceProductId,
+                    cell.HasClaim ? "true" : "false",
+                    cell.MatchesCanonical ? "true" : "false",
+                    cell.HasDisagreement ? "true" : "false",
+                    string.Join(" | ", cell.Claims.Select(claim => claim.DisplayValue))
+                });
+            }
+        }
+
+        return File(CsvExportBuilder.Build(rows), "text/csv", $"product-comparison-{product.Id}.csv");
     }
 
     public sealed class AnalystNoteInput

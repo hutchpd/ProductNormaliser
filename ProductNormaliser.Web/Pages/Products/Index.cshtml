@@ -203,6 +203,16 @@
                 <p class="eyebrow">Results</p>
                 <h2>Analysis-ready product explorer</h2>
             </div>
+            <a asp-page-handler="Export"
+               asp-route-category="@Model.CategoryKey"
+               asp-route-search="@Model.Search"
+               asp-route-minSourceCount="@Model.MinSourceCount"
+               asp-route-freshness="@Model.Freshness"
+               asp-route-conflictStatus="@Model.ConflictStatus"
+               asp-route-completeness="@Model.CompletenessStatus"
+               asp-route-sort="@Model.Sort"
+               asp-route-page="@Model.PageNumber"
+               class="btn btn-outline-dark">Export CSV</a>
         </div>
 
         @if (Model.Products.Items.Count == 0)

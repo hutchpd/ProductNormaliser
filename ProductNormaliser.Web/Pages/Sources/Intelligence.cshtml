@@ -486,6 +486,11 @@
                     <h2>Disagreement hotspots</h2>
                     <p class="subtle-copy">This hotspot table is category-wide for @Model.TimeRangeLabel.ToLowerInvariant(), so you can see where the selected source diverges from broader supplier pressure.</p>
                 </div>
+                <a asp-page-handler="ExportDisagreements"
+                   asp-route-category="@Model.CategoryKey"
+                   asp-route-source="@Model.SourceName"
+                   asp-route-range="@Model.EffectiveTimeRangeDays"
+                   class="btn btn-outline-dark">Export disagreements CSV</a>
             </div>
 
             @if (Model.DisagreementHotspots.Count == 0)

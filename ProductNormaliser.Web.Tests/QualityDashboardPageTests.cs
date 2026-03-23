@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text;
 using ProductNormaliser.Web.Contracts;
 using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
@@ -197,5 +198,90 @@ public sealed class QualityDashboardPageTests
             Assert.That(client.LastSavedAnalystWorkflowRequest.State["category"], Is.EqualTo("monitor"));
             Assert.That(result, Is.TypeOf<RedirectToPageResult>());
         });
+    }
+
+    [Test]
+    public async Task QualityDashboard_OnGetExportSummaryAsync_ExportsSummaryCsv()
+    {
+        var client = new FakeAdminApiClient
+        {
+            DetailedCoverage = new DetailedCoverageResponseDto
+            {
+                CategoryKey = "monitor",
+                TotalCanonicalProducts = 12,
+                TotalSourceProducts = 30,
+                Attributes =
+                [
+                    new AttributeCoverageDetailDto
+                    {
+                        AttributeKey = "refresh_rate_hz",
+                        DisplayName = "Refresh Rate",
+                        CoveragePercent = 62m,
+                        ReliabilityScore = 58m,
+                        ConflictPercent = 21m
+                    }
+                ]
+            },
+            UnmappedAttributes =
+            [
+                new UnmappedAttributeDto
+                {
+                    CanonicalKey = "panel_type",
+                    RawAttributeKey = "display_panel",
+                    OccurrenceCount = 5,
+                    SourceNames = ["Northwind"]
+                }
+            ],
+            SourceDisagreements =
+            [
+                new SourceAttributeDisagreementDto
+                {
+                    CategoryKey = "monitor",
+                    SourceName = "Northwind",
+                    AttributeKey = "refresh_rate_hz",
+                    DisagreementRate = 37.5m,
+                    TotalComparisons = 8
+                }
+            ],
+            AttributeStability =
+            [
+                new AttributeStabilityDto
+                {
+                    CategoryKey = "monitor",
+                    AttributeKey = "refresh_rate_hz",
+                    StabilityScore = 54m,
+                    SuspicionReason = "Supplier values keep flipping."
+                }
+            ]
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Quality.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Quality.IndexModel>.Instance)
+        {
+            CategoryKey = "monitor"
+        };
+
+        var result = await model.OnGetExportSummaryAsync(CancellationToken.None);
+        var csv = Encoding.UTF8.GetString(result.FileContents);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(csv, Does.Contain("Section,Key,Label,Metric,Value,Context"));
+            Assert.That(csv, Does.Contain("summary,monitor,Total canonical products,count,12,"));
+            Assert.That(csv, Does.Contain("coverage,refresh_rate_hz,Refresh Rate,coverage_percent,62"));
+            Assert.That(csv, Does.Contain("unmapped,display_panel,panel_type,occurrence_count,5,Northwind"));
+            Assert.That(csv, Does.Contain("stability,refresh_rate_hz,refresh_rate_hz,stability_score,54,Supplier values keep flipping."));
+        });
+    }
+
+    [Test]
+    public async Task QualityDashboard_OnGetExportSummaryAsync_WhenEmpty_ReturnsHeaderOnlyCsv()
+    {
+        var client = new FakeAdminApiClient();
+        var model = new ProductNormaliser.Web.Pages.Quality.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Quality.IndexModel>.Instance);
+
+        var result = await model.OnGetExportSummaryAsync(CancellationToken.None);
+        var csv = Encoding.UTF8.GetString(result.FileContents).Trim();
+
+        Assert.That(csv, Is.EqualTo("Section,Key,Label,Metric,Value,Context"));
     }
 }
