@@ -72,6 +72,15 @@
                     <option value="sparse">Sparse</option>
                 </select>
             </div>
+            <div>
+                <label asp-for="Sort" class="form-label">Sort</label>
+                <select asp-for="Sort" class="form-select">
+                    <option value="">Recently updated</option>
+                    <option value="stale">Stalest first</option>
+                    <option value="completeness_asc">Lowest completeness first</option>
+                    <option value="conflicts_desc">Most conflicts first</option>
+                </select>
+            </div>
             <div class="actions-bar product-filter-actions">
                 <button type="submit" class="btn btn-dark">Apply Filters</button>
                 <a asp-page="/Products/Index" class="btn btn-outline-secondary">Reset</a>
@@ -127,15 +136,7 @@
                         <div class="product-result-header">
                             <div>
                                 <h3>
-                                    <a asp-page="/Products/Details"
-                                       asp-route-productId="@product.Id"
-                                       asp-route-category="@Model.CategoryKey"
-                                       asp-route-search="@Model.Search"
-                                       asp-route-page="@Model.PageNumber"
-                                       asp-route-minSourceCount="@Model.MinSourceCount"
-                                       asp-route-freshness="@Model.Freshness"
-                                       asp-route-conflictStatus="@Model.ConflictStatus"
-                                       asp-route-completeness="@Model.CompletenessStatus">@product.DisplayName</a>
+                                    <a href="@Model.GetDetailUrl(product)">@product.DisplayName</a>
                                 </h3>
                                 <p class="subtle-copy mono">@product.Id</p>
                                 <p class="subtle-copy">@product.Brand @(string.IsNullOrWhiteSpace(product.ModelNumber) ? string.Empty : $"/ {product.ModelNumber}")</p>

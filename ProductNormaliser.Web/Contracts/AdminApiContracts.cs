@@ -171,6 +171,7 @@ public sealed class ProductListQueryDto
     public string? Freshness { get; init; }
     public string? ConflictStatus { get; init; }
     public string? CompletenessStatus { get; init; }
+    public string? Sort { get; init; }
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 12;
 }

@@ -1,0 +1,42 @@
+@model ProductNormaliser.Web.Pages.Products.DetailsModel
+
+<section id="summary" class="panel">
+    <div class="panel-heading">
+        <div>
+            <p class="eyebrow">Canonical Summary</p>
+            <h2>@Model.Product!.DisplayName</h2>
+        </div>
+        <div class="chip-row">
+            <span class="status-pill @Model.FreshnessBadge.Tone">@Model.FreshnessBadge.Text</span>
+            <span class="status-pill @Model.CompletenessBadge.Tone">@Model.CompletenessBadge.Text</span>
+            <span class="status-pill @Model.ConflictBadge.Tone">@Model.ConflictBadge.Text</span>
+        </div>
+    </div>
+
+    <dl class="detail-grid product-summary-grid">
+        <div>
+            <dt>Category</dt>
+            <dd>@Model.Product.CategoryKey</dd>
+        </div>
+        <div>
+            <dt>Source count</dt>
+            <dd>@Model.Product.SourceCount</dd>
+        </div>
+        <div>
+            <dt>Evidence count</dt>
+            <dd>@Model.Product.EvidenceCount</dd>
+        </div>
+        <div>
+            <dt>Completeness</dt>
+            <dd>@ProductNormaliser.Web.Models.ProductExplorerPresentation.FormatPercent(Model.Product.CompletenessScore)</dd>
+        </div>
+        <div>
+            <dt>Created</dt>
+            <dd>@Model.Product.CreatedUtc.ToString("u")</dd>
+        </div>
+        <div>
+            <dt>Updated</dt>
+            <dd>@Model.Product.UpdatedUtc.ToString("u")</dd>
+        </div>
+    </dl>
+</section>

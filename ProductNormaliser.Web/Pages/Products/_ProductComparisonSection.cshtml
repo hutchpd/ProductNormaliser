@@ -1,0 +1,82 @@
+@model ProductNormaliser.Web.Pages.Products.DetailsModel
+
+<section id="comparison" class="panel panel-muted inspector-section">
+    <div class="panel-heading">
+        <div>
+            <p class="eyebrow">Side By Side</p>
+            <h2>Source comparison</h2>
+        </div>
+    </div>
+
+    @if (Model.SourceComparisonRows.Count == 0)
+    {
+        <div class="empty-panel">
+            <p class="empty-state">This product does not have comparable attribute evidence yet.</p>
+        </div>
+    }
+    else
+    {
+        <div class="comparison-table-wrap">
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th class="sticky-col">Attribute</th>
+                        <th class="canonical-col">Canonical</th>
+                        @foreach (var source in Model.SourceComparisonColumns)
+                        {
+                            <th>
+                                <div class="comparison-source-heading">
+                                    <strong>@source.SourceName</strong>
+                                    <span>@source.Title</span>
+                                    <span>@(source.ModelNumber ?? source.Gtin ?? "No model metadata")</span>
+                                </div>
+                            </th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Model.SourceComparisonRows)
+                    {
+                        <tr class="@(row.HasConflict ? "comparison-row-conflict" : string.Empty)">
+                            <th class="sticky-col" scope="row">
+                                <div class="comparison-attribute">
+                                    <span class="mono">@row.AttributeKey</span>
+                                    <span class="subtle-copy">@row.EvidenceCount evidence item@(row.EvidenceCount == 1 ? string.Empty : "s")</span>
+                                </div>
+                            </th>
+                            <td class="comparison-canonical @(row.HasConflict ? "attention" : string.Empty)">
+                                <strong>@row.CanonicalValue</strong>
+                                <span class="status-pill @(row.HasConflict ? "warning" : "completed")">@(row.HasConflict ? "Conflict" : "Canonical")</span>
+                            </td>
+                            @foreach (var cell in row.Cells)
+                            {
+                                <td class="@(cell.HasClaim ? (cell.HasDisagreement ? "comparison-cell disagreement" : cell.MatchesCanonical ? "comparison-cell canonical-match" : "comparison-cell claimed") : "comparison-cell missing")">
+                                    @if (!cell.HasClaim)
+                                    {
+                                        <span class="subtle-copy">No claim</span>
+                                    }
+                                    else
+                                    {
+                                        <div class="claim-stack">
+                                            @foreach (var claim in cell.Claims)
+                                            {
+                                                <div class="claim-card @(claim.MatchesCanonical ? "canonical" : "disagreement")">
+                                                    <strong>@claim.DisplayValue</strong>
+                                                    <span class="subtle-copy">@claim.SourceAttributeKey</span>
+                                                    @if (!string.IsNullOrWhiteSpace(claim.SelectorOrPath))
+                                                    {
+                                                        <span class="subtle-copy">@claim.SelectorOrPath</span>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

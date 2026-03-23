@@ -8,6 +8,31 @@ namespace ProductNormaliser.AdminApi.Services;
 
 public static class ProductAnalysisProjection
 {
+    public static IReadOnlyList<(CanonicalProduct Product, ProductAnalysisSummary Analysis)> ApplySort(IEnumerable<(CanonicalProduct Product, ProductAnalysisSummary Analysis)> items, string? sort)
+    {
+        var normalized = NormalizeFilter(sort);
+
+        var ordered = normalized switch
+        {
+            "stale" or "stalest" => items
+                .OrderByDescending(item => item.Analysis.FreshnessAgeDays)
+                .ThenBy(item => item.Product.DisplayName, StringComparer.OrdinalIgnoreCase),
+            "completeness_asc" or "lowest_completeness" => items
+                .OrderBy(item => item.Analysis.CompletenessScore)
+                .ThenByDescending(item => item.Analysis.FreshnessAgeDays)
+                .ThenBy(item => item.Product.DisplayName, StringComparer.OrdinalIgnoreCase),
+            "conflicts_desc" or "most_conflicts" => items
+                .OrderByDescending(item => item.Analysis.ConflictAttributeCount)
+                .ThenByDescending(item => item.Analysis.FreshnessAgeDays)
+                .ThenBy(item => item.Product.DisplayName, StringComparer.OrdinalIgnoreCase),
+            _ => items
+                .OrderByDescending(item => item.Product.UpdatedUtc)
+                .ThenBy(item => item.Product.DisplayName, StringComparer.OrdinalIgnoreCase)
+        };
+
+        return ordered.ToArray();
+    }
+
     public static ProductAnalysisSummary BuildSummary(CanonicalProduct product, ICategorySchemaRegistry schemaRegistry, ICategoryAttributeNormaliserRegistry attributeNormaliserRegistry)
     {
         var schema = schemaRegistry.GetSchema(product.CategoryKey);

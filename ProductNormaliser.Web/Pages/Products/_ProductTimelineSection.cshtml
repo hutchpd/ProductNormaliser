@@ -1,0 +1,48 @@
+@model ProductNormaliser.Web.Pages.Products.DetailsModel
+
+<section id="timeline" class="panel panel-muted inspector-section">
+    <div class="panel-heading">
+        <div>
+            <p class="eyebrow">Timeline</p>
+            <h2>Product history</h2>
+        </div>
+    </div>
+
+    @if (Model.Timeline.Count == 0)
+    {
+        <div class="empty-panel">
+            <p class="empty-state">No history events are recorded for this product yet.</p>
+        </div>
+    }
+    else
+    {
+        <ol class="timeline-list">
+            @foreach (var change in Model.Timeline)
+            {
+                <li class="timeline-item">
+                    <div class="timeline-marker"></div>
+                    <article class="timeline-card">
+                        <div class="timeline-card-header">
+                            <div>
+                                <strong class="mono">@change.AttributeKey</strong>
+                                <p class="subtle-copy">@change.SourceName</p>
+                            </div>
+                            <time>@change.TimestampUtc.ToString("u")</time>
+                        </div>
+                        <p>@change.ChangeSummary</p>
+                        <div class="timeline-value-grid">
+                            <div>
+                                <dt>Old</dt>
+                                <dd>@change.OldValue</dd>
+                            </div>
+                            <div>
+                                <dt>New</dt>
+                                <dd>@change.NewValue</dd>
+                            </div>
+                        </div>
+                    </article>
+                </li>
+            }
+        </ol>
+    }
+</section>

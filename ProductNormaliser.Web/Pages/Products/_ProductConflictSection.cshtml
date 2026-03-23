@@ -1,0 +1,48 @@
+@model ProductNormaliser.Web.Pages.Products.DetailsModel
+
+<section id="conflicts" class="panel panel-muted inspector-section">
+    <div class="panel-heading">
+        <div>
+            <p class="eyebrow">Disagreement</p>
+            <h2>Conflict panel</h2>
+        </div>
+    </div>
+
+    @if (Model.ConflictRows.Count == 0)
+    {
+        <div class="empty-panel">
+            <p class="empty-state">No disagreement is recorded for the selected product.</p>
+        </div>
+    }
+    else
+    {
+        <div class="conflict-stack">
+            @foreach (var conflict in Model.ConflictRows)
+            {
+                <article class="conflict-card">
+                    <div class="conflict-card-header">
+                        <div>
+                            <h4 class="mono">@conflict.AttributeKey</h4>
+                            <p class="subtle-copy">Canonical value: <strong>@conflict.CanonicalValue</strong></p>
+                        </div>
+                        <span class="status-pill warning">@conflict.Groups.Count distinct claim@(conflict.Groups.Count == 1 ? string.Empty : "s")</span>
+                    </div>
+
+                    <div class="conflict-group-list">
+                        @foreach (var group in conflict.Groups)
+                        {
+                            <div class="conflict-group @(group.IsCanonical ? "canonical" : "disagreement")">
+                                <strong>@group.DisplayValue</strong>
+                                <span>@string.Join(", ", group.Sources)</span>
+                                @if (group.IsCanonical)
+                                {
+                                    <span class="status-pill completed">Canonical</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</section>

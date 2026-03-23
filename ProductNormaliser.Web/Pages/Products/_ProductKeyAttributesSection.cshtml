@@ -1,0 +1,29 @@
+@model ProductNormaliser.Web.Pages.Products.DetailsModel
+
+<section id="key-attributes" class="panel panel-muted inspector-section">
+    <div class="panel-heading">
+        <div>
+            <p class="eyebrow">Key Attributes</p>
+            <h2>Most useful canonical fields</h2>
+        </div>
+    </div>
+
+    @if (Model.Product!.KeyAttributes.Count == 0)
+    {
+        <div class="empty-panel">
+            <p class="empty-state">No key attributes are available for this product.</p>
+        </div>
+    }
+    else
+    {
+        <div class="product-key-attribute-list detail">
+            @foreach (var keyAttribute in Model.Product.KeyAttributes)
+            {
+                <div class="product-key-attribute @(keyAttribute.HasConflict ? "attention" : string.Empty)">
+                    <dt>@keyAttribute.DisplayName</dt>
+                    <dd>@keyAttribute.Value</dd>
+                </div>
+            }
+        </div>
+    }
+</section>

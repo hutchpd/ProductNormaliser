@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.WebUtilities;
 using ProductNormaliser.Web.Contracts;
 using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
@@ -19,7 +20,7 @@ public sealed class DetailsModel(
     [BindProperty(SupportsGet = true, Name = "search")]
     public string? ReturnSearch { get; set; }
 
-    [BindProperty(SupportsGet = true, Name = "page")]
+    [BindProperty(SupportsGet = true, Name = "returnPage")]
     public int ReturnPage { get; set; } = 1;
 
     [BindProperty(SupportsGet = true, Name = "minSourceCount")]
@@ -33,6 +34,9 @@ public sealed class DetailsModel(
 
     [BindProperty(SupportsGet = true, Name = "completeness")]
     public string? ReturnCompletenessStatus { get; set; }
+
+    [BindProperty(SupportsGet = true, Name = "sort")]
+    public string? ReturnSort { get; set; }
 
     public string? ErrorMessage { get; private set; }
 
@@ -100,8 +104,11 @@ public sealed class DetailsModel(
         ["minSourceCount"] = ReturnMinSourceCount?.ToString(),
         ["freshness"] = ReturnFreshness,
         ["conflictStatus"] = ReturnConflictStatus,
-        ["completeness"] = ReturnCompletenessStatus
+        ["completeness"] = ReturnCompletenessStatus,
+        ["sort"] = ReturnSort
     };
+
+    public string BackToExplorerUrl => QueryHelpers.AddQueryString("/Products", BackToExplorerRouteValues);
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {

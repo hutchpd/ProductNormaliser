@@ -58,7 +58,7 @@ public sealed class AdminQueryService(
         }).ToArray();
     }
 
-    public async Task<ProductListResponse> ListProductsAsync(string? categoryKey, string? search, int? minSourceCount, string? freshness, string? conflictStatus, string? completenessStatus, int page, int pageSize, CancellationToken cancellationToken)
+    public async Task<ProductListResponse> ListProductsAsync(string? categoryKey, string? search, int? minSourceCount, string? freshness, string? conflictStatus, string? completenessStatus, string? sort, int page, int pageSize, CancellationToken cancellationToken)
     {
         var normalizedCategoryKey = string.IsNullOrWhiteSpace(categoryKey) ? null : categoryKey.Trim();
         var normalizedSearch = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
@@ -93,10 +93,13 @@ public sealed class AdminQueryService(
                 Analysis = ProductAnalysisProjection.BuildSummary(product, categorySchemaRegistry, categoryAttributeNormaliserRegistry)
             })
             .Where(entry => ProductAnalysisProjection.MatchesFilters(entry.Analysis, minSourceCount, freshness, conflictStatus, completenessStatus))
+            .Select(entry => (entry.Product, entry.Analysis))
             .ToArray();
 
-        var totalCount = summaries.LongLength;
-        var pagedItems = summaries
+        var sortedItems = ProductAnalysisProjection.ApplySort(summaries, sort);
+
+        var totalCount = sortedItems.Count;
+        var pagedItems = sortedItems
             .Skip((effectivePage - 1) * effectivePageSize)
             .Take(effectivePageSize)
             .ToArray();

@@ -1,0 +1,89 @@
+@model ProductNormaliser.Web.Pages.Products.DetailsModel
+
+<section id="evidence" class="panel panel-muted inspector-section">
+    <div class="panel-heading">
+        <div>
+            <p class="eyebrow">Evidence Inspector</p>
+            <h2>Attribute evidence</h2>
+        </div>
+    </div>
+
+    @if (Model.EvidenceInspectorRows.Count == 0)
+    {
+        <div class="empty-panel">
+            <p class="empty-state">No attribute evidence is available for the selected product.</p>
+        </div>
+    }
+    else
+    {
+        <div class="evidence-stack">
+            @foreach (var row in Model.EvidenceInspectorRows)
+            {
+                <details class="evidence-item @(row.HasConflict ? "attention" : string.Empty)">
+                    <summary>
+                        <div>
+                            <strong class="mono">@row.AttributeKey</strong>
+                            <span class="subtle-copy">Canonical: @row.CanonicalValue</span>
+                        </div>
+                        <div class="chip-row">
+                            <span class="status-pill @(row.HasConflict ? "warning" : "completed")">@(row.HasConflict ? "Conflict" : "Aligned")</span>
+                            <span class="status-pill neutral">@row.Evidence.Count evidence item@(row.Evidence.Count == 1 ? string.Empty : "s")</span>
+                        </div>
+                    </summary>
+
+                    @if (row.Evidence.Count == 0)
+                    {
+                        <div class="empty-panel">
+                            <p class="empty-state">No evidence items were returned for this attribute.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="evidence-card-grid">
+                            @foreach (var evidence in row.Evidence)
+                            {
+                                <article class="evidence-card @(evidence.MatchesCanonical ? "canonical" : "disagreement")">
+                                    <div class="evidence-card-header">
+                                        <strong>@evidence.SourceName</strong>
+                                        <span class="status-pill @(evidence.MatchesCanonical ? "completed" : "warning")">@(evidence.MatchesCanonical ? "Matches canonical" : "Differs")</span>
+                                    </div>
+                                    <div class="evidence-meta-grid">
+                                        <div>
+                                            <dt>Claimed value</dt>
+                                            <dd>@evidence.DisplayValue</dd>
+                                        </div>
+                                        <div>
+                                            <dt>Source product</dt>
+                                            <dd class="mono">@evidence.SourceProductId</dd>
+                                        </div>
+                                        <div>
+                                            <dt>Source field</dt>
+                                            <dd class="mono">@evidence.SourceAttributeKey</dd>
+                                        </div>
+                                        <div>
+                                            <dt>Observed</dt>
+                                            <dd>@evidence.ObservedUtc.ToString("u")</dd>
+                                        </div>
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(evidence.SelectorOrPath) || !string.IsNullOrWhiteSpace(evidence.SourceUrl))
+                                    {
+                                        <div class="evidence-footnotes">
+                                            @if (!string.IsNullOrWhiteSpace(evidence.SelectorOrPath))
+                                            {
+                                                <p class="subtle-copy"><span class="mono">@evidence.SelectorOrPath</span></p>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(evidence.SourceUrl))
+                                            {
+                                                <p><a href="@evidence.SourceUrl" target="_blank" rel="noreferrer">Open source page</a></p>
+                                            }
+                                        </div>
+                                    }
+                                </article>
+                            }
+                        </div>
+                    }
+                </details>
+            }
+        </div>
+    }
+</section>

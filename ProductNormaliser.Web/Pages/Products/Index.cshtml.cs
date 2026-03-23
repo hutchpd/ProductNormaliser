@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.WebUtilities;
 using ProductNormaliser.Web.Contracts;
 using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
@@ -27,6 +28,9 @@ public sealed class IndexModel(
 
     [BindProperty(SupportsGet = true, Name = "completeness")]
     public string? CompletenessStatus { get; set; }
+
+    [BindProperty(SupportsGet = true, Name = "sort")]
+    public string? Sort { get; set; }
 
     [BindProperty(SupportsGet = true, Name = "page")]
     public int PageNumber { get; set; } = 1;
@@ -58,7 +62,8 @@ public sealed class IndexModel(
             ["minSourceCount"] = MinSourceCount?.ToString(),
             ["freshness"] = Freshness,
             ["conflictStatus"] = ConflictStatus,
-            ["completeness"] = CompletenessStatus
+            ["completeness"] = CompletenessStatus,
+            ["sort"] = Sort
         }
     };
 
@@ -82,6 +87,24 @@ public sealed class IndexModel(
 
     public StatusBadgeModel GetConflictBadge(ProductSummaryDto product) => ProductExplorerPresentation.GetConflictBadge(product.HasConflict, product.ConflictAttributeCount);
 
+    public string GetDetailUrl(ProductSummaryDto product)
+    {
+        var query = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["productId"] = product.Id,
+            ["category"] = CategoryKey,
+            ["search"] = Search,
+            ["returnPage"] = Math.Max(1, PageNumber).ToString(),
+            ["minSourceCount"] = MinSourceCount?.ToString(),
+            ["freshness"] = Freshness,
+            ["conflictStatus"] = ConflictStatus,
+            ["completeness"] = CompletenessStatus,
+            ["sort"] = Sort
+        };
+
+        return QueryHelpers.AddQueryString("/Products/Details", query);
+    }
+
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         try
@@ -95,6 +118,7 @@ public sealed class IndexModel(
                 Freshness = Freshness,
                 ConflictStatus = ConflictStatus,
                 CompletenessStatus = CompletenessStatus,
+                Sort = Sort,
                 Page = Math.Max(1, PageNumber),
                 PageSize = 12
             }, cancellationToken);

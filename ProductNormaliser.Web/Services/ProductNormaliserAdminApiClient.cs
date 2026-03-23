@@ -118,6 +118,7 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
             ["freshness"] = query?.Freshness,
             ["conflictStatus"] = query?.ConflictStatus,
             ["completeness"] = query?.CompletenessStatus,
+            ["sort"] = query?.Sort,
             ["page"] = query?.Page.ToString(CultureInfo.InvariantCulture),
             ["pageSize"] = query?.PageSize.ToString(CultureInfo.InvariantCulture)
         });
