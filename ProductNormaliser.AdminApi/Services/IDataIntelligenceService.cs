@@ -8,7 +8,7 @@ public interface IDataIntelligenceService
     Task<IReadOnlyList<UnmappedAttributeDto>> GetUnmappedAttributesAsync(string categoryKey, CancellationToken cancellationToken);
     Task<IReadOnlyList<SourceQualityScoreDto>> GetSourceQualityScoresAsync(string categoryKey, CancellationToken cancellationToken);
     Task<MergeInsightsResponse> GetMergeInsightsAsync(string categoryKey, CancellationToken cancellationToken);
-    Task<IReadOnlyList<SourceQualitySnapshotDto>> GetSourceHistoryAsync(string categoryKey, string? sourceName, CancellationToken cancellationToken);
+    Task<IReadOnlyList<SourceQualitySnapshotDto>> GetSourceHistoryAsync(string categoryKey, string? sourceName, int? timeRangeDays, CancellationToken cancellationToken);
     Task<IReadOnlyList<AttributeStabilityDto>> GetAttributeStabilityAsync(string categoryKey, CancellationToken cancellationToken);
-    Task<IReadOnlyList<SourceAttributeDisagreementDto>> GetSourceDisagreementsAsync(string categoryKey, string? sourceName, CancellationToken cancellationToken);
+    Task<IReadOnlyList<SourceAttributeDisagreementDto>> GetSourceDisagreementsAsync(string categoryKey, string? sourceName, int? timeRangeDays, CancellationToken cancellationToken);
 }

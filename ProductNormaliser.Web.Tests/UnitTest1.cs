@@ -499,15 +499,51 @@ public sealed class AdminApiClientTests
             }));
         });
 
-        var result = await client.GetSourceHistoryAsync("monitor", "Northwind");
+        var result = await client.GetSourceHistoryAsync("monitor", "Northwind", 90);
 
         Assert.Multiple(() =>
         {
             Assert.That(requestUri, Does.Contain("api/quality/source-history"));
             Assert.That(requestUri, Does.Contain("categoryKey=monitor"));
             Assert.That(requestUri, Does.Contain("sourceName=Northwind"));
+            Assert.That(requestUri, Does.Contain("timeRangeDays=90"));
             Assert.That(result, Has.Count.EqualTo(1));
             Assert.That(result[0].SourceName, Is.EqualTo("Northwind"));
+        });
+    }
+
+    [Test]
+    public async Task GetSourceDisagreementsAsync_PreservesTimeRangeQuery()
+    {
+        var requestUri = string.Empty;
+        var client = CreateClient((request, _) =>
+        {
+            requestUri = request.RequestUri!.ToString();
+            return Task.FromResult(CreateJsonResponse(HttpStatusCode.OK, new[]
+            {
+                new SourceAttributeDisagreementDto
+                {
+                    SourceName = "Northwind",
+                    CategoryKey = "monitor",
+                    AttributeKey = "refresh_rate_hz",
+                    TotalComparisons = 8,
+                    TimesDisagreed = 2,
+                    DisagreementRate = 25m,
+                    WinRate = 75m,
+                    LastUpdatedUtc = new DateTime(2026, 03, 23, 09, 00, 00, DateTimeKind.Utc)
+                }
+            }));
+        });
+
+        var result = await client.GetSourceDisagreementsAsync("monitor", null, 30);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(requestUri, Does.Contain("api/quality/source-disagreements"));
+            Assert.That(requestUri, Does.Contain("categoryKey=monitor"));
+            Assert.That(requestUri, Does.Contain("timeRangeDays=30"));
+            Assert.That(result, Has.Count.EqualTo(1));
+            Assert.That(result[0].AttributeKey, Is.EqualTo("refresh_rate_hz"));
         });
     }
 

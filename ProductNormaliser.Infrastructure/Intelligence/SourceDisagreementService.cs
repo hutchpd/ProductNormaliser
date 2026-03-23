@@ -18,9 +18,18 @@ public sealed class SourceDisagreementService(ISourceAttributeDisagreementStore 
         return Math.Min(1.20m, Math.Max(0.45m, decimal.Round(adjustment, 4, MidpointRounding.AwayFromZero)));
     }
 
-    public IReadOnlyList<SourceAttributeDisagreement> GetDisagreements(string categoryKey, string? sourceName = null)
+    public IReadOnlyList<SourceAttributeDisagreement> GetDisagreements(string categoryKey, string? sourceName = null, int? timeRangeDays = null)
     {
-        return disagreementStore.ListAsync(categoryKey, sourceName).GetAwaiter().GetResult();
+        var disagreements = disagreementStore.ListAsync(categoryKey, sourceName).GetAwaiter().GetResult();
+        if (timeRangeDays is not > 0)
+        {
+            return disagreements;
+        }
+
+        var cutoffUtc = DateTime.UtcNow.AddDays(-timeRangeDays.Value);
+        return disagreements
+            .Where(item => item.LastUpdatedUtc >= cutoffUtc)
+            .ToArray();
     }
 
     public void RefreshForProduct(CanonicalProduct product)

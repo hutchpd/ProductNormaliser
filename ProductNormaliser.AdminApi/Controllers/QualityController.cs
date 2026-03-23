@@ -33,9 +33,9 @@ public sealed class QualityController(IDataIntelligenceService dataIntelligenceS
     }
 
     [HttpGet("source-history")]
-    public async Task<IActionResult> GetSourceHistory([FromQuery] string categoryKey = TvCategorySchemaProvider.CategoryKey, [FromQuery] string? sourceName = null, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetSourceHistory([FromQuery] string categoryKey = TvCategorySchemaProvider.CategoryKey, [FromQuery] string? sourceName = null, [FromQuery] int? timeRangeDays = null, CancellationToken cancellationToken = default)
     {
-        return Ok(await dataIntelligenceService.GetSourceHistoryAsync(categoryKey, sourceName, cancellationToken));
+        return Ok(await dataIntelligenceService.GetSourceHistoryAsync(categoryKey, sourceName, timeRangeDays, cancellationToken));
     }
 
     [HttpGet("attribute-stability")]
@@ -45,8 +45,8 @@ public sealed class QualityController(IDataIntelligenceService dataIntelligenceS
     }
 
     [HttpGet("source-disagreements")]
-    public async Task<IActionResult> GetSourceDisagreements([FromQuery] string categoryKey = TvCategorySchemaProvider.CategoryKey, [FromQuery] string? sourceName = null, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetSourceDisagreements([FromQuery] string categoryKey = TvCategorySchemaProvider.CategoryKey, [FromQuery] string? sourceName = null, [FromQuery] int? timeRangeDays = null, CancellationToken cancellationToken = default)
     {
-        return Ok(await dataIntelligenceService.GetSourceDisagreementsAsync(categoryKey, sourceName, cancellationToken));
+        return Ok(await dataIntelligenceService.GetSourceDisagreementsAsync(categoryKey, sourceName, timeRangeDays, cancellationToken));
     }
 }

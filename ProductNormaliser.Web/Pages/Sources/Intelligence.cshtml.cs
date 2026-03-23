@@ -10,11 +10,16 @@ public sealed class IntelligenceModel(
     IProductNormaliserAdminApiClient adminApiClient,
     ILogger<IntelligenceModel> logger) : PageModel
 {
+    private static readonly int[] SupportedTimeRanges = [7, 30, 90, 180];
+
     [BindProperty(SupportsGet = true, Name = "category")]
     public string? CategoryKey { get; set; }
 
     [BindProperty(SupportsGet = true, Name = "source")]
     public string? SourceName { get; set; }
+
+    [BindProperty(SupportsGet = true, Name = "range")]
+    public int? TimeRangeDays { get; set; }
 
     public string? ErrorMessage { get; private set; }
 
@@ -24,9 +29,17 @@ public sealed class IntelligenceModel(
 
     public IReadOnlyList<SourceQualityScoreDto> SourceQualityScores { get; private set; } = [];
 
-    public IReadOnlyList<SourceQualitySnapshotDto> SourceHistory { get; private set; } = [];
+    public IReadOnlyList<SourceQualitySnapshotDto> CategoryHistory { get; private set; } = [];
 
-    public IReadOnlyList<SourceAttributeDisagreementDto> SourceDisagreements { get; private set; } = [];
+    public IReadOnlyList<SourceAttributeDisagreementDto> CategoryDisagreements { get; private set; } = [];
+
+    public IReadOnlyList<SourceIntelligenceMetricModel> SourceMetrics { get; private set; } = [];
+
+    public IReadOnlyList<SupportMatrixCategoryModel> SupportMatrixCategories { get; private set; } = [];
+
+    public IReadOnlyList<SupportMatrixRowModel> SupportMatrixRows { get; private set; } = [];
+
+    public IReadOnlyList<SourceIntelligenceHighlightModel> TriageHighlights { get; private set; } = [];
 
     public CategoryMetadataDto? SelectedCategory => Categories.FirstOrDefault(category => string.Equals(category.CategoryKey, CategoryKey, StringComparison.OrdinalIgnoreCase));
 
@@ -34,11 +47,35 @@ public sealed class IntelligenceModel(
         .Where(source => string.IsNullOrWhiteSpace(CategoryKey) || source.SupportedCategoryKeys.Contains(CategoryKey, StringComparer.OrdinalIgnoreCase))
         .Select(source => source.DisplayName)
         .Concat(SourceQualityScores.Select(score => score.SourceName))
+        .Concat(CategoryHistory.Select(snapshot => snapshot.SourceName))
+        .Concat(CategoryDisagreements.Select(item => item.SourceName))
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .OrderBy(sourceName => sourceName, StringComparer.OrdinalIgnoreCase)
         .ToArray();
 
+    public IReadOnlyList<TimeRangeOptionModel> TimeRangeOptions => SupportedTimeRanges
+        .Select(days => new TimeRangeOptionModel(days, days switch
+        {
+            7 => "Last 7 days",
+            30 => "Last 30 days",
+            90 => "Last 90 days",
+            180 => "Last 180 days",
+            _ => $"Last {days} days"
+        }))
+        .ToArray();
+
+    public int EffectiveTimeRangeDays { get; private set; } = 30;
+
     public string? EffectiveSourceName { get; private set; }
+
+    public IReadOnlyList<SourceQualitySnapshotDto> SourceHistory => CategoryHistory
+        .Where(snapshot => string.Equals(snapshot.SourceName, EffectiveSourceName, StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(snapshot => snapshot.TimestampUtc)
+        .ToArray();
+
+    public IReadOnlyList<SourceAttributeDisagreementDto> SourceDisagreements => CategoryDisagreements
+        .Where(item => string.Equals(item.SourceName, EffectiveSourceName, StringComparison.OrdinalIgnoreCase))
+        .ToArray();
 
     public IReadOnlyList<SourceQualitySnapshotDto> TrendSnapshots => SourceHistory
         .OrderBy(snapshot => snapshot.TimestampUtc)
@@ -50,21 +87,48 @@ public sealed class IntelligenceModel(
 
     public bool IsEmpty => !IsAwaitingSelection
         && SourceQualityScores.Count == 0
-        && SourceHistory.Count == 0
-        && SourceDisagreements.Count == 0;
+        && CategoryHistory.Count == 0
+        && CategoryDisagreements.Count == 0;
 
-    public IReadOnlyList<SourceQualityScoreDto> SourceOverview => SourceQualityScores
-        .OrderByDescending(score => score.QualityScore)
-        .ThenByDescending(score => score.SourceProductCount)
+    public IReadOnlyList<SourceIntelligenceMetricModel> SourceOverview => SourceMetrics
+        .OrderByDescending(score => score.ValueScore)
+        .ThenByDescending(score => score.QualityScore)
         .Take(8)
         .ToArray();
 
-    public IReadOnlyList<SourceAttributeDisagreementDto> DisagreementHotspots => SourceDisagreements
+    public IReadOnlyList<SourceIntelligenceMetricModel> WeakSources => SourceMetrics
+        .OrderByDescending(score => score.RiskScore)
+        .ThenBy(score => score.ValueScore)
+        .Take(5)
+        .ToArray();
+
+    public IReadOnlyList<SourceIntelligenceMetricModel> HighValueSources => SourceMetrics
+        .OrderByDescending(score => score.ValueScore)
+        .ThenBy(score => score.RiskScore)
+        .Take(5)
+        .ToArray();
+
+    public IReadOnlyList<SourceIntelligenceMetricModel> ChangeLeaders => SourceMetrics
+        .Where(metric => metric.HasHistory)
+        .OrderByDescending(metric => metric.LatestChangeActivity)
+        .ThenByDescending(metric => metric.HotspotCount)
+        .Take(8)
+        .ToArray();
+
+    public IReadOnlyList<SourceIntelligenceMetricModel> CoverageLeaders => SourceMetrics
+        .OrderByDescending(metric => metric.LatestCoveragePercent)
+        .ThenByDescending(metric => metric.QualityScore)
+        .Take(8)
+        .ToArray();
+
+    public IReadOnlyList<SourceAttributeDisagreementDto> DisagreementHotspots => CategoryDisagreements
         .OrderByDescending(item => item.DisagreementRate)
         .ThenByDescending(item => item.TotalComparisons)
         .ThenBy(item => item.AttributeKey, StringComparer.OrdinalIgnoreCase)
         .Take(10)
         .ToArray();
+
+    public string TimeRangeLabel => TimeRangeOptions.First(option => option.Days == EffectiveTimeRangeDays).Label;
 
     public PageHeroModel Hero => new()
     {
@@ -72,20 +136,50 @@ public sealed class IntelligenceModel(
         Title = SelectedCategory is null ? "Source trust and change intelligence" : $"{SelectedCategory.DisplayName} source intelligence",
         Description = SelectedCategory is null
             ? "Choose a category to inspect trust, disagreement, completeness, and change activity for the sources that actually participate in that category."
-            : "Compare source quality, then drill into one source to inspect trust over time, disagreement hotspots, completeness, and change activity trends.",
+            : $"Compare source quality, risk, and support breadth across {TimeRangeLabel.ToLowerInvariant()}, then drill into one source to inspect trust over time and disagreement hotspots.",
         Metrics =
         [
-            new HeroMetricModel { Label = "Sources", Value = SourceQualityScores.Count.ToString() },
-            new HeroMetricModel { Label = "Focused source", Value = EffectiveSourceName ?? "None selected" },
+            new HeroMetricModel { Label = "Sources", Value = SourceMetrics.Count.ToString() },
+            new HeroMetricModel { Label = "Focused source", Value = EffectiveSourceName ?? "Highest-value source" },
+            new HeroMetricModel { Label = "Time window", Value = TimeRangeLabel },
             new HeroMetricModel { Label = "Latest trust", Value = LatestSnapshot is null ? "0%" : AnalyticsPresentation.FormatPercent(LatestSnapshot.HistoricalTrustScore) },
-            new HeroMetricModel { Label = "Latest coverage", Value = LatestSnapshot is null ? "0%" : AnalyticsPresentation.FormatPercent(LatestSnapshot.AttributeCoverage) }
+            new HeroMetricModel { Label = "Weak watchlist", Value = WeakSources.Count == 0 ? "0" : WeakSources.Count(metric => metric.RiskScore >= 45m).ToString() }
         ]
     };
+
+    public string GetTrendDeltaText(SourceIntelligenceMetricModel metric)
+    {
+        if (metric.TrendDelta == 0m)
+        {
+            return "Flat";
+        }
+
+        var prefix = metric.TrendDelta > 0m ? "+" : "-";
+        return $"{prefix}{AnalyticsPresentation.FormatPercent(decimal.Abs(metric.TrendDelta))}";
+    }
+
+    public string GetTrendDeltaTone(SourceIntelligenceMetricModel metric)
+    {
+        if (metric.TrendDelta >= 5m)
+        {
+            return "completed";
+        }
+
+        if (metric.TrendDelta <= -5m)
+        {
+            return "danger";
+        }
+
+        return "neutral";
+    }
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         try
         {
+            EffectiveTimeRangeDays = NormalizeTimeRange(TimeRangeDays);
+            TimeRangeDays = EffectiveTimeRangeDays;
+
             var categoriesTask = adminApiClient.GetCategoriesAsync(cancellationToken);
             var sourcesTask = adminApiClient.GetSourcesAsync(cancellationToken);
             await Task.WhenAll(categoriesTask, sourcesTask);
@@ -107,26 +201,265 @@ public sealed class IntelligenceModel(
                 return;
             }
 
-            SourceQualityScores = await adminApiClient.GetSourceQualityScoresAsync(CategoryKey!, cancellationToken);
+            var scoresTask = adminApiClient.GetSourceQualityScoresAsync(CategoryKey!, cancellationToken);
+            var historyTask = adminApiClient.GetSourceHistoryAsync(CategoryKey!, null, EffectiveTimeRangeDays, cancellationToken);
+            var disagreementsTask = adminApiClient.GetSourceDisagreementsAsync(CategoryKey!, null, EffectiveTimeRangeDays, cancellationToken);
+            await Task.WhenAll(scoresTask, historyTask, disagreementsTask);
 
-            EffectiveSourceName = AvailableSourceNames.Contains(SourceName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-                ? SourceName
-                : SourceQualityScores.FirstOrDefault()?.SourceName;
+            SourceQualityScores = scoresTask.Result;
+            CategoryHistory = historyTask.Result;
+            CategoryDisagreements = disagreementsTask.Result;
 
-            var historyTask = adminApiClient.GetSourceHistoryAsync(CategoryKey!, EffectiveSourceName, cancellationToken);
-            var disagreementsTask = adminApiClient.GetSourceDisagreementsAsync(CategoryKey!, EffectiveSourceName, cancellationToken);
-            await Task.WhenAll(historyTask, disagreementsTask);
-
-            SourceHistory = historyTask.Result;
-            SourceDisagreements = disagreementsTask.Result;
+            SourceMetrics = BuildSourceMetrics();
+            EffectiveSourceName = ResolveEffectiveSourceName();
+            SupportMatrixCategories = Categories.Take(8)
+                .Select(category => new SupportMatrixCategoryModel(
+                    category.CategoryKey,
+                    category.DisplayName,
+                    string.Equals(category.CategoryKey, CategoryKey, StringComparison.OrdinalIgnoreCase)))
+                .ToArray();
+            SupportMatrixRows = BuildSupportMatrixRows();
+            TriageHighlights = BuildTriageHighlights();
         }
         catch (AdminApiException exception)
         {
             logger.LogWarning(exception, "Failed to load source intelligence page for {CategoryKey}/{SourceName}.", CategoryKey, SourceName);
             ErrorMessage = exception.Message;
             SourceQualityScores = [];
-            SourceHistory = [];
-            SourceDisagreements = [];
+            CategoryHistory = [];
+            CategoryDisagreements = [];
+            SourceMetrics = [];
+            SupportMatrixCategories = [];
+            SupportMatrixRows = [];
+            TriageHighlights = [];
         }
     }
+
+    private int NormalizeTimeRange(int? days)
+    {
+        return SupportedTimeRanges.Contains(days ?? 0)
+            ? days!.Value
+            : 30;
+    }
+
+    private string? ResolveEffectiveSourceName()
+    {
+        if (AvailableSourceNames.Contains(SourceName ?? string.Empty, StringComparer.OrdinalIgnoreCase))
+        {
+            return SourceName;
+        }
+
+        return SourceMetrics.FirstOrDefault()?.SourceName
+            ?? SourceQualityScores.FirstOrDefault()?.SourceName
+            ?? Sources.FirstOrDefault(source => source.SupportedCategoryKeys.Contains(CategoryKey ?? string.Empty, StringComparer.OrdinalIgnoreCase))?.DisplayName;
+    }
+
+    private IReadOnlyList<SourceIntelligenceMetricModel> BuildSourceMetrics()
+    {
+        var relevantSourceNames = Sources
+            .Where(source => string.IsNullOrWhiteSpace(CategoryKey) || source.SupportedCategoryKeys.Contains(CategoryKey!, StringComparer.OrdinalIgnoreCase))
+            .Select(source => source.DisplayName)
+            .Concat(SourceQualityScores.Select(score => score.SourceName))
+            .Concat(CategoryHistory.Select(snapshot => snapshot.SourceName))
+            .Concat(CategoryDisagreements.Select(item => item.SourceName))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var sourceCount = Math.Max(1, Categories.Count);
+        var metrics = new List<SourceIntelligenceMetricModel>(relevantSourceNames.Length);
+
+        foreach (var sourceName in relevantSourceNames)
+        {
+            var source = Sources.FirstOrDefault(item => string.Equals(item.DisplayName, sourceName, StringComparison.OrdinalIgnoreCase));
+            var score = SourceQualityScores.FirstOrDefault(item => string.Equals(item.SourceName, sourceName, StringComparison.OrdinalIgnoreCase));
+            var sourceSnapshots = CategoryHistory
+                .Where(item => string.Equals(item.SourceName, sourceName, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(item => item.TimestampUtc)
+                .ToArray();
+            var latestSnapshot = sourceSnapshots.LastOrDefault();
+            var earliestSnapshot = sourceSnapshots.FirstOrDefault();
+            var disagreements = CategoryDisagreements
+                .Where(item => string.Equals(item.SourceName, sourceName, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            var qualityScore = score?.QualityScore ?? latestSnapshot?.HistoricalTrustScore ?? source?.Health.TrustScore ?? 0m;
+            var latestTrustScore = latestSnapshot?.HistoricalTrustScore ?? source?.Health.TrustScore ?? qualityScore;
+            var latestCoveragePercent = latestSnapshot?.AttributeCoverage ?? score?.CoveragePercent ?? source?.Health.CoveragePercent ?? 0m;
+            var latestAgreementPercent = score?.AgreementPercent ?? latestSnapshot?.AgreementRate ?? 0m;
+            var latestConflictRate = latestSnapshot?.ConflictRate ?? 0m;
+            var latestSuccessfulCrawlRate = latestSnapshot?.SuccessfulCrawlRate ?? source?.Health.SuccessfulCrawlRate ?? 0m;
+            var latestChangeActivity = latestSnapshot is null ? 0m : AnalyticsPresentation.GetChangeActivity(latestSnapshot);
+            var disagreementRate = disagreements.Length == 0 ? 0m : decimal.Round(disagreements.Average(item => item.DisagreementRate), 1, MidpointRounding.AwayFromZero);
+            var hotspotCount = disagreements.Count(item => item.DisagreementRate >= 25m);
+            var supportedCategoryCount = source?.SupportedCategoryKeys.Count ?? 0;
+            var supportBreadth = decimal.Round(decimal.Divide(supportedCategoryCount * 100m, sourceCount), 1, MidpointRounding.AwayFromZero);
+            var trendDelta = latestSnapshot is null || earliestSnapshot is null
+                ? 0m
+                : decimal.Round(latestSnapshot.HistoricalTrustScore - earliestSnapshot.HistoricalTrustScore, 1, MidpointRounding.AwayFromZero);
+            var valueScore = decimal.Clamp(decimal.Round(
+                qualityScore * 0.45m
+                + latestTrustScore * 0.20m
+                + latestCoveragePercent * 0.20m
+                + supportBreadth * 0.15m,
+                1,
+                MidpointRounding.AwayFromZero), 0m, 100m);
+            var riskScore = decimal.Clamp(decimal.Round(
+                (100m - latestTrustScore) * 0.30m
+                + latestChangeActivity * 0.30m
+                + disagreementRate * 0.25m
+                + (100m - latestCoveragePercent) * 0.15m,
+                1,
+                MidpointRounding.AwayFromZero), 0m, 100m);
+
+            metrics.Add(new SourceIntelligenceMetricModel(
+                sourceName,
+                score?.SourceProductCount ?? 0,
+                qualityScore,
+                score?.CoveragePercent ?? latestCoveragePercent,
+                latestAgreementPercent,
+                score?.AverageMappedAttributes ?? 0m,
+                score?.AverageAttributeConfidence ?? 0m,
+                latestTrustScore,
+                latestCoveragePercent,
+                latestChangeActivity,
+                latestConflictRate,
+                latestSuccessfulCrawlRate,
+                disagreementRate,
+                hotspotCount,
+                supportedCategoryCount,
+                trendDelta,
+                valueScore,
+                riskScore,
+                latestSnapshot is not null));
+        }
+
+        return metrics;
+    }
+
+    private IReadOnlyList<SupportMatrixRowModel> BuildSupportMatrixRows()
+    {
+        if (SupportMatrixCategories.Count == 0)
+        {
+            return [];
+        }
+
+        var rows = Sources
+            .Where(source => source.IsEnabled || source.SupportedCategoryKeys.Count > 0)
+            .OrderByDescending(source => source.SupportedCategoryKeys.Contains(CategoryKey ?? string.Empty, StringComparer.OrdinalIgnoreCase))
+            .ThenByDescending(source => SourceMetrics.FirstOrDefault(metric => string.Equals(metric.SourceName, source.DisplayName, StringComparison.OrdinalIgnoreCase))?.ValueScore ?? 0m)
+            .ThenBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .Select(source =>
+            {
+                var metric = SourceMetrics.FirstOrDefault(item => string.Equals(item.SourceName, source.DisplayName, StringComparison.OrdinalIgnoreCase));
+                var cells = SupportMatrixCategories.Select(category =>
+                {
+                    var isSupported = source.SupportedCategoryKeys.Contains(category.CategoryKey, StringComparer.OrdinalIgnoreCase);
+                    if (!isSupported)
+                    {
+                        return new SupportMatrixCellModel(false, category.IsSelected, "-", "neutral");
+                    }
+
+                    if (category.IsSelected && metric is not null)
+                    {
+                        return new SupportMatrixCellModel(true, true, AnalyticsPresentation.FormatPercent(metric.QualityScore), AnalyticsPresentation.GetPositiveTone(metric.QualityScore));
+                    }
+
+                    return new SupportMatrixCellModel(true, category.IsSelected, source.Readiness.Status.Equals("ready", StringComparison.OrdinalIgnoreCase) ? "Ready" : "Assigned", source.IsEnabled ? "completed" : "warning");
+                }).ToArray();
+
+                return new SupportMatrixRowModel(source.DisplayName, source.Readiness.Status, source.SupportedCategoryKeys.Count, cells);
+            })
+            .Take(10)
+            .ToArray();
+
+        return rows;
+    }
+
+    private IReadOnlyList<SourceIntelligenceHighlightModel> BuildTriageHighlights()
+    {
+        var highestValue = SourceMetrics
+            .OrderByDescending(metric => metric.ValueScore)
+            .FirstOrDefault();
+        var highestRisk = SourceMetrics
+            .OrderByDescending(metric => metric.RiskScore)
+            .FirstOrDefault();
+        var fastestChange = ChangeLeaders.FirstOrDefault();
+        var hottestHotspot = DisagreementHotspots.FirstOrDefault();
+
+        return
+        [
+            new SourceIntelligenceHighlightModel(
+                "Highest value",
+                highestValue?.SourceName ?? "No source data",
+                highestValue is null ? "0%" : AnalyticsPresentation.FormatPercent(highestValue.ValueScore),
+                highestValue is null ? "neutral" : AnalyticsPresentation.GetPositiveTone(highestValue.ValueScore),
+                highestValue is null ? "No ranked sources are available for this window." : $"Best blend of quality, trust, coverage, and breadth across {TimeRangeLabel.ToLowerInvariant()}"),
+            new SourceIntelligenceHighlightModel(
+                "Weakest source",
+                highestRisk?.SourceName ?? "No source data",
+                highestRisk is null ? "0%" : AnalyticsPresentation.FormatPercent(highestRisk.RiskScore),
+                highestRisk is null ? "neutral" : AnalyticsPresentation.GetInverseTone(highestRisk.RiskScore),
+                highestRisk is null ? "No risk signal is available for this window." : $"Risk blends low trust, low coverage, change activity, and disagreement pressure."),
+            new SourceIntelligenceHighlightModel(
+                "Fastest change",
+                fastestChange?.SourceName ?? "No history",
+                fastestChange is null ? "0%" : AnalyticsPresentation.FormatPercent(fastestChange.LatestChangeActivity),
+                fastestChange is null ? "neutral" : AnalyticsPresentation.GetInverseTone(fastestChange.LatestChangeActivity),
+                fastestChange is null ? "No trust snapshots were recorded in this window." : $"Latest observed change activity with trust drift {GetTrendDeltaText(fastestChange)}."),
+            new SourceIntelligenceHighlightModel(
+                "Hottest disagreement",
+                hottestHotspot?.AttributeKey ?? "No hotspots",
+                hottestHotspot is null ? "0%" : AnalyticsPresentation.FormatPercent(hottestHotspot.DisagreementRate),
+                hottestHotspot is null ? "neutral" : AnalyticsPresentation.GetInverseTone(hottestHotspot.DisagreementRate),
+                hottestHotspot is null ? "No disagreement records were recorded in this window." : $"{hottestHotspot.SourceName} is driving the sharpest disagreement rate in the selected category."),
+        ];
+    }
 }
+
+public sealed record TimeRangeOptionModel(int Days, string Label);
+
+public sealed record SourceIntelligenceMetricModel(
+    string SourceName,
+    int SourceProductCount,
+    decimal QualityScore,
+    decimal CoveragePercent,
+    decimal AgreementPercent,
+    decimal AverageMappedAttributes,
+    decimal AverageAttributeConfidence,
+    decimal LatestTrustScore,
+    decimal LatestCoveragePercent,
+    decimal LatestChangeActivity,
+    decimal LatestConflictRate,
+    decimal LatestSuccessfulCrawlRate,
+    decimal LatestDisagreementRate,
+    int HotspotCount,
+    int SupportedCategoryCount,
+    decimal TrendDelta,
+    decimal ValueScore,
+    decimal RiskScore,
+    bool HasHistory);
+
+public sealed record SourceIntelligenceHighlightModel(
+    string Label,
+    string Name,
+    string Value,
+    string Tone,
+    string Description);
+
+public sealed record SupportMatrixCategoryModel(
+    string CategoryKey,
+    string DisplayName,
+    bool IsSelected);
+
+public sealed record SupportMatrixCellModel(
+    bool IsSupported,
+    bool IsSelected,
+    string Label,
+    string Tone);
+
+public sealed record SupportMatrixRowModel(
+    string SourceName,
+    string ReadinessStatus,
+    int SupportedCategoryCount,
+    IReadOnlyList<SupportMatrixCellModel> Cells);

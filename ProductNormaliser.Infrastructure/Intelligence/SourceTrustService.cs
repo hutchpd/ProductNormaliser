@@ -47,13 +47,25 @@ public sealed class SourceTrustService : ISourceTrustService
         return Clamp(decimal.Round(weightedTotal / weightTotal, 4, MidpointRounding.AwayFromZero));
     }
 
-    public IReadOnlyList<SourceQualitySnapshot> GetSourceHistory(string categoryKey, string? sourceName = null, int limit = 30)
+    public IReadOnlyList<SourceQualitySnapshot> GetSourceHistory(string categoryKey, string? sourceName = null, int? timeRangeDays = null, int limit = 30)
     {
-        return mongoDbContext.SourceQualitySnapshots
-            .Find(snapshot => snapshot.CategoryKey == categoryKey && (sourceName == null || snapshot.SourceName == sourceName))
-            .SortByDescending(snapshot => snapshot.TimestampUtc)
-            .Limit(limit)
-            .ToList();
+        var hasCutoff = timeRangeDays.HasValue && timeRangeDays.Value > 0;
+        var cutoffUtc = hasCutoff
+            ? DateTime.UtcNow.AddDays(-timeRangeDays!.Value)
+            : DateTime.MinValue;
+
+        IFindFluent<SourceQualitySnapshot, SourceQualitySnapshot> snapshots = mongoDbContext.SourceQualitySnapshots
+            .Find(snapshot => snapshot.CategoryKey == categoryKey
+                && (sourceName == null || snapshot.SourceName == sourceName)
+                && (!hasCutoff || snapshot.TimestampUtc >= cutoffUtc))
+            .SortByDescending(snapshot => snapshot.TimestampUtc);
+
+        if (!hasCutoff && limit > 0)
+        {
+            snapshots = snapshots.Limit(limit);
+        }
+
+        return snapshots.ToList();
     }
 
     public void CaptureSnapshot(string sourceName, string categoryKey)

@@ -53,9 +53,11 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public string? LastMergeInsightsCategoryKey { get; private set; }
     public string? LastSourceHistoryCategoryKey { get; private set; }
     public string? LastSourceHistorySourceName { get; private set; }
+    public int? LastSourceHistoryTimeRangeDays { get; private set; }
     public string? LastAttributeStabilityCategoryKey { get; private set; }
     public string? LastSourceDisagreementsCategoryKey { get; private set; }
     public string? LastSourceDisagreementsSourceName { get; private set; }
+    public int? LastSourceDisagreementsTimeRangeDays { get; private set; }
 
     public Task<StatsDto> GetStatsAsync(CancellationToken cancellationToken = default)
         => StatsException is null ? Task.FromResult(Stats) : Task.FromException<StatsDto>(StatsException);
@@ -220,7 +222,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         return Task.FromResult(MergeInsights);
     }
 
-    public Task<IReadOnlyList<SourceQualitySnapshotDto>> GetSourceHistoryAsync(string categoryKey, string? sourceName = null, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<SourceQualitySnapshotDto>> GetSourceHistoryAsync(string categoryKey, string? sourceName = null, int? timeRangeDays = null, CancellationToken cancellationToken = default)
     {
         if (AnalyticsException is not null)
         {
@@ -229,6 +231,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
 
         LastSourceHistoryCategoryKey = categoryKey;
         LastSourceHistorySourceName = sourceName;
+        LastSourceHistoryTimeRangeDays = timeRangeDays;
         return Task.FromResult(SourceHistory);
     }
 
@@ -243,7 +246,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         return Task.FromResult(AttributeStability);
     }
 
-    public Task<IReadOnlyList<SourceAttributeDisagreementDto>> GetSourceDisagreementsAsync(string categoryKey, string? sourceName = null, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<SourceAttributeDisagreementDto>> GetSourceDisagreementsAsync(string categoryKey, string? sourceName = null, int? timeRangeDays = null, CancellationToken cancellationToken = default)
     {
         if (AnalyticsException is not null)
         {
@@ -252,6 +255,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
 
         LastSourceDisagreementsCategoryKey = categoryKey;
         LastSourceDisagreementsSourceName = sourceName;
+        LastSourceDisagreementsTimeRangeDays = timeRangeDays;
         return Task.FromResult(SourceDisagreements);
     }
 

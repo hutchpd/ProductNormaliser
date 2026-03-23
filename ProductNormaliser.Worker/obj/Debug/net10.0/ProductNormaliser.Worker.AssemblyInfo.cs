@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ProductNormaliser.Worker")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+21e0b6f467e7caf325dc2e0c266b522db8be5f75")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1d35b5a275c5349934cf331200ce49e84a6eedc7")]
 [assembly: System.Reflection.AssemblyProductAttribute("ProductNormaliser.Worker")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ProductNormaliser.Worker")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

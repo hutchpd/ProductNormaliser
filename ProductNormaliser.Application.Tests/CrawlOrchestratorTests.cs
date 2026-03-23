@@ -465,7 +465,7 @@ public sealed class CrawlOrchestratorTests
 
         public decimal GetHistoricalTrustScore(string sourceName, string categoryKey) => 0.75m;
 
-        public IReadOnlyList<SourceQualitySnapshot> GetSourceHistory(string categoryKey, string? sourceName = null, int limit = 30) => [];
+        public IReadOnlyList<SourceQualitySnapshot> GetSourceHistory(string categoryKey, string? sourceName = null, int? timeRangeDays = null, int limit = 30) => [];
     }
 
     private sealed class FakeProductChangeEventStore : IProductChangeEventStore
@@ -483,7 +483,7 @@ public sealed class CrawlOrchestratorTests
     {
         public decimal GetSourceAttributeAdjustment(string sourceName, string categoryKey, string attributeKey) => 1.00m;
 
-        public IReadOnlyList<SourceAttributeDisagreement> GetDisagreements(string categoryKey, string? sourceName = null) => [];
+        public IReadOnlyList<SourceAttributeDisagreement> GetDisagreements(string categoryKey, string? sourceName = null, int? timeRangeDays = null) => [];
 
         public void RefreshForProduct(CanonicalProduct product)
         {

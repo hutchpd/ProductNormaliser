@@ -176,12 +176,13 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
         return GetRequiredAsync<MergeInsightsResponseDto>(relativeUri, AdminApiContractValidator.ValidateMergeInsights, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<SourceQualitySnapshotDto>> GetSourceHistoryAsync(string categoryKey, string? sourceName = null, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<SourceQualitySnapshotDto>> GetSourceHistoryAsync(string categoryKey, string? sourceName = null, int? timeRangeDays = null, CancellationToken cancellationToken = default)
     {
         var relativeUri = BuildRelativeUri("api/quality/source-history", new Dictionary<string, string?>
         {
             ["categoryKey"] = categoryKey,
-            ["sourceName"] = sourceName
+            ["sourceName"] = sourceName,
+            ["timeRangeDays"] = timeRangeDays?.ToString(CultureInfo.InvariantCulture)
         });
 
         return await GetRequiredAsync<SourceQualitySnapshotDto[]>(relativeUri, AdminApiContractValidator.ValidateSourceHistory, cancellationToken);
@@ -197,12 +198,13 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
         return await GetRequiredAsync<AttributeStabilityDto[]>(relativeUri, AdminApiContractValidator.ValidateAttributeStability, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<SourceAttributeDisagreementDto>> GetSourceDisagreementsAsync(string categoryKey, string? sourceName = null, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<SourceAttributeDisagreementDto>> GetSourceDisagreementsAsync(string categoryKey, string? sourceName = null, int? timeRangeDays = null, CancellationToken cancellationToken = default)
     {
         var relativeUri = BuildRelativeUri("api/quality/source-disagreements", new Dictionary<string, string?>
         {
             ["categoryKey"] = categoryKey,
-            ["sourceName"] = sourceName
+            ["sourceName"] = sourceName,
+            ["timeRangeDays"] = timeRangeDays?.ToString(CultureInfo.InvariantCulture)
         });
 
         return await GetRequiredAsync<SourceAttributeDisagreementDto[]>(relativeUri, AdminApiContractValidator.ValidateSourceDisagreements, cancellationToken);

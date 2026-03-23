@@ -381,7 +381,7 @@ public sealed class IdentityAndMergeTests
         public decimal GetHistoricalTrustScore(string sourceName, string categoryKey)
             => scores.TryGetValue(sourceName, out var score) ? score : 0.72m;
 
-        public IReadOnlyList<SourceQualitySnapshot> GetSourceHistory(string categoryKey, string? sourceName = null, int limit = 30) => [];
+        public IReadOnlyList<SourceQualitySnapshot> GetSourceHistory(string categoryKey, string? sourceName = null, int? timeRangeDays = null, int limit = 30) => [];
     }
 
     private sealed class StubAttributeStabilityService(decimal score) : ProductNormaliser.Core.Interfaces.IAttributeStabilityService

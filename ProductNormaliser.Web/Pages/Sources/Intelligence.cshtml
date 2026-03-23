@@ -33,6 +33,15 @@
                 </select>
             </div>
             <div>
+                <label asp-for="TimeRangeDays" class="form-label">Time range</label>
+                <select asp-for="TimeRangeDays" class="form-select">
+                    @foreach (var option in Model.TimeRangeOptions)
+                    {
+                        <option value="@option.Days">@option.Label</option>
+                    }
+                </select>
+            </div>
+            <div>
                 <label asp-for="SourceName" class="form-label">Source</label>
                 <select asp-for="SourceName" class="form-select">
                     <option value="">Highest-signal source</option>
@@ -70,38 +79,167 @@
         <section class="panel panel-muted inspector-section">
             <div class="panel-heading">
                 <div>
+                    <p class="eyebrow">Triage</p>
+                    <h2>Analyst starting points</h2>
+                    <p class="subtle-copy">Use these signals to spot weak sources quickly, confirm high-value suppliers, and decide where to drill into trust and disagreement evidence.</p>
+                </div>
+            </div>
+
+            <div class="analytics-card-grid">
+                @foreach (var highlight in Model.TriageHighlights)
+                {
+                    <article class="analytics-card">
+                        <div class="analytics-card-header">
+                            <div>
+                                <p class="eyebrow">@highlight.Label</p>
+                                <strong>@highlight.Name</strong>
+                            </div>
+                            <span class="status-pill @highlight.Tone">@highlight.Value</span>
+                        </div>
+                        <p class="subtle-copy">@highlight.Description</p>
+                    </article>
+                }
+            </div>
+        </section>
+
+        <section class="panel panel-muted inspector-section">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Source Queues</p>
+                    <h2>Weak and high-value watchlists</h2>
+                </div>
+            </div>
+
+            <div class="analytics-filter-grid two-up">
+                <article class="analytics-card">
+                    <div class="analytics-card-header">
+                        <div>
+                            <strong>Weak sources</strong>
+                            <p class="subtle-copy">Highest risk blend across trust drift, disagreement pressure, and coverage gaps.</p>
+                        </div>
+                    </div>
+
+                    <div class="trend-stack">
+                        @foreach (var metric in Model.WeakSources)
+                        {
+                            <article class="trend-card">
+                                <div class="trend-card-header">
+                                    <div>
+                                        <strong>@metric.SourceName</strong>
+                                        <p class="subtle-copy">@metric.HotspotCount hotspots, @metric.SupportedCategoryCount categories supported</p>
+                                    </div>
+                                    <span class="status-pill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetInverseTone(metric.RiskScore)">@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.RiskScore)</span>
+                                </div>
+                                <dl class="job-meta-grid compact">
+                                    <div>
+                                        <dt>Trust</dt>
+                                        <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestTrustScore)</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Change</dt>
+                                        <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestChangeActivity)</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Coverage</dt>
+                                        <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestCoveragePercent)</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Trend</dt>
+                                        <dd><span class="status-pill @Model.GetTrendDeltaTone(metric)">@Model.GetTrendDeltaText(metric)</span></dd>
+                                    </div>
+                                </dl>
+                            </article>
+                        }
+                    </div>
+                </article>
+
+                <article class="analytics-card">
+                    <div class="analytics-card-header">
+                        <div>
+                            <strong>High-value sources</strong>
+                            <p class="subtle-copy">Best current blend of quality score, trust, completeness, and breadth.</p>
+                        </div>
+                    </div>
+
+                    <div class="trend-stack">
+                        @foreach (var metric in Model.HighValueSources)
+                        {
+                            <article class="trend-card">
+                                <div class="trend-card-header">
+                                    <div>
+                                        <strong>@metric.SourceName</strong>
+                                        <p class="subtle-copy">@metric.SourceProductCount products in @Model.SelectedCategory?.DisplayName</p>
+                                    </div>
+                                    <span class="status-pill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetPositiveTone(metric.ValueScore)">@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.ValueScore)</span>
+                                </div>
+                                <dl class="job-meta-grid compact">
+                                    <div>
+                                        <dt>Quality</dt>
+                                        <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.QualityScore)</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Trust</dt>
+                                        <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestTrustScore)</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Coverage</dt>
+                                        <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestCoveragePercent)</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Risk</dt>
+                                        <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.RiskScore)</dd>
+                                    </div>
+                                </dl>
+                            </article>
+                        }
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <section class="panel panel-muted inspector-section">
+            <div class="panel-heading">
+                <div>
                     <p class="eyebrow">Source Ranking</p>
                     <h2>Quality and trust overview</h2>
                 </div>
             </div>
 
             <div class="analytics-card-grid">
-                @foreach (var score in Model.SourceOverview)
+                @foreach (var metric in Model.SourceOverview)
                 {
-                    <article class="analytics-card @(string.Equals(score.SourceName, Model.EffectiveSourceName, StringComparison.OrdinalIgnoreCase) ? "attention" : string.Empty)">
+                    <article class="analytics-card @(string.Equals(metric.SourceName, Model.EffectiveSourceName, StringComparison.OrdinalIgnoreCase) ? "attention" : string.Empty)">
                         <div class="analytics-card-header">
                             <div>
-                                <strong>@score.SourceName</strong>
-                                <p class="subtle-copy">@score.SourceProductCount products in @Model.SelectedCategory?.DisplayName</p>
+                                <strong>@metric.SourceName</strong>
+                                <p class="subtle-copy">@metric.SourceProductCount products in @Model.SelectedCategory?.DisplayName, @metric.SupportedCategoryCount supported categories</p>
                             </div>
-                            <span class="status-pill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetPositiveTone(score.QualityScore)">@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(score.QualityScore)</span>
+                            <span class="status-pill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetPositiveTone(metric.ValueScore)">@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.ValueScore)</span>
                         </div>
                         <dl class="job-meta-grid compact">
                             <div>
+                                <dt>Quality</dt>
+                                <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.QualityScore)</dd>
+                            </div>
+                            <div>
+                                <dt>Trust</dt>
+                                <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestTrustScore)</dd>
+                            </div>
+                            <div>
                                 <dt>Coverage</dt>
-                                <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(score.CoveragePercent)</dd>
+                                <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestCoveragePercent)</dd>
                             </div>
                             <div>
-                                <dt>Agreement</dt>
-                                <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(score.AgreementPercent)</dd>
+                                <dt>Risk</dt>
+                                <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.RiskScore)</dd>
                             </div>
                             <div>
-                                <dt>Mapped attrs</dt>
-                                <dd>@score.AverageMappedAttributes</dd>
+                                <dt>Change</dt>
+                                <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestChangeActivity)</dd>
                             </div>
                             <div>
-                                <dt>Confidence</dt>
-                                <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(score.AverageAttributeConfidence)</dd>
+                                <dt>Hotspots</dt>
+                                <dd>@metric.HotspotCount</dd>
                             </div>
                         </dl>
                     </article>
@@ -112,8 +250,93 @@
         <section class="panel panel-muted inspector-section">
             <div class="panel-heading">
                 <div>
+                    <p class="eyebrow">Change Frequency</p>
+                    <h2>Fast-moving sources</h2>
+                    <p class="subtle-copy">Change activity is derived from the most recent spec stability snapshot inside @Model.TimeRangeLabel.ToLowerInvariant().</p>
+                </div>
+            </div>
+
+            @if (Model.ChangeLeaders.Count == 0)
+            {
+                <div class="empty-panel">
+                    <p class="empty-state">No change-frequency snapshots are available for the current selection.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table dashboard-table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Source</th>
+                                <th>Change activity</th>
+                                <th>Trust drift</th>
+                                <th>Conflict</th>
+                                <th>Crawl success</th>
+                                <th>Hotspots</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var metric in Model.ChangeLeaders)
+                            {
+                                <tr>
+                                    <td>@metric.SourceName</td>
+                                    <td><span class="status-pill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetInverseTone(metric.LatestChangeActivity)">@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestChangeActivity)</span></td>
+                                    <td><span class="status-pill @Model.GetTrendDeltaTone(metric)">@Model.GetTrendDeltaText(metric)</span></td>
+                                    <td>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestConflictRate)</td>
+                                    <td>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestSuccessfulCrawlRate)</td>
+                                    <td>@metric.HotspotCount</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <section class="panel panel-muted inspector-section">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Coverage Completeness</p>
+                    <h2>@Model.SelectedCategory?.DisplayName source coverage</h2>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table dashboard-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Source</th>
+                            <th>Coverage</th>
+                            <th>Agreement</th>
+                            <th>Mapped attrs</th>
+                            <th>Confidence</th>
+                            <th>Gap</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var metric in Model.CoverageLeaders)
+                        {
+                            <tr>
+                                <td>@metric.SourceName</td>
+                                <td><span class="status-pill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetPositiveTone(metric.LatestCoveragePercent)">@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestCoveragePercent)</span></td>
+                                <td>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.AgreementPercent)</td>
+                                <td>@metric.AverageMappedAttributes</td>
+                                <td>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.AverageAttributeConfidence)</td>
+                                <td>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(100m - metric.LatestCoveragePercent)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel panel-muted inspector-section">
+            <div class="panel-heading">
+                <div>
                     <p class="eyebrow">Trust Over Time</p>
                     <h2>@(Model.EffectiveSourceName ?? "Selected source") trust timeline</h2>
+                    <p class="subtle-copy">Focused source trends stay scoped to @Model.TimeRangeLabel.ToLowerInvariant(). Category ranking cards stay category-wide.</p>
                 </div>
             </div>
 
@@ -183,6 +406,7 @@
                 <div>
                     <p class="eyebrow">Hotspots</p>
                     <h2>Disagreement hotspots</h2>
+                    <p class="subtle-copy">This hotspot table is category-wide for @Model.TimeRangeLabel.ToLowerInvariant(), so you can see where the selected source diverges from broader supplier pressure.</p>
                 </div>
             </div>
 
@@ -199,6 +423,7 @@
                         <thead>
                             <tr>
                                 <th>Attribute</th>
+                                <th>Source</th>
                                 <th>Disagreement rate</th>
                                 <th>Wins</th>
                                 <th>Comparisons</th>
@@ -210,10 +435,63 @@
                             {
                                 <tr>
                                     <td class="mono">@item.AttributeKey</td>
+                                    <td>@item.SourceName</td>
                                     <td><span class="status-pill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetInverseTone(item.DisagreementRate)">@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(item.DisagreementRate)</span></td>
                                     <td>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(item.WinRate)</td>
                                     <td>@item.TotalComparisons</td>
                                     <td>@item.LastUpdatedUtc.ToString("u")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <section class="panel panel-muted inspector-section">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Support Matrix</p>
+                    <h2>Source support by commodity</h2>
+                    <p class="subtle-copy">Rows show active suppliers. The selected category column surfaces the current quality score; other columns show whether the source is assigned and ready for that commodity.</p>
+                </div>
+            </div>
+
+            @if (Model.SupportMatrixRows.Count == 0)
+            {
+                <div class="empty-panel">
+                    <p class="empty-state">No source support assignments are available yet.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table dashboard-table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Source</th>
+                                <th>Status</th>
+                                @foreach (var category in Model.SupportMatrixCategories)
+                                {
+                                    <th>@category.DisplayName</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in Model.SupportMatrixRows)
+                            {
+                                <tr>
+                                    <td>
+                                        <strong>@row.SourceName</strong>
+                                        <div class="subtle-copy">@row.SupportedCategoryCount categories</div>
+                                    </td>
+                                    <td>@row.ReadinessStatus</td>
+                                    @foreach (var cell in row.Cells)
+                                    {
+                                        <td>
+                                            <span class="status-pill @cell.Tone">@cell.Label</span>
+                                        </td>
+                                    }
                                 </tr>
                             }
                         </tbody>

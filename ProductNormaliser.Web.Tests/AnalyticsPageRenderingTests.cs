@@ -97,11 +97,13 @@ public sealed class AnalyticsPageRenderingTests
         {
             Categories =
             [
-                new CategoryMetadataDto { CategoryKey = "monitor", DisplayName = "Monitors", IsEnabled = true, CrawlSupportStatus = "Supported" }
+                new CategoryMetadataDto { CategoryKey = "monitor", DisplayName = "Monitors", IsEnabled = true, CrawlSupportStatus = "Supported" },
+                new CategoryMetadataDto { CategoryKey = "tv", DisplayName = "TVs", IsEnabled = true, CrawlSupportStatus = "Supported" }
             ],
             Sources =
             [
-                new SourceDto { SourceId = "northwind", DisplayName = "Northwind", SupportedCategoryKeys = ["monitor"] }
+                new SourceDto { SourceId = "northwind", DisplayName = "Northwind", SupportedCategoryKeys = ["monitor", "tv"], IsEnabled = true, Readiness = new SourceReadinessDto { Status = "ready" } },
+                new SourceDto { SourceId = "contoso", DisplayName = "Contoso", SupportedCategoryKeys = ["monitor"], IsEnabled = true, Readiness = new SourceReadinessDto { Status = "configured" } }
             ],
             SourceQualityScores =
             [
@@ -114,6 +116,16 @@ public sealed class AnalyticsPageRenderingTests
                     AverageMappedAttributes = 9.2m,
                     AverageAttributeConfidence = 91m,
                     QualityScore = 87m
+                },
+                new SourceQualityScoreDto
+                {
+                    SourceName = "Contoso",
+                    SourceProductCount = 11,
+                    CoveragePercent = 71m,
+                    AgreementPercent = 73m,
+                    AverageMappedAttributes = 7.8m,
+                    AverageAttributeConfidence = 78m,
+                    QualityScore = 74m
                 }
             ],
             SourceHistory =
@@ -129,6 +141,18 @@ public sealed class AnalyticsPageRenderingTests
                     SuccessfulCrawlRate = 93m,
                     SpecStabilityScore = 76m,
                     HistoricalTrustScore = 81m
+                },
+                new SourceQualitySnapshotDto
+                {
+                    SourceName = "Contoso",
+                    CategoryKey = "monitor",
+                    TimestampUtc = new DateTime(2026, 3, 21, 8, 0, 0, DateTimeKind.Utc),
+                    AttributeCoverage = 68m,
+                    AgreementRate = 74m,
+                    ConflictRate = 26m,
+                    SuccessfulCrawlRate = 90m,
+                    SpecStabilityScore = 58m,
+                    HistoricalTrustScore = 69m
                 }
             ],
             SourceDisagreements =
@@ -143,6 +167,17 @@ public sealed class AnalyticsPageRenderingTests
                     WinRate = 80m,
                     DisagreementRate = 20m,
                     LastUpdatedUtc = new DateTime(2026, 3, 23, 10, 0, 0, DateTimeKind.Utc)
+                },
+                new SourceAttributeDisagreementDto
+                {
+                    SourceName = "Contoso",
+                    CategoryKey = "monitor",
+                    AttributeKey = "panel_type",
+                    TotalComparisons = 7,
+                    TimesDisagreed = 3,
+                    WinRate = 57m,
+                    DisagreementRate = 43m,
+                    LastUpdatedUtc = new DateTime(2026, 3, 23, 10, 30, 0, DateTimeKind.Utc)
                 }
             ]
         };
@@ -150,12 +185,17 @@ public sealed class AnalyticsPageRenderingTests
         await using var factory = new ProductWebApplicationFactory(fakeAdminApiClient);
         using var client = await factory.CreateOperatorClientAsync();
 
-        var html = await client.GetStringAsync("/Sources/Intelligence?category=monitor&source=Northwind");
+        var html = await client.GetStringAsync("/Sources/Intelligence?category=monitor&source=Northwind&range=90");
 
         Assert.That(html, Does.Contain("Monitors source intelligence"));
+        Assert.That(html, Does.Contain("Analyst starting points"));
+        Assert.That(html, Does.Contain("Weak and high-value watchlists"));
         Assert.That(html, Does.Contain("Quality and trust overview"));
+        Assert.That(html, Does.Contain("Fast-moving sources"));
         Assert.That(html, Does.Contain("Trust Over Time"));
         Assert.That(html, Does.Contain("Disagreement hotspots"));
+        Assert.That(html, Does.Contain("Source support by commodity"));
+        Assert.That(html, Does.Contain("Last 90 days"));
         Assert.That(html, Does.Contain("Northwind"));
         Assert.That(html, Does.Contain("selected=\"selected\">Northwind"));
     }

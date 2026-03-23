@@ -190,9 +190,9 @@ public sealed class DataIntelligenceService(
         };
     }
 
-    public Task<IReadOnlyList<SourceQualitySnapshotDto>> GetSourceHistoryAsync(string categoryKey, string? sourceName, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<SourceQualitySnapshotDto>> GetSourceHistoryAsync(string categoryKey, string? sourceName, int? timeRangeDays, CancellationToken cancellationToken)
     {
-        var history = sourceTrustService?.GetSourceHistory(categoryKey, sourceName) ?? [];
+        var history = sourceTrustService?.GetSourceHistory(categoryKey, sourceName, timeRangeDays) ?? [];
         return Task.FromResult<IReadOnlyList<SourceQualitySnapshotDto>>(history
             .Select(snapshot => new SourceQualitySnapshotDto
             {
@@ -228,9 +228,9 @@ public sealed class DataIntelligenceService(
             .ToArray());
     }
 
-    public Task<IReadOnlyList<SourceAttributeDisagreementDto>> GetSourceDisagreementsAsync(string categoryKey, string? sourceName, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<SourceAttributeDisagreementDto>> GetSourceDisagreementsAsync(string categoryKey, string? sourceName, int? timeRangeDays, CancellationToken cancellationToken)
     {
-        var disagreements = sourceDisagreementService?.GetDisagreements(categoryKey, sourceName) ?? [];
+        var disagreements = sourceDisagreementService?.GetDisagreements(categoryKey, sourceName, timeRangeDays) ?? [];
         return Task.FromResult<IReadOnlyList<SourceAttributeDisagreementDto>>(disagreements
             .Select(item => new SourceAttributeDisagreementDto
             {
