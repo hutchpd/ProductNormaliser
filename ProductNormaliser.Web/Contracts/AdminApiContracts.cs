@@ -9,6 +9,50 @@ public sealed class StatsDto
     public decimal PercentProductsMissingKeyAttributes { get; init; }
 }
 
+public sealed class AnalystWorkflowDto
+{
+    public string Id { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string WorkflowType { get; init; } = string.Empty;
+    public string RoutePath { get; init; } = string.Empty;
+    public string? Description { get; init; }
+    public string? PrimaryCategoryKey { get; init; }
+    public IReadOnlyList<string> SelectedCategoryKeys { get; init; } = [];
+    public IReadOnlyDictionary<string, string> State { get; init; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    public DateTime CreatedUtc { get; init; }
+    public DateTime UpdatedUtc { get; init; }
+}
+
+public sealed class UpsertAnalystWorkflowRequest
+{
+    public string? Id { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public string WorkflowType { get; init; } = string.Empty;
+    public string RoutePath { get; init; } = string.Empty;
+    public string? Description { get; init; }
+    public string? PrimaryCategoryKey { get; init; }
+    public IReadOnlyList<string> SelectedCategoryKeys { get; init; } = [];
+    public IReadOnlyDictionary<string, string> State { get; init; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+}
+
+public sealed class AnalystNoteDto
+{
+    public string TargetType { get; init; } = string.Empty;
+    public string TargetId { get; init; } = string.Empty;
+    public string? Title { get; init; }
+    public string Content { get; init; } = string.Empty;
+    public DateTime CreatedUtc { get; init; }
+    public DateTime UpdatedUtc { get; init; }
+}
+
+public sealed class UpsertAnalystNoteRequest
+{
+    public string TargetType { get; init; } = string.Empty;
+    public string TargetId { get; init; } = string.Empty;
+    public string? Title { get; init; }
+    public string Content { get; init; } = string.Empty;
+}
+
 public sealed class CategoryMetadataDto
 {
     public string CategoryKey { get; init; } = string.Empty;

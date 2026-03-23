@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using ProductNormaliser.Web.Contracts;
 using ProductNormaliser.Web.Models;
@@ -97,6 +98,166 @@ public sealed class ProductExplorerPageTests
     }
 
     [Test]
+    public async Task ProductsIndex_OnPostSaveViewAsync_SavesCurrentFilterStateAndRedirects()
+    {
+        var client = new FakeAdminApiClient
+        {
+            SavedAnalystWorkflow = new AnalystWorkflowDto
+            {
+                Id = "workflow_products_1",
+                Name = "Sony stale queue",
+                WorkflowType = AnalystWorkspacePresentation.WorkflowTypeProductFilters,
+                RoutePath = "/Products/Index",
+                PrimaryCategoryKey = "tv",
+                SelectedCategoryKeys = ["tv"],
+                State = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["category"] = "tv",
+                    ["search"] = "sony",
+                    ["freshness"] = "stale"
+                }
+            }
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Products.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Products.IndexModel>.Instance)
+        {
+            CategoryKey = "tv",
+            Search = "sony",
+            Freshness = "stale",
+            ConflictStatus = "with_conflicts",
+            SaveViewName = "Sony stale queue",
+            SaveViewDescription = "Daily stale review"
+        };
+
+        var result = await model.OnPostSaveViewAsync(AnalystWorkspacePresentation.WorkflowTypeProductFilters, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(client.LastSavedAnalystWorkflowRequest, Is.Not.Null);
+            Assert.That(client.LastSavedAnalystWorkflowRequest!.WorkflowType, Is.EqualTo(AnalystWorkspacePresentation.WorkflowTypeProductFilters));
+            Assert.That(client.LastSavedAnalystWorkflowRequest.State["search"], Is.EqualTo("sony"));
+            Assert.That(client.LastSavedAnalystWorkflowRequest.State["conflictStatus"], Is.EqualTo("with_conflicts"));
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
+            var redirect = (RedirectToPageResult)result;
+            Assert.That(redirect.RouteValues! ["view"], Is.EqualTo("workflow_products_1"));
+        });
+    }
+
+    [Test]
+    public async Task ProductsIndex_OnGetAsync_RestoresSavedViewState()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = [new CategoryMetadataDto { CategoryKey = "tv", DisplayName = "TVs", IsEnabled = true, CrawlSupportStatus = "Supported" }],
+            AnalystWorkflows =
+            [
+                new AnalystWorkflowDto
+                {
+                    Id = "workflow_products_restore",
+                    Name = "Conflict triage",
+                    WorkflowType = AnalystWorkspacePresentation.WorkflowTypeProductFilters,
+                    RoutePath = "/Products/Index",
+                    PrimaryCategoryKey = "tv",
+                    SelectedCategoryKeys = ["tv"],
+                    State = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["category"] = "tv",
+                        ["search"] = "sony",
+                        ["minSourceCount"] = "3",
+                        ["freshness"] = "stale",
+                        ["conflictStatus"] = "with_conflicts",
+                        ["completeness"] = "partial",
+                        ["sort"] = "conflicts_desc",
+                        ["page"] = "2"
+                    }
+                }
+            ],
+            ProductPage = new ProductListResponseDto { Page = 2, PageSize = 12, TotalPages = 1, TotalCount = 0 }
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Products.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Products.IndexModel>.Instance)
+        {
+            SavedViewId = "workflow_products_restore"
+        };
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.CategoryKey, Is.EqualTo("tv"));
+            Assert.That(model.Search, Is.EqualTo("sony"));
+            Assert.That(model.MinSourceCount, Is.EqualTo(3));
+            Assert.That(model.Freshness, Is.EqualTo("stale"));
+            Assert.That(model.ConflictStatus, Is.EqualTo("with_conflicts"));
+            Assert.That(model.CompletenessStatus, Is.EqualTo("partial"));
+            Assert.That(model.Sort, Is.EqualTo("conflicts_desc"));
+            Assert.That(model.PageNumber, Is.EqualTo(2));
+            Assert.That(client.LastProductQuery!.Search, Is.EqualTo("sony"));
+        });
+    }
+
+    [Test]
+    public async Task ProductsIndex_OnPostDeleteViewAsync_DeletesSavedView()
+    {
+        var client = new FakeAdminApiClient();
+        var model = new ProductNormaliser.Web.Pages.Products.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Products.IndexModel>.Instance)
+        {
+            CategoryKey = "tv",
+            Search = "sony"
+        };
+
+        var result = await model.OnPostDeleteViewAsync("workflow_products_delete", CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(client.LastDeletedAnalystWorkflowId, Is.EqualTo("workflow_products_delete"));
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
+            var redirect = (RedirectToPageResult)result;
+            Assert.That(redirect.RouteValues!["view"], Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task ProductsIndex_OnGetAsync_WhenSavedViewCategoryMissing_ShowsWorkflowMessageAndFallsBack()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = [new CategoryMetadataDto { CategoryKey = "monitor", DisplayName = "Monitors", IsEnabled = true, CrawlSupportStatus = "Supported" }],
+            AnalystWorkflows =
+            [
+                new AnalystWorkflowDto
+                {
+                    Id = "workflow_missing_category",
+                    Name = "Old TV queue",
+                    WorkflowType = AnalystWorkspacePresentation.WorkflowTypeProductFilters,
+                    RoutePath = "/Products/Index",
+                    PrimaryCategoryKey = "tv",
+                    SelectedCategoryKeys = ["tv"],
+                    State = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["category"] = "tv",
+                        ["search"] = "sony"
+                    }
+                }
+            ]
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Products.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Products.IndexModel>.Instance)
+        {
+            SavedViewId = "workflow_missing_category"
+        };
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.CategoryKey, Is.EqualTo("monitor"));
+            Assert.That(model.WorkflowMessage, Does.Contain("missing category 'tv'"));
+            Assert.That(model.SavedWorkflows[0].HasMissingCategory, Is.True);
+        });
+    }
+
+    [Test]
     public async Task ProductsIndex_OnGetAsync_FiltersCategorySelectorToRolloutCategories()
     {
         var client = new FakeAdminApiClient
@@ -150,6 +311,31 @@ public sealed class ProductExplorerPageTests
     }
 
     [Test]
+    public async Task ProductDetails_OnPostSaveNoteAsync_SavesProductNote()
+    {
+        var client = new FakeAdminApiClient();
+        var model = new ProductNormaliser.Web.Pages.Products.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Products.DetailsModel>.Instance)
+        {
+            ProductId = "canon-1",
+            NoteInput = new ProductNormaliser.Web.Pages.Products.DetailsModel.AnalystNoteInput
+            {
+                Title = "Check pricing",
+                Content = "Revisit price drift after the next crawl."
+            }
+        };
+
+        var result = await model.OnPostSaveNoteAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(client.LastSavedAnalystNoteRequest, Is.Not.Null);
+            Assert.That(client.LastSavedAnalystNoteRequest!.TargetType, Is.EqualTo("product"));
+            Assert.That(client.LastSavedAnalystNoteRequest.TargetId, Is.EqualTo("canon-1"));
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
+        });
+    }
+
+    [Test]
     public void ProductExplorerPresentation_ReturnsRenderingBadges()
     {
         var freshness = ProductExplorerPresentation.GetFreshnessBadge("stale", 42);
@@ -169,6 +355,13 @@ public sealed class ProductExplorerPageTests
     {
         public Task<StatsDto> GetStatsAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<IReadOnlyList<CategoryMetadataDto>> GetCategoriesAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<IReadOnlyList<AnalystWorkflowDto>> GetAnalystWorkflowsAsync(string? workflowType = null, string? routePath = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<AnalystWorkflowDto?> GetAnalystWorkflowAsync(string workflowId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<AnalystWorkflowDto> SaveAnalystWorkflowAsync(UpsertAnalystWorkflowRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task DeleteAnalystWorkflowAsync(string workflowId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<AnalystNoteDto?> GetAnalystNoteAsync(string targetType, string targetId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<AnalystNoteDto> SaveAnalystNoteAsync(UpsertAnalystNoteRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task DeleteAnalystNoteAsync(string targetType, string targetId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<IReadOnlyList<CategoryFamilyDto>> GetCategoryFamiliesAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<IReadOnlyList<CategoryMetadataDto>> GetEnabledCategoriesAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<CategoryDetailDto?> GetCategoryDetailAsync(string categoryKey, CancellationToken cancellationToken = default) => throw new NotImplementedException();

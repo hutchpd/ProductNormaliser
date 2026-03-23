@@ -31,12 +31,26 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public CrawlJobDto? CancelledJob { get; set; }
     public Exception? CreateJobException { get; set; }
     public Exception? AnalyticsException { get; set; }
+    public Exception? AnalystWorkspaceException { get; set; }
     public CreateCrawlJobRequest? LastCreatedJobRequest { get; private set; }
     public string? LastCancelledJobId { get; private set; }
     public string? LastRequestedCrawlJobId { get; private set; }
     public ProductListResponseDto ProductPage { get; set; } = new();
     public ProductDetailDto? Product { get; set; }
     public IReadOnlyList<ProductChangeEventDto> ProductHistory { get; set; } = [];
+    public IReadOnlyList<AnalystWorkflowDto> AnalystWorkflows { get; set; } = [];
+    public AnalystWorkflowDto? SavedAnalystWorkflow { get; set; }
+    public AnalystNoteDto? AnalystNote { get; set; }
+    public UpsertAnalystWorkflowRequest? LastSavedAnalystWorkflowRequest { get; private set; }
+    public string? LastDeletedAnalystWorkflowId { get; private set; }
+    public string? LastRequestedAnalystWorkflowId { get; private set; }
+    public string? LastRequestedWorkflowType { get; private set; }
+    public string? LastRequestedWorkflowRoutePath { get; private set; }
+    public UpsertAnalystNoteRequest? LastSavedAnalystNoteRequest { get; private set; }
+    public string? LastDeletedAnalystNoteTargetType { get; private set; }
+    public string? LastDeletedAnalystNoteTargetId { get; private set; }
+    public string? LastRequestedAnalystNoteTargetType { get; private set; }
+    public string? LastRequestedAnalystNoteTargetId { get; private set; }
     public ProductListQueryDto? LastProductQuery { get; private set; }
     public string? LastRequestedProductId { get; private set; }
     public string? LastRequestedProductHistoryId { get; private set; }
@@ -64,6 +78,125 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
 
     public Task<IReadOnlyList<CategoryMetadataDto>> GetCategoriesAsync(CancellationToken cancellationToken = default)
         => CategoriesException is null ? Task.FromResult(Categories) : Task.FromException<IReadOnlyList<CategoryMetadataDto>>(CategoriesException);
+    public Task<IReadOnlyList<AnalystWorkflowDto>> GetAnalystWorkflowsAsync(string? workflowType = null, string? routePath = null, CancellationToken cancellationToken = default)
+    {
+        if (AnalystWorkspaceException is not null)
+        {
+            return Task.FromException<IReadOnlyList<AnalystWorkflowDto>>(AnalystWorkspaceException);
+        }
+
+        LastRequestedWorkflowType = workflowType;
+        LastRequestedWorkflowRoutePath = routePath;
+
+        IEnumerable<AnalystWorkflowDto> workflows = AnalystWorkflows;
+        if (!string.IsNullOrWhiteSpace(workflowType))
+        {
+            workflows = workflows.Where(item => string.Equals(item.WorkflowType, workflowType, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(routePath))
+        {
+            workflows = workflows.Where(item => string.Equals(item.RoutePath, routePath, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return Task.FromResult<IReadOnlyList<AnalystWorkflowDto>>(workflows.ToArray());
+    }
+    public Task<AnalystWorkflowDto?> GetAnalystWorkflowAsync(string workflowId, CancellationToken cancellationToken = default)
+    {
+        if (AnalystWorkspaceException is not null)
+        {
+            return Task.FromException<AnalystWorkflowDto?>(AnalystWorkspaceException);
+        }
+
+        LastRequestedAnalystWorkflowId = workflowId;
+        return Task.FromResult(SavedAnalystWorkflow ?? AnalystWorkflows.FirstOrDefault(item => string.Equals(item.Id, workflowId, StringComparison.OrdinalIgnoreCase)));
+    }
+    public Task<AnalystWorkflowDto> SaveAnalystWorkflowAsync(UpsertAnalystWorkflowRequest request, CancellationToken cancellationToken = default)
+    {
+        if (AnalystWorkspaceException is not null)
+        {
+            return Task.FromException<AnalystWorkflowDto>(AnalystWorkspaceException);
+        }
+
+        LastSavedAnalystWorkflowRequest = request;
+        var workflow = SavedAnalystWorkflow ?? new AnalystWorkflowDto
+        {
+            Id = string.IsNullOrWhiteSpace(request.Id) ? "workflow_saved" : request.Id,
+            Name = request.Name,
+            WorkflowType = request.WorkflowType,
+            RoutePath = request.RoutePath,
+            Description = request.Description,
+            PrimaryCategoryKey = request.PrimaryCategoryKey,
+            SelectedCategoryKeys = request.SelectedCategoryKeys.ToArray(),
+            State = new Dictionary<string, string>(request.State, StringComparer.OrdinalIgnoreCase),
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow
+        };
+        SavedAnalystWorkflow = workflow;
+        AnalystWorkflows = AnalystWorkflows
+            .Where(item => !string.Equals(item.Id, workflow.Id, StringComparison.OrdinalIgnoreCase))
+            .Append(workflow)
+            .ToArray();
+        return Task.FromResult(workflow);
+    }
+    public Task DeleteAnalystWorkflowAsync(string workflowId, CancellationToken cancellationToken = default)
+    {
+        if (AnalystWorkspaceException is not null)
+        {
+            return Task.FromException(AnalystWorkspaceException);
+        }
+
+        LastDeletedAnalystWorkflowId = workflowId;
+        AnalystWorkflows = AnalystWorkflows.Where(item => !string.Equals(item.Id, workflowId, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (SavedAnalystWorkflow is not null && string.Equals(SavedAnalystWorkflow.Id, workflowId, StringComparison.OrdinalIgnoreCase))
+        {
+            SavedAnalystWorkflow = null;
+        }
+
+        return Task.CompletedTask;
+    }
+    public Task<AnalystNoteDto?> GetAnalystNoteAsync(string targetType, string targetId, CancellationToken cancellationToken = default)
+    {
+        if (AnalystWorkspaceException is not null)
+        {
+            return Task.FromException<AnalystNoteDto?>(AnalystWorkspaceException);
+        }
+
+        LastRequestedAnalystNoteTargetType = targetType;
+        LastRequestedAnalystNoteTargetId = targetId;
+        return Task.FromResult(AnalystNote);
+    }
+    public Task<AnalystNoteDto> SaveAnalystNoteAsync(UpsertAnalystNoteRequest request, CancellationToken cancellationToken = default)
+    {
+        if (AnalystWorkspaceException is not null)
+        {
+            return Task.FromException<AnalystNoteDto>(AnalystWorkspaceException);
+        }
+
+        LastSavedAnalystNoteRequest = request;
+        AnalystNote = new AnalystNoteDto
+        {
+            TargetType = request.TargetType,
+            TargetId = request.TargetId,
+            Title = request.Title,
+            Content = request.Content,
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow
+        };
+        return Task.FromResult(AnalystNote);
+    }
+    public Task DeleteAnalystNoteAsync(string targetType, string targetId, CancellationToken cancellationToken = default)
+    {
+        if (AnalystWorkspaceException is not null)
+        {
+            return Task.FromException(AnalystWorkspaceException);
+        }
+
+        LastDeletedAnalystNoteTargetType = targetType;
+        LastDeletedAnalystNoteTargetId = targetId;
+        AnalystNote = null;
+        return Task.CompletedTask;
+    }
     public Task<IReadOnlyList<CategoryFamilyDto>> GetCategoryFamiliesAsync(CancellationToken cancellationToken = default) => Task.FromResult(CategoryFamilies);
     public Task<IReadOnlyList<CategoryMetadataDto>> GetEnabledCategoriesAsync(CancellationToken cancellationToken = default)
         => Task.FromResult(EnabledCategories.Count == 0

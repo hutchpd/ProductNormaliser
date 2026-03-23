@@ -7,6 +7,11 @@
 <section class="dashboard-shell">
     <partial name="_PageHero" model="Model.Hero" />
 
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="notice success">@Model.StatusMessage</div>
+    }
+
     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
     {
         <div class="notice error">@Model.ErrorMessage</div>
@@ -35,6 +40,51 @@
 
     @if (Model.Product is not null)
     {
+        <section class="panel panel-muted">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Analyst Notes</p>
+                    <h2>Internal product note</h2>
+                    <p class="subtle-copy">Keep a lightweight handoff note for review context, edge cases, or downstream follow-up.</p>
+                </div>
+                @if (Model.AnalystNote is not null)
+                {
+                    <span class="status-pill completed">Updated @Model.AnalystNote.UpdatedUtc.ToString("u")</span>
+                }
+            </div>
+
+            <form method="post" asp-page-handler="SaveNote" class="source-form">
+                <input type="hidden" asp-for="ProductId" />
+                <input type="hidden" asp-for="ReturnCategory" />
+                <input type="hidden" asp-for="ReturnSearch" />
+                <input type="hidden" asp-for="ReturnPage" />
+                <input type="hidden" asp-for="ReturnMinSourceCount" />
+                <input type="hidden" asp-for="ReturnFreshness" />
+                <input type="hidden" asp-for="ReturnConflictStatus" />
+                <input type="hidden" asp-for="ReturnCompletenessStatus" />
+                <input type="hidden" asp-for="ReturnSort" />
+                <div class="form-grid">
+                    <div>
+                        <label asp-for="NoteInput.Title" class="form-label"></label>
+                        <input asp-for="NoteInput.Title" class="form-control" placeholder="Why this product matters" />
+                        <span asp-validation-for="NoteInput.Title" class="text-danger small"></span>
+                    </div>
+                    <div class="wide">
+                        <label asp-for="NoteInput.Content" class="form-label"></label>
+                        <textarea asp-for="NoteInput.Content" rows="4" class="form-control" placeholder="Observed issue, next check, or analyst handoff note"></textarea>
+                        <span asp-validation-for="NoteInput.Content" class="text-danger small"></span>
+                    </div>
+                </div>
+                <div class="actions-bar">
+                    <button type="submit" class="btn btn-dark">Save note</button>
+                    @if (Model.AnalystNote is not null)
+                    {
+                        <button type="submit" asp-page-handler="DeleteNote" class="btn btn-outline-danger">Delete note</button>
+                    }
+                </div>
+            </form>
+        </section>
+
         <partial name="_ProductSummarySection" model="Model" />
         <partial name="_ProductKeyAttributesSection" model="Model" />
         <partial name="_ProductInvestigationSection" model="Model" />

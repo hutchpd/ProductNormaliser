@@ -61,6 +61,21 @@ internal static class AdminApiContractValidator
         ValidateItems(payload, "categories", ValidateCategoryMetadata);
     }
 
+    public static void ValidateAnalystWorkflows(IReadOnlyList<AnalystWorkflowDto> payload)
+    {
+        ValidateItems(payload, "analystWorkflows", ValidateAnalystWorkflow);
+    }
+
+    public static void ValidateAnalystWorkflow(AnalystWorkflowDto payload)
+    {
+        ValidateAnalystWorkflow(payload, "analystWorkflow");
+    }
+
+    public static void ValidateAnalystNote(AnalystNoteDto payload)
+    {
+        ValidateAnalystNote(payload, "analystNote");
+    }
+
     public static void ValidateCategoryFamilies(IReadOnlyList<CategoryFamilyDto> payload)
     {
         ValidateItems(payload, "categoryFamilies", ValidateCategoryFamily);
@@ -155,6 +170,21 @@ internal static class AdminApiContractValidator
         ValidateRequiredString(payload.FamilyDisplayName, $"{path}.familyDisplayName");
         ValidateRequiredString(payload.IconKey, $"{path}.iconKey");
         ValidateEnumValue(payload.CrawlSupportStatus, CrawlSupportStatuses, $"{path}.crawlSupportStatus");
+    }
+
+    private static void ValidateAnalystWorkflow(AnalystWorkflowDto payload, string path)
+    {
+        ValidateRequiredString(payload.Id, $"{path}.id");
+        ValidateRequiredString(payload.Name, $"{path}.name");
+        ValidateRequiredString(payload.WorkflowType, $"{path}.workflowType");
+        ValidateRequiredString(payload.RoutePath, $"{path}.routePath");
+        ValidateStringItems(payload.SelectedCategoryKeys, $"{path}.selectedCategoryKeys");
+    }
+
+    private static void ValidateAnalystNote(AnalystNoteDto payload, string path)
+    {
+        ValidateRequiredString(payload.TargetType, $"{path}.targetType");
+        ValidateRequiredString(payload.TargetId, $"{path}.targetId");
     }
 
     private static void ValidateCategoryFamily(CategoryFamilyDto payload, string path)

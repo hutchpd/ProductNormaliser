@@ -19,6 +19,8 @@ public sealed class MongoDbContext
 
         Client = mongoClient;
         Database = mongoClient.GetDatabase(databaseName);
+        AnalystNotes = Database.GetCollection<AnalystNote>(MongoCollectionNames.AnalystNotes);
+        AnalystWorkflows = Database.GetCollection<AnalystWorkflow>(MongoCollectionNames.AnalystWorkflows);
         Categories = Database.GetCollection<CategoryMetadata>(MongoCollectionNames.Categories);
         CrawlJobs = Database.GetCollection<CrawlJob>(MongoCollectionNames.CrawlJobs);
         CrawlSources = Database.GetCollection<CrawlSource>(MongoCollectionNames.CrawlSources);
@@ -40,6 +42,10 @@ public sealed class MongoDbContext
     public IMongoClient Client { get; }
 
     public IMongoDatabase Database { get; }
+
+    public IMongoCollection<AnalystNote> AnalystNotes { get; }
+
+    public IMongoCollection<AnalystWorkflow> AnalystWorkflows { get; }
 
     public IMongoCollection<CategoryMetadata> Categories { get; }
 
@@ -75,6 +81,24 @@ public sealed class MongoDbContext
 
     public async Task EnsureIndexesAsync(CancellationToken cancellationToken = default)
     {
+        await AnalystNotes.Indexes.CreateOneAsync(
+            new CreateIndexModel<AnalystNote>(Builders<AnalystNote>.IndexKeys
+                .Ascending(note => note.TargetType)
+                .Ascending(note => note.TargetId)),
+            cancellationToken: cancellationToken);
+
+        await AnalystWorkflows.Indexes.CreateManyAsync(
+            [
+                new CreateIndexModel<AnalystWorkflow>(Builders<AnalystWorkflow>.IndexKeys
+                    .Ascending(workflow => workflow.WorkflowType)
+                    .Ascending(workflow => workflow.RoutePath)
+                    .Descending(workflow => workflow.UpdatedUtc)),
+                new CreateIndexModel<AnalystWorkflow>(Builders<AnalystWorkflow>.IndexKeys
+                    .Ascending(workflow => workflow.PrimaryCategoryKey)
+                    .Descending(workflow => workflow.UpdatedUtc))
+            ],
+            cancellationToken: cancellationToken);
+
         await Categories.Indexes.CreateOneAsync(
             new CreateIndexModel<CategoryMetadata>(Builders<CategoryMetadata>.IndexKeys
                 .Ascending(category => category.FamilyKey)

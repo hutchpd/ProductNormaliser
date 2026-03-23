@@ -36,6 +36,7 @@ builder.Services.AddSingleton<ISourceManagementService, SourceManagementService>
 builder.Services.AddSingleton<ISourceOperationalInsightsProvider, SourceOperationalInsightsProvider>();
 builder.Services.AddSingleton<IAdminQueryService, AdminQueryService>();
 builder.Services.AddSingleton<IDataIntelligenceService, DataIntelligenceService>();
+builder.Services.AddSingleton<IAnalystWorkspaceService, AnalystWorkspaceService>();
 builder.Services.AddSingleton<IManagementActorContext, HttpContextManagementActorContext>();
 
 var app = builder.Build();

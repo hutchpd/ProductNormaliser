@@ -16,6 +16,8 @@ public static class MongoMappingRegistry
         }
 
         RegisterObjectSerializer();
+        RegisterClassMap<AnalystNote>(map => map.MapIdMember(model => model.Id));
+        RegisterClassMap<AnalystWorkflow>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<RawPage>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<CategoryMetadata>(map => map.MapIdMember(model => model.CategoryKey));
         RegisterClassMap<CrawlJob>(map => map.MapIdMember(model => model.JobId));

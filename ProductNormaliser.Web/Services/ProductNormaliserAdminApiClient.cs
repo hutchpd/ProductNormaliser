@@ -24,6 +24,59 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
         return await GetRequiredAsync<CategoryMetadataDto[]>("api/categories", AdminApiContractValidator.ValidateCategories, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<AnalystWorkflowDto>> GetAnalystWorkflowsAsync(string? workflowType = null, string? routePath = null, CancellationToken cancellationToken = default)
+    {
+        var relativeUri = BuildRelativeUri("api/analyst-workspace/workflows", new Dictionary<string, string?>
+        {
+            ["workflowType"] = workflowType,
+            ["routePath"] = routePath
+        });
+
+        return await GetRequiredAsync<AnalystWorkflowDto[]>(relativeUri, AdminApiContractValidator.ValidateAnalystWorkflows, cancellationToken);
+    }
+
+    public Task<AnalystWorkflowDto?> GetAnalystWorkflowAsync(string workflowId, CancellationToken cancellationToken = default)
+    {
+        return GetOptionalAsync<AnalystWorkflowDto>($"api/analyst-workspace/workflows/{Uri.EscapeDataString(workflowId)}", AdminApiContractValidator.ValidateAnalystWorkflow, cancellationToken);
+    }
+
+    public Task<AnalystWorkflowDto> SaveAnalystWorkflowAsync(UpsertAnalystWorkflowRequest request, CancellationToken cancellationToken = default)
+    {
+        return SendAsync<AnalystWorkflowDto>(HttpMethod.Post, "api/analyst-workspace/workflows", request, AdminApiContractValidator.ValidateAnalystWorkflow, cancellationToken);
+    }
+
+    public Task DeleteAnalystWorkflowAsync(string workflowId, CancellationToken cancellationToken = default)
+    {
+        return SendNoContentAsync(HttpMethod.Delete, $"api/analyst-workspace/workflows/{Uri.EscapeDataString(workflowId)}", cancellationToken);
+    }
+
+    public Task<AnalystNoteDto?> GetAnalystNoteAsync(string targetType, string targetId, CancellationToken cancellationToken = default)
+    {
+        var relativeUri = BuildRelativeUri("api/analyst-workspace/notes", new Dictionary<string, string?>
+        {
+            ["targetType"] = targetType,
+            ["targetId"] = targetId
+        });
+
+        return GetOptionalAsync<AnalystNoteDto>(relativeUri, AdminApiContractValidator.ValidateAnalystNote, cancellationToken);
+    }
+
+    public Task<AnalystNoteDto> SaveAnalystNoteAsync(UpsertAnalystNoteRequest request, CancellationToken cancellationToken = default)
+    {
+        return SendAsync<AnalystNoteDto>(HttpMethod.Post, "api/analyst-workspace/notes", request, AdminApiContractValidator.ValidateAnalystNote, cancellationToken);
+    }
+
+    public Task DeleteAnalystNoteAsync(string targetType, string targetId, CancellationToken cancellationToken = default)
+    {
+        var relativeUri = BuildRelativeUri("api/analyst-workspace/notes", new Dictionary<string, string?>
+        {
+            ["targetType"] = targetType,
+            ["targetId"] = targetId
+        });
+
+        return SendNoContentAsync(HttpMethod.Delete, relativeUri, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<CategoryFamilyDto>> GetCategoryFamiliesAsync(CancellationToken cancellationToken = default)
     {
         return await GetRequiredAsync<CategoryFamilyDto[]>("api/categories/families", AdminApiContractValidator.ValidateCategoryFamilies, cancellationToken);
@@ -247,6 +300,13 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
         var payload = await ReadRequiredAsync<T>(response, cancellationToken);
         validate(payload);
         return payload;
+    }
+
+    private async Task SendNoContentAsync(HttpMethod method, string relativeUri, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(method, relativeUri);
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
     }
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)

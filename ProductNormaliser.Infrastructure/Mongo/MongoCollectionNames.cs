@@ -2,6 +2,8 @@ namespace ProductNormaliser.Infrastructure.Mongo;
 
 public static class MongoCollectionNames
 {
+    public const string AnalystNotes = "analyst_notes";
+    public const string AnalystWorkflows = "analyst_workflows";
     public const string Categories = "category_metadata";
     public const string CrawlJobs = "crawl_jobs";
     public const string CrawlSources = "crawl_sources";

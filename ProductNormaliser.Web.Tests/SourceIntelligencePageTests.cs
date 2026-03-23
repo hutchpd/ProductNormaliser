@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using ProductNormaliser.Web.Contracts;
+using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
 
 namespace ProductNormaliser.Web.Tests;
@@ -241,6 +243,48 @@ public sealed class SourceIntelligencePageTests
             Assert.That(model.SourceQualityScores, Is.Empty);
             Assert.That(model.SourceHistory, Is.Empty);
             Assert.That(model.SourceMetrics, Is.Empty);
+        });
+    }
+
+    [Test]
+    public async Task SourceIntelligence_OnPostSaveViewAsync_SavesSourceQueue()
+    {
+        var client = new FakeAdminApiClient
+        {
+            SavedAnalystWorkflow = new AnalystWorkflowDto
+            {
+                Id = "workflow_source_1",
+                Name = "Monitor drift",
+                WorkflowType = AnalystWorkspacePresentation.WorkflowTypeSourceReviewQueue,
+                RoutePath = "/Sources/Intelligence",
+                PrimaryCategoryKey = "monitor",
+                SelectedCategoryKeys = ["monitor"],
+                State = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["category"] = "monitor",
+                    ["source"] = "Northwind",
+                    ["range"] = "90"
+                }
+            }
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.IntelligenceModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IntelligenceModel>.Instance)
+        {
+            CategoryKey = "monitor",
+            SourceName = "Northwind",
+            TimeRangeDays = 90,
+            SaveViewName = "Monitor drift"
+        };
+
+        var result = await model.OnPostSaveViewAsync(AnalystWorkspacePresentation.WorkflowTypeSourceReviewQueue, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(client.LastSavedAnalystWorkflowRequest, Is.Not.Null);
+            Assert.That(client.LastSavedAnalystWorkflowRequest!.WorkflowType, Is.EqualTo(AnalystWorkspacePresentation.WorkflowTypeSourceReviewQueue));
+            Assert.That(client.LastSavedAnalystWorkflowRequest.State["source"], Is.EqualTo("Northwind"));
+            Assert.That(client.LastSavedAnalystWorkflowRequest.State["range"], Is.EqualTo("90"));
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
         });
     }
 }

@@ -10,6 +10,7 @@ public sealed class IntelligenceModel(
     IProductNormaliserAdminApiClient adminApiClient,
     ILogger<IntelligenceModel> logger) : PageModel
 {
+    private const string RoutePath = "/Sources/Intelligence";
     private static readonly int[] SupportedTimeRanges = [7, 30, 90, 180];
 
     [BindProperty(SupportsGet = true, Name = "category")]
@@ -18,10 +19,24 @@ public sealed class IntelligenceModel(
     [BindProperty(SupportsGet = true, Name = "source")]
     public string? SourceName { get; set; }
 
+    [BindProperty(SupportsGet = true, Name = "view")]
+    public string? SavedViewId { get; set; }
+
     [BindProperty(SupportsGet = true, Name = "range")]
     public int? TimeRangeDays { get; set; }
 
+    [BindProperty]
+    public string SaveViewName { get; set; } = string.Empty;
+
+    [BindProperty]
+    public string? SaveViewDescription { get; set; }
+
+    [TempData]
+    public string? StatusMessage { get; set; }
+
     public string? ErrorMessage { get; private set; }
+
+    public string? WorkflowMessage { get; private set; }
 
     public IReadOnlyList<CategoryMetadataDto> Categories { get; private set; } = [];
 
@@ -40,6 +55,8 @@ public sealed class IntelligenceModel(
     public IReadOnlyList<SupportMatrixRowModel> SupportMatrixRows { get; private set; } = [];
 
     public IReadOnlyList<SourceIntelligenceHighlightModel> TriageHighlights { get; private set; } = [];
+
+    public IReadOnlyList<SavedAnalystWorkflowCardModel> SavedWorkflows { get; private set; } = [];
 
     public CategoryMetadataDto? SelectedCategory => Categories.FirstOrDefault(category => string.Equals(category.CategoryKey, CategoryKey, StringComparison.OrdinalIgnoreCase));
 
@@ -182,9 +199,13 @@ public sealed class IntelligenceModel(
 
             var categoriesTask = adminApiClient.GetCategoriesAsync(cancellationToken);
             var sourcesTask = adminApiClient.GetSourcesAsync(cancellationToken);
-            await Task.WhenAll(categoriesTask, sourcesTask);
+            var workflowsTask = adminApiClient.GetAnalystWorkflowsAsync(routePath: RoutePath, cancellationToken: cancellationToken);
+            await Task.WhenAll(categoriesTask, sourcesTask, workflowsTask);
 
             Categories = InteractiveCategoryFilter.Apply(categoriesTask.Result);
+            var workflowDefinitions = workflowsTask.Result;
+            var restoredWorkflow = await ResolveSavedWorkflowAsync(workflowDefinitions, cancellationToken);
+            ApplySavedWorkflow(restoredWorkflow);
             var categoryContext = CategoryContextStateFactory.Resolve(
                 Categories,
                 CategoryKey,
@@ -194,7 +215,18 @@ public sealed class IntelligenceModel(
                 .OrderBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
+            if (restoredWorkflow is not null && !string.IsNullOrWhiteSpace(restoredWorkflow.PrimaryCategoryKey) && !Categories.Any(category => string.Equals(category.CategoryKey, restoredWorkflow.PrimaryCategoryKey, StringComparison.OrdinalIgnoreCase)))
+            {
+                WorkflowMessage = $"Saved view '{restoredWorkflow.Name}' referenced missing category '{restoredWorkflow.PrimaryCategoryKey}'. Showing the default active category instead.";
+            }
+
             CategoryKey = categoryContext.PrimaryCategoryKey;
+            SavedWorkflows = AnalystWorkspacePresentation.BuildWorkflowCards(
+                workflowDefinitions,
+                Categories,
+                SavedViewId,
+                AnalystWorkspacePresentation.WorkflowTypeSourceReviewQueue,
+                AnalystWorkspacePresentation.WorkflowTypeSelectedCategories);
 
             if (IsAwaitingSelection)
             {
@@ -233,6 +265,87 @@ public sealed class IntelligenceModel(
             SupportMatrixRows = [];
             TriageHighlights = [];
         }
+    }
+
+    public async Task<IActionResult> OnPostSaveViewAsync(string workflowType, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var effectiveRange = NormalizeTimeRange(TimeRangeDays);
+            var workflow = await adminApiClient.SaveAnalystWorkflowAsync(new UpsertAnalystWorkflowRequest
+            {
+                Id = SavedViewId,
+                Name = string.IsNullOrWhiteSpace(SaveViewName) ? $"{(string.IsNullOrWhiteSpace(CategoryKey) ? "Category" : CategoryKey)} source queue" : SaveViewName.Trim(),
+                Description = string.IsNullOrWhiteSpace(SaveViewDescription) ? null : SaveViewDescription.Trim(),
+                WorkflowType = workflowType,
+                RoutePath = RoutePath,
+                PrimaryCategoryKey = CategoryKey,
+                SelectedCategoryKeys = string.IsNullOrWhiteSpace(CategoryKey) ? [] : [CategoryKey],
+                State = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["category"] = CategoryKey ?? string.Empty,
+                    ["source"] = SourceName ?? string.Empty,
+                    ["range"] = effectiveRange.ToString()
+                }
+            }, cancellationToken);
+            StatusMessage = $"Saved analyst view '{workflow.Name}'.";
+            return RedirectToPage(new { category = CategoryKey, source = SourceName, range = effectiveRange, view = workflow.Id });
+        }
+        catch (AdminApiException exception)
+        {
+            logger.LogWarning(exception, "Failed to save source workflow for {CategoryKey}/{SourceName}.", CategoryKey, SourceName);
+            ErrorMessage = exception.Message;
+            await OnGetAsync(cancellationToken);
+            return Page();
+        }
+    }
+
+    public async Task<IActionResult> OnPostDeleteViewAsync(string workflowId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await adminApiClient.DeleteAnalystWorkflowAsync(workflowId, cancellationToken);
+            StatusMessage = "Deleted analyst view.";
+            return RedirectToPage(new { category = CategoryKey, source = SourceName, range = EffectiveTimeRangeDays });
+        }
+        catch (AdminApiException exception)
+        {
+            logger.LogWarning(exception, "Failed to delete source workflow {WorkflowId}.", workflowId);
+            ErrorMessage = exception.Message;
+            await OnGetAsync(cancellationToken);
+            return Page();
+        }
+    }
+
+    private async Task<AnalystWorkflowDto?> ResolveSavedWorkflowAsync(IReadOnlyList<AnalystWorkflowDto> workflows, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(SavedViewId))
+        {
+            return null;
+        }
+
+        var workflow = workflows.FirstOrDefault(item => string.Equals(item.Id, SavedViewId, StringComparison.OrdinalIgnoreCase))
+            ?? await adminApiClient.GetAnalystWorkflowAsync(SavedViewId, cancellationToken);
+        if (workflow is null)
+        {
+            WorkflowMessage = "Saved view was not found.";
+        }
+
+        return workflow;
+    }
+
+    private void ApplySavedWorkflow(AnalystWorkflowDto? workflow)
+    {
+        if (workflow is null)
+        {
+            return;
+        }
+
+        CategoryKey = workflow.State.TryGetValue("category", out var category) ? category : CategoryKey;
+        SourceName = workflow.State.TryGetValue("source", out var source) ? source : SourceName;
+        TimeRangeDays = workflow.State.TryGetValue("range", out var range) && int.TryParse(range, out var parsedRange)
+            ? parsedRange
+            : TimeRangeDays;
     }
 
     private int NormalizeTimeRange(int? days)

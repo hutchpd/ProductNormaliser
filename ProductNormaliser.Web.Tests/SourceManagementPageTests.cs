@@ -128,6 +128,35 @@ public sealed class SourceManagementPageTests
         });
     }
 
+    [Test]
+    public async Task SourceDetails_OnPostSaveNoteAsync_SavesSourceNote()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            Sources = [CreateSource("ao_uk", "AO UK", isEnabled: true, categoryKeys: ["tv"], readinessStatus: "Ready", healthStatus: "Healthy")]
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.DetailsModel>.Instance)
+        {
+            NoteInput = new ProductNormaliser.Web.Pages.Sources.DetailsModel.AnalystNoteInput
+            {
+                Title = "Check crawl timing",
+                Content = "Review timeout profile before next pricing crawl."
+            }
+        };
+
+        var result = await model.OnPostSaveNoteAsync("ao_uk", CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(client.LastSavedAnalystNoteRequest, Is.Not.Null);
+            Assert.That(client.LastSavedAnalystNoteRequest!.TargetType, Is.EqualTo("source"));
+            Assert.That(client.LastSavedAnalystNoteRequest.TargetId, Is.EqualTo("ao_uk"));
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
+        });
+    }
+
     private static DefaultHttpContext CreateHttpContextWithCategoryCookie(string categoryKey)
     {
         var httpContext = new DefaultHttpContext();

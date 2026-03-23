@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
+using ProductNormaliser.Application.Analyst;
 using ProductNormaliser.Application.Categories;
 using ProductNormaliser.Application.Crawls;
 using ProductNormaliser.Application.Governance;
@@ -38,6 +39,8 @@ public static class MongoServiceCollectionExtensions
         });
 
         services.AddSingleton<RawPageRepository>();
+        services.AddSingleton<AnalystNoteRepository>();
+        services.AddSingleton<AnalystWorkflowRepository>();
         services.AddSingleton<SourceProductRepository>();
         services.AddSingleton<CanonicalProductRepository>();
         services.AddSingleton<ProductOfferRepository>();
@@ -55,6 +58,8 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<CategoryMetadataRepository>();
         services.AddSingleton<KnownCrawlTargetRepository>();
         services.AddSingleton<IRawPageStore>(serviceProvider => serviceProvider.GetRequiredService<RawPageRepository>());
+        services.AddSingleton<IAnalystNoteStore>(serviceProvider => serviceProvider.GetRequiredService<AnalystNoteRepository>());
+        services.AddSingleton<IAnalystWorkflowStore>(serviceProvider => serviceProvider.GetRequiredService<AnalystWorkflowRepository>());
         services.AddSingleton<ICategoryMetadataStore>(serviceProvider => serviceProvider.GetRequiredService<CategoryMetadataRepository>());
         services.AddSingleton<ICrawlJobStore>(serviceProvider => serviceProvider.GetRequiredService<CrawlJobRepository>());
         services.AddSingleton<IKnownCrawlTargetStore>(serviceProvider => serviceProvider.GetRequiredService<KnownCrawlTargetRepository>());

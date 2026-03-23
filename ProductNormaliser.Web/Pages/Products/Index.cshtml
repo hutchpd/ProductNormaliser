@@ -7,10 +7,98 @@
 <section class="dashboard-shell">
     <partial name="_PageHero" model="Model.Hero" />
 
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="notice success">@Model.StatusMessage</div>
+    }
+
     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
     {
         <div class="notice error">@Model.ErrorMessage</div>
     }
+
+    @if (!string.IsNullOrWhiteSpace(Model.WorkflowMessage))
+    {
+        <div class="notice error">@Model.WorkflowMessage</div>
+    }
+
+    <section class="panel panel-muted">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Saved Workflows</p>
+                <h2>Keep product investigation views ready</h2>
+                <p class="subtle-copy">Save the current filter state as a reusable analyst view or a lightweight category watchlist.</p>
+            </div>
+        </div>
+
+        <form method="post" asp-page-handler="SaveView" class="analytics-filter-grid two-up">
+            <input type="hidden" name="CategoryKey" value="@Model.CategoryKey" />
+            <input type="hidden" name="Search" value="@Model.Search" />
+            <input type="hidden" name="MinSourceCount" value="@Model.MinSourceCount" />
+            <input type="hidden" name="Freshness" value="@Model.Freshness" />
+            <input type="hidden" name="ConflictStatus" value="@Model.ConflictStatus" />
+            <input type="hidden" name="CompletenessStatus" value="@Model.CompletenessStatus" />
+            <input type="hidden" name="Sort" value="@Model.Sort" />
+            <input type="hidden" name="PageNumber" value="@Model.PageNumber" />
+            <input type="hidden" name="SavedViewId" value="@Model.SavedViewId" />
+            <div>
+                <label asp-for="SaveViewName" class="form-label">View name</label>
+                <input asp-for="SaveViewName" class="form-control" placeholder="Stale TVs with conflicts" />
+            </div>
+            <div>
+                <label asp-for="SaveViewDescription" class="form-label">Description</label>
+                <input asp-for="SaveViewDescription" class="form-control" placeholder="Optional analyst note about why this view matters" />
+            </div>
+            <div class="actions-bar analytics-filter-actions">
+                <button type="submit" name="workflowType" value="product_filters" class="btn btn-dark">Save product filters</button>
+                <button type="submit" name="workflowType" value="selected_categories" class="btn btn-outline-dark">Save category watchlist</button>
+            </div>
+        </form>
+
+        @if (Model.SavedWorkflows.Count == 0)
+        {
+            <div class="empty-panel">
+                <p class="empty-state">No saved product workflows exist yet.</p>
+            </div>
+        }
+        else
+        {
+            <div class="analytics-card-grid">
+                @foreach (var workflow in Model.SavedWorkflows)
+                {
+                    <article class="analytics-card @(workflow.IsCurrent ? "attention" : string.Empty)">
+                        <div class="analytics-card-header">
+                            <div>
+                                <strong>@workflow.Name</strong>
+                                <p class="subtle-copy">@workflow.WorkflowTypeLabel • @workflow.PrimaryCategoryLabel</p>
+                            </div>
+                            <span class="status-pill @workflow.StatusTone">@workflow.StatusText</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(workflow.Description))
+                        {
+                            <p class="subtle-copy">@workflow.Description</p>
+                        }
+                        <p class="subtle-copy">@workflow.Summary</p>
+                        <div class="actions-bar analytics-filter-actions">
+                            <a href="@workflow.RestoreUrl" class="btn btn-outline-dark btn-sm">Restore</a>
+                            <form method="post" asp-page-handler="DeleteView" class="inline-form">
+                                <input type="hidden" name="workflowId" value="@workflow.Id" />
+                                <input type="hidden" name="CategoryKey" value="@Model.CategoryKey" />
+                                <input type="hidden" name="Search" value="@Model.Search" />
+                                <input type="hidden" name="MinSourceCount" value="@Model.MinSourceCount" />
+                                <input type="hidden" name="Freshness" value="@Model.Freshness" />
+                                <input type="hidden" name="ConflictStatus" value="@Model.ConflictStatus" />
+                                <input type="hidden" name="CompletenessStatus" value="@Model.CompletenessStatus" />
+                                <input type="hidden" name="Sort" value="@Model.Sort" />
+                                <input type="hidden" name="PageNumber" value="@Model.PageNumber" />
+                                <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                            </form>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+    </section>
 
     <section class="panel">
         <div class="panel-heading">

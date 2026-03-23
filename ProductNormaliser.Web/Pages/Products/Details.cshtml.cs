@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.WebUtilities;
@@ -38,9 +39,17 @@ public sealed class DetailsModel(
     [BindProperty(SupportsGet = true, Name = "sort")]
     public string? ReturnSort { get; set; }
 
+    [BindProperty]
+    public AnalystNoteInput NoteInput { get; set; } = new();
+
+    [TempData]
+    public string? StatusMessage { get; set; }
+
     public string? ErrorMessage { get; private set; }
 
     public ProductDetailDto? Product { get; private set; }
+
+    public AnalystNoteDto? AnalystNote { get; private set; }
 
     public IReadOnlyList<ProductChangeEventDto> ProductHistory { get; private set; } = [];
 
@@ -140,10 +149,21 @@ public sealed class DetailsModel(
         {
             var productTask = adminApiClient.GetProductAsync(ProductId, cancellationToken);
             var historyTask = adminApiClient.GetProductHistoryAsync(ProductId, cancellationToken);
-            await Task.WhenAll(productTask, historyTask);
+            var noteTask = adminApiClient.GetAnalystNoteAsync("product", ProductId, cancellationToken);
+            await Task.WhenAll(productTask, historyTask, noteTask);
 
             Product = productTask.Result;
             ProductHistory = historyTask.Result;
+            AnalystNote = noteTask.Result;
+
+            if (AnalystNote is not null && string.IsNullOrWhiteSpace(NoteInput.Content))
+            {
+                NoteInput = new AnalystNoteInput
+                {
+                    Title = AnalystNote.Title,
+                    Content = AnalystNote.Content
+                };
+            }
 
             if (Product is null)
             {
@@ -155,5 +175,88 @@ public sealed class DetailsModel(
             logger.LogWarning(exception, "Failed to load product detail page data for {ProductId}.", ProductId);
             ErrorMessage = exception.Message;
         }
+    }
+
+    public async Task<IActionResult> OnPostSaveNoteAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(ProductId))
+        {
+            ErrorMessage = "A product id is required.";
+            return Page();
+        }
+
+        try
+        {
+            await adminApiClient.SaveAnalystNoteAsync(new UpsertAnalystNoteRequest
+            {
+                TargetType = "product",
+                TargetId = ProductId,
+                Title = NoteInput.Title,
+                Content = NoteInput.Content
+            }, cancellationToken);
+            StatusMessage = "Saved product note.";
+            return RedirectToPage(new
+            {
+                productId = ProductId,
+                category = ReturnCategory,
+                search = ReturnSearch,
+                returnPage = ReturnPage,
+                minSourceCount = ReturnMinSourceCount,
+                freshness = ReturnFreshness,
+                conflictStatus = ReturnConflictStatus,
+                completeness = ReturnCompletenessStatus,
+                sort = ReturnSort
+            });
+        }
+        catch (AdminApiException exception)
+        {
+            logger.LogWarning(exception, "Failed to save product note for {ProductId}.", ProductId);
+            ErrorMessage = exception.Message;
+            await OnGetAsync(cancellationToken);
+            return Page();
+        }
+    }
+
+    public async Task<IActionResult> OnPostDeleteNoteAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(ProductId))
+        {
+            ErrorMessage = "A product id is required.";
+            return Page();
+        }
+
+        try
+        {
+            await adminApiClient.DeleteAnalystNoteAsync("product", ProductId, cancellationToken);
+            StatusMessage = "Deleted product note.";
+            return RedirectToPage(new
+            {
+                productId = ProductId,
+                category = ReturnCategory,
+                search = ReturnSearch,
+                returnPage = ReturnPage,
+                minSourceCount = ReturnMinSourceCount,
+                freshness = ReturnFreshness,
+                conflictStatus = ReturnConflictStatus,
+                completeness = ReturnCompletenessStatus,
+                sort = ReturnSort
+            });
+        }
+        catch (AdminApiException exception)
+        {
+            logger.LogWarning(exception, "Failed to delete product note for {ProductId}.", ProductId);
+            ErrorMessage = exception.Message;
+            await OnGetAsync(cancellationToken);
+            return Page();
+        }
+    }
+
+    public sealed class AnalystNoteInput
+    {
+        [StringLength(120)]
+        public string? Title { get; set; }
+
+        [StringLength(4000)]
+        public string Content { get; set; } = string.Empty;
     }
 }

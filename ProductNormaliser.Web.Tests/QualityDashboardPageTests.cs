@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using ProductNormaliser.Web.Contracts;
+using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
 
 namespace ProductNormaliser.Web.Tests;
@@ -157,6 +159,43 @@ public sealed class QualityDashboardPageTests
             Assert.That(model.ErrorMessage, Is.EqualTo("Quality analytics are unavailable."));
             Assert.That(model.Coverage.Attributes, Is.Empty);
             Assert.That(model.UnmappedAttributes, Is.Empty);
+        });
+    }
+
+    [Test]
+    public async Task QualityDashboard_OnPostSaveViewAsync_SavesConflictQueue()
+    {
+        var client = new FakeAdminApiClient
+        {
+            SavedAnalystWorkflow = new AnalystWorkflowDto
+            {
+                Id = "workflow_quality_1",
+                Name = "Monitor backlog",
+                WorkflowType = AnalystWorkspacePresentation.WorkflowTypeConflictReviewQueue,
+                RoutePath = "/Quality/Index",
+                PrimaryCategoryKey = "monitor",
+                SelectedCategoryKeys = ["monitor"],
+                State = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["category"] = "monitor"
+                }
+            }
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Quality.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Quality.IndexModel>.Instance)
+        {
+            CategoryKey = "monitor",
+            SaveViewName = "Monitor backlog"
+        };
+
+        var result = await model.OnPostSaveViewAsync(AnalystWorkspacePresentation.WorkflowTypeConflictReviewQueue, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(client.LastSavedAnalystWorkflowRequest, Is.Not.Null);
+            Assert.That(client.LastSavedAnalystWorkflowRequest!.WorkflowType, Is.EqualTo(AnalystWorkspacePresentation.WorkflowTypeConflictReviewQueue));
+            Assert.That(client.LastSavedAnalystWorkflowRequest.State["category"], Is.EqualTo("monitor"));
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
         });
     }
 }

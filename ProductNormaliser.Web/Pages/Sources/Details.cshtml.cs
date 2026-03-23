@@ -20,12 +20,17 @@ public sealed class DetailsModel(
     [BindProperty]
     public ThrottlingInput Throttling { get; set; } = new();
 
+    [BindProperty]
+    public AnalystNoteInput NoteInput { get; set; } = new();
+
     [TempData]
     public string? StatusMessage { get; set; }
 
     public string? ErrorMessage { get; private set; }
 
     public SourceDto? CurrentSource { get; private set; }
+
+    public AnalystNoteDto? AnalystNote { get; private set; }
 
     public IReadOnlyList<CategoryMetadataDto> AvailableCategories { get; private set; } = [];
 
@@ -174,17 +179,70 @@ public sealed class DetailsModel(
         return await LoadAsync(sourceId, cancellationToken) ? Page() : NotFound();
     }
 
+    public async Task<IActionResult> OnPostSaveNoteAsync(string sourceId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await adminApiClient.SaveAnalystNoteAsync(new UpsertAnalystNoteRequest
+            {
+                TargetType = "source",
+                TargetId = sourceId,
+                Title = NoteInput.Title,
+                Content = NoteInput.Content
+            }, cancellationToken);
+            StatusMessage = $"Saved note for '{sourceId}'.";
+            return RedirectToPage(new { sourceId });
+        }
+        catch (AdminApiException exception)
+        {
+            logger.LogWarning(exception, "Failed to save note for source {SourceId}.", sourceId);
+            ErrorMessage = exception.Message;
+            return await LoadAsync(sourceId, cancellationToken) ? Page() : NotFound();
+        }
+    }
+
+    public async Task<IActionResult> OnPostDeleteNoteAsync(string sourceId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await adminApiClient.DeleteAnalystNoteAsync("source", sourceId, cancellationToken);
+            StatusMessage = $"Deleted note for '{sourceId}'.";
+            return RedirectToPage(new { sourceId });
+        }
+        catch (AdminApiException exception)
+        {
+            logger.LogWarning(exception, "Failed to delete note for source {SourceId}.", sourceId);
+            ErrorMessage = exception.Message;
+            return await LoadAsync(sourceId, cancellationToken) ? Page() : NotFound();
+        }
+    }
+
     private async Task<bool> LoadAsync(string sourceId, CancellationToken cancellationToken)
     {
         try
         {
-            AvailableCategories = (await adminApiClient.GetCategoriesAsync(cancellationToken))
+            var categoriesTask = adminApiClient.GetCategoriesAsync(cancellationToken);
+            var sourceTask = adminApiClient.GetSourceAsync(sourceId, cancellationToken);
+            var noteTask = adminApiClient.GetAnalystNoteAsync("source", sourceId, cancellationToken);
+            await Task.WhenAll(categoriesTask, sourceTask, noteTask);
+
+            AvailableCategories = categoriesTask.Result
                 .OrderBy(category => category.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            CurrentSource = await adminApiClient.GetSourceAsync(sourceId, cancellationToken);
+            CurrentSource = sourceTask.Result;
+            AnalystNote = noteTask.Result;
             if (CurrentSource is null)
             {
                 return false;
+            }
+
+            if (AnalystNote is not null && string.IsNullOrWhiteSpace(NoteInput.Content))
+            {
+                NoteInput = new AnalystNoteInput
+                {
+                    Title = AnalystNote.Title,
+                    Content = AnalystNote.Content
+                };
             }
 
             if (string.IsNullOrWhiteSpace(Source.DisplayName))
@@ -270,5 +328,14 @@ public sealed class DetailsModel(
         public int RequestsPerMinute { get; set; } = 30;
 
         public bool RespectRobotsTxt { get; set; } = true;
+    }
+
+    public sealed class AnalystNoteInput
+    {
+        [StringLength(120)]
+        public string? Title { get; set; }
+
+        [StringLength(4000)]
+        public string Content { get; set; } = string.Empty;
     }
 }
