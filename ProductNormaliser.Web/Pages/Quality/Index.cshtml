@@ -1,0 +1,294 @@
+@page
+@model ProductNormaliser.Web.Pages.Quality.IndexModel
+@{
+    ViewData["Title"] = "Quality Dashboard";
+}
+
+<section class="dashboard-shell">
+    <partial name="_PageHero" model="Model.Hero" />
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="notice error">@Model.ErrorMessage</div>
+    }
+
+    <section class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Quality Scope</p>
+                <h2>Choose a category lens</h2>
+                <p class="subtle-copy">Every panel below is recalculated for the selected category, so coverage and disagreement semantics follow the active schema instead of assuming one product family.</p>
+            </div>
+        </div>
+
+        <form method="get" class="analytics-filter-grid">
+            <div>
+                <label asp-for="CategoryKey" class="form-label">Category</label>
+                <select asp-for="CategoryKey" class="form-select">
+                    <option value="">Select a category</option>
+                    @foreach (var category in Model.Categories)
+                    {
+                        <option value="@category.CategoryKey">@category.DisplayName</option>
+                    }
+                </select>
+            </div>
+            <div class="actions-bar analytics-filter-actions">
+                <button type="submit" class="btn btn-dark">Load dashboard</button>
+                <a asp-page="/Quality/Index" class="btn btn-outline-secondary">Reset</a>
+            </div>
+        </form>
+    </section>
+
+    @if (Model.IsAwaitingSelection)
+    {
+        <section class="panel panel-muted">
+            <div class="empty-panel">
+                <p class="empty-state">Select a category to load coverage, disagreement, backlog, and stability analytics.</p>
+            </div>
+        </section>
+    }
+    else if (Model.IsEmpty)
+    {
+        <section class="panel panel-muted">
+            <div class="empty-panel">
+                <p class="empty-state">No quality analytics are available for @Model.SelectedCategory?.DisplayName yet.</p>
+            </div>
+        </section>
+    }
+    else
+    {
+        <section class="panel panel-muted">
+            <div class="metric-strip analytics-strip">
+                <article>
+                    <span>Canonical products</span>
+                    <strong>@Model.Coverage.TotalCanonicalProducts</strong>
+                </article>
+                <article>
+                    <span>Source products</span>
+                    <strong>@Model.Coverage.TotalSourceProducts</strong>
+                </article>
+                <article>
+                    <span>Average coverage</span>
+                    <strong>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(Model.AverageCoverage)</strong>
+                </article>
+                <article>
+                    <span>Average reliability</span>
+                    <strong>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(Model.AverageReliability)</strong>
+                </article>
+            </div>
+        </section>
+
+        <section class="panel panel-muted inspector-section">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Coverage Heatmap</p>
+                    <h2>Schema coverage and reliability</h2>
+                </div>
+            </div>
+
+            <div class="analytics-card-grid">
+                @foreach (var coverageItem in Model.CoverageHeatmap)
+                {
+                    <article class="analytics-card">
+                        <div class="analytics-card-header">
+                            <div>
+                                <strong>@coverageItem.DisplayName</strong>
+                                <p class="subtle-copy mono">@coverageItem.AttributeKey</p>
+                            </div>
+                            <span class="status-pill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetPositiveTone(coverageItem.CoveragePercent)">@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(coverageItem.CoveragePercent)</span>
+                        </div>
+
+                        <div class="analytics-heat-grid">
+                            <div>
+                                <span>Coverage</span>
+                                <div class="analytics-meter-shell"><div class="analytics-meter-fill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetPositiveTone(coverageItem.CoveragePercent)" style="@ProductNormaliser.Web.Models.AnalyticsPresentation.GetWidthStyle(coverageItem.CoveragePercent)"></div></div>
+                            </div>
+                            <div>
+                                <span>Reliability</span>
+                                <div class="analytics-meter-shell"><div class="analytics-meter-fill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetPositiveTone(coverageItem.ReliabilityScore)" style="@ProductNormaliser.Web.Models.AnalyticsPresentation.GetWidthStyle(coverageItem.ReliabilityScore)"></div></div>
+                            </div>
+                            <div>
+                                <span>Conflict</span>
+                                <div class="analytics-meter-shell"><div class="analytics-meter-fill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetInverseTone(coverageItem.ConflictPercent)" style="@ProductNormaliser.Web.Models.AnalyticsPresentation.GetWidthStyle(coverageItem.ConflictPercent)"></div></div>
+                            </div>
+                        </div>
+
+                        <dl class="job-meta-grid compact">
+                            <div>
+                                <dt>Present</dt>
+                                <dd>@coverageItem.PresentProductCount</dd>
+                            </div>
+                            <div>
+                                <dt>Missing</dt>
+                                <dd>@coverageItem.MissingProductCount</dd>
+                            </div>
+                            <div>
+                                <dt>Agreement</dt>
+                                <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(coverageItem.AgreementPercent)</dd>
+                            </div>
+                            <div>
+                                <dt>Confidence</dt>
+                                <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatConfidence(coverageItem.AverageConfidence)</dd>
+                            </div>
+                        </dl>
+                    </article>
+                }
+            </div>
+        </section>
+
+        <section class="panel panel-muted inspector-section">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Backlog</p>
+                    <h2>Unmapped attribute backlog</h2>
+                </div>
+            </div>
+
+            @if (Model.UnmappedAttributes.Count == 0)
+            {
+                <div class="empty-panel">
+                    <p class="empty-state">No unmapped attributes are waiting for review in this category.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table dashboard-table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Raw attribute</th>
+                                <th>Suggested canonical key</th>
+                                <th>Sources</th>
+                                <th>Occurrences</th>
+                                <th>Sample values</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var backlogItem in Model.UnmappedAttributes)
+                            {
+                                <tr>
+                                    <td class="mono">@backlogItem.RawAttributeKey</td>
+                                    <td class="mono">@backlogItem.CanonicalKey</td>
+                                    <td>@string.Join(", ", backlogItem.SourceNames)</td>
+                                    <td>@backlogItem.OccurrenceCount</td>
+                                    <td>@string.Join(" | ", backlogItem.SampleValues.Take(3))</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <section class="panel panel-muted inspector-section">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Disagreement Matrix</p>
+                    <h2>Source by attribute disagreement</h2>
+                </div>
+            </div>
+
+            @if (Model.DisagreementMatrix.Rows.Count == 0)
+            {
+                <div class="empty-panel">
+                    <p class="empty-state">No source disagreement records are available for this category.</p>
+                </div>
+            }
+            else
+            {
+                <div class="comparison-table-wrap">
+                    <table class="comparison-table analytics-matrix-table">
+                        <thead>
+                            <tr>
+                                <th class="sticky-col">Attribute</th>
+                                @foreach (var column in Model.DisagreementMatrix.Columns)
+                                {
+                                    <th>@column.SourceName</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in Model.DisagreementMatrix.Rows)
+                            {
+                                <tr>
+                                    <th class="sticky-col mono">@row.AttributeKey</th>
+                                    @foreach (var cell in row.Cells)
+                                    {
+                                        <td class="analytics-matrix-cell @(cell.HasData ? cell.Tone : "missing")">
+                                            @if (!cell.HasData)
+                                            {
+                                                <span class="subtle-copy">No signal</span>
+                                            }
+                                            else
+                                            {
+                                                <div class="analytics-matrix-value">
+                                                    <strong>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(cell.DisagreementRate)</strong>
+                                                    <span class="subtle-copy">@cell.TimesDisagreed / @cell.TotalComparisons</span>
+                                                </div>
+                                            }
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <section class="panel panel-muted inspector-section">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Stability</p>
+                    <h2>Attribute stability charts</h2>
+                </div>
+            </div>
+
+            @if (Model.StabilityChart.Count == 0)
+            {
+                <div class="empty-panel">
+                    <p class="empty-state">No attribute stability records are available for this category.</p>
+                </div>
+            }
+            else
+            {
+                <div class="trend-stack">
+                    @foreach (var stabilityItem in Model.StabilityChart)
+                    {
+                        <article class="trend-card @(stabilityItem.IsSuspicious ? "attention" : string.Empty)">
+                            <div class="trend-card-header">
+                                <div>
+                                    <strong class="mono">@stabilityItem.AttributeKey</strong>
+                                    @if (!string.IsNullOrWhiteSpace(stabilityItem.SuspicionReason))
+                                    {
+                                        <p class="subtle-copy">@stabilityItem.SuspicionReason</p>
+                                    }
+                                </div>
+                                <span class="status-pill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetPositiveTone(stabilityItem.StabilityScore)">@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(stabilityItem.StabilityScore)</span>
+                            </div>
+                            <div class="analytics-meter-shell"><div class="analytics-meter-fill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetPositiveTone(stabilityItem.StabilityScore)" style="@ProductNormaliser.Web.Models.AnalyticsPresentation.GetWidthStyle(stabilityItem.StabilityScore)"></div></div>
+                            <dl class="job-meta-grid compact">
+                                <div>
+                                    <dt>Changes</dt>
+                                    <dd>@stabilityItem.ChangeCount</dd>
+                                </div>
+                                <div>
+                                    <dt>Oscillations</dt>
+                                    <dd>@stabilityItem.OscillationCount</dd>
+                                </div>
+                                <div>
+                                    <dt>Distinct values</dt>
+                                    <dd>@stabilityItem.DistinctValueCount</dd>
+                                </div>
+                                <div>
+                                    <dt>Suspicious</dt>
+                                    <dd>@(stabilityItem.IsSuspicious ? "Yes" : "No")</dd>
+                                </div>
+                            </dl>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+    }
+</section>

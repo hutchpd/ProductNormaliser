@@ -136,6 +136,78 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
         return await GetRequiredAsync<ProductChangeEventDto[]>($"api/products/{Uri.EscapeDataString(productId)}/history", cancellationToken) ?? [];
     }
 
+    public Task<DetailedCoverageResponseDto> GetDetailedCoverageAsync(string categoryKey, CancellationToken cancellationToken = default)
+    {
+        var relativeUri = BuildRelativeUri("api/quality/coverage/detailed", new Dictionary<string, string?>
+        {
+            ["categoryKey"] = categoryKey
+        });
+
+        return GetRequiredAsync<DetailedCoverageResponseDto>(relativeUri, cancellationToken)!;
+    }
+
+    public async Task<IReadOnlyList<UnmappedAttributeDto>> GetUnmappedAttributesAsync(string categoryKey, CancellationToken cancellationToken = default)
+    {
+        var relativeUri = BuildRelativeUri("api/quality/unmapped", new Dictionary<string, string?>
+        {
+            ["categoryKey"] = categoryKey
+        });
+
+        return await GetRequiredAsync<UnmappedAttributeDto[]>(relativeUri, cancellationToken) ?? [];
+    }
+
+    public async Task<IReadOnlyList<SourceQualityScoreDto>> GetSourceQualityScoresAsync(string categoryKey, CancellationToken cancellationToken = default)
+    {
+        var relativeUri = BuildRelativeUri("api/quality/sources", new Dictionary<string, string?>
+        {
+            ["categoryKey"] = categoryKey
+        });
+
+        return await GetRequiredAsync<SourceQualityScoreDto[]>(relativeUri, cancellationToken) ?? [];
+    }
+
+    public Task<MergeInsightsResponseDto> GetMergeInsightsAsync(string categoryKey, CancellationToken cancellationToken = default)
+    {
+        var relativeUri = BuildRelativeUri("api/quality/merge-insights", new Dictionary<string, string?>
+        {
+            ["categoryKey"] = categoryKey
+        });
+
+        return GetRequiredAsync<MergeInsightsResponseDto>(relativeUri, cancellationToken)!;
+    }
+
+    public async Task<IReadOnlyList<SourceQualitySnapshotDto>> GetSourceHistoryAsync(string categoryKey, string? sourceName = null, CancellationToken cancellationToken = default)
+    {
+        var relativeUri = BuildRelativeUri("api/quality/source-history", new Dictionary<string, string?>
+        {
+            ["categoryKey"] = categoryKey,
+            ["sourceName"] = sourceName
+        });
+
+        return await GetRequiredAsync<SourceQualitySnapshotDto[]>(relativeUri, cancellationToken) ?? [];
+    }
+
+    public async Task<IReadOnlyList<AttributeStabilityDto>> GetAttributeStabilityAsync(string categoryKey, CancellationToken cancellationToken = default)
+    {
+        var relativeUri = BuildRelativeUri("api/quality/attribute-stability", new Dictionary<string, string?>
+        {
+            ["categoryKey"] = categoryKey
+        });
+
+        return await GetRequiredAsync<AttributeStabilityDto[]>(relativeUri, cancellationToken) ?? [];
+    }
+
+    public async Task<IReadOnlyList<SourceAttributeDisagreementDto>> GetSourceDisagreementsAsync(string categoryKey, string? sourceName = null, CancellationToken cancellationToken = default)
+    {
+        var relativeUri = BuildRelativeUri("api/quality/source-disagreements", new Dictionary<string, string?>
+        {
+            ["categoryKey"] = categoryKey,
+            ["sourceName"] = sourceName
+        });
+
+        return await GetRequiredAsync<SourceAttributeDisagreementDto[]>(relativeUri, cancellationToken) ?? [];
+    }
+
     private async Task<T?> GetOptionalAsync<T>(string relativeUri, CancellationToken cancellationToken)
     {
         using var response = await httpClient.GetAsync(relativeUri, cancellationToken);

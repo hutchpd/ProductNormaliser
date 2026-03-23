@@ -7,5 +7,6 @@ public sealed class CanonicalAttributeDefinition
     public string ValueType { get; set; } = default!;
     public string? Unit { get; set; }
     public bool IsRequired { get; set; }
+    public ConflictSensitivity ConflictSensitivity { get; set; } = ConflictSensitivity.Medium;
     public string Description { get; set; } = default!;
 }

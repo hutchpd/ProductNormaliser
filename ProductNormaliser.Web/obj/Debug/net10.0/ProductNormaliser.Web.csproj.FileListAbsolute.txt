@@ -94,5 +94,5 @@ C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\refint\
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\ProductNormaliser.Web.pdb
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\ProductNormaliser.Web.genruntimeconfig.cache
 C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\ref\ProductNormaliser.Web.dll
-C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\compressed\pz0ooybwrp-{0}-wbjd12v45f-wbjd12v45f.gz
-C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\compressed\i375wqfdvz-{0}-lofayulxxi-lofayulxxi.gz
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\compressed\pz0ooybwrp-{0}-ynt4fuide8-ynt4fuide8.gz
+C:\Users\xhabl\ProductNormaliser\ProductNormaliser.Web\obj\Debug\net10.0\compressed\i375wqfdvz-{0}-i1f4tsw80k-i1f4tsw80k.gz

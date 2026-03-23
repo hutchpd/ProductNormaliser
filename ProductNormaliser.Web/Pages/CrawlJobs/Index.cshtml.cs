@@ -218,7 +218,7 @@ public sealed class IndexModel(
 
         await Task.WhenAll(categoriesTask, sourcesTask);
 
-        Categories = categoriesTask.Result.OrderBy(category => category.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
+        Categories = InteractiveCategoryFilter.Apply(categoriesTask.Result);
         Sources = sourcesTask.Result.OrderBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
 
         Launch.RequestType = "category";

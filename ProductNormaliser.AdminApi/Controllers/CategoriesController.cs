@@ -117,6 +117,7 @@ public sealed class CategoriesController(ICategoryManagementService categoryMana
                 ValueType = attribute.ValueType,
                 Unit = attribute.Unit,
                 IsRequired = attribute.IsRequired,
+                ConflictSensitivity = attribute.ConflictSensitivity.ToString(),
                 Description = attribute.Description
             }).ToArray()
         };

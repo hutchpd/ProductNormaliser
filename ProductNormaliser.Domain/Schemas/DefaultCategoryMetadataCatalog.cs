@@ -7,8 +7,8 @@ public static class DefaultCategoryMetadataCatalog
     private static readonly IReadOnlyList<CategoryMetadata> Categories =
     [
         Create("tv", "TVs", "display", "Display", "tv", CrawlSupportStatus.Supported, 1.00m, true),
-        Create("monitor", "Monitors", "display", "Display", "monitor", CrawlSupportStatus.Planned, 0.15m, false),
-        Create("laptop", "Laptops", "computing", "Computing", "laptop", CrawlSupportStatus.Planned, 0.15m, false),
+        Create("monitor", "Monitors", "display", "Display", "monitor", CrawlSupportStatus.Supported, 0.89m, true),
+        Create("laptop", "Laptops", "computing", "Computing", "laptop", CrawlSupportStatus.Supported, 0.87m, true),
         Create("tablet", "Tablets", "mobile", "Mobile", "tablet", CrawlSupportStatus.Planned, 0.15m, false),
         Create("smartphone", "Smartphones", "mobile", "Mobile", "smartphone", CrawlSupportStatus.Planned, 0.15m, false),
         Create("headphones", "Headphones", "audio", "Audio", "headphones", CrawlSupportStatus.Planned, 0.15m, false),

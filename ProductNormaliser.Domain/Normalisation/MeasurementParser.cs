@@ -6,7 +6,7 @@ namespace ProductNormaliser.Core.Normalisation;
 public sealed class MeasurementParser
 {
     private static readonly Regex MeasurementPattern = new(
-        @"(?<value>\d+(?:[\.,]\d+)?)\s*(?<unit>inches|inch|in|cm|mm|hz)?\b",
+        @"(?<value>\d+(?:[\.,]\d+)?)\s*(?<unit>inches|inch|in|cm|mm|hz|tb|gb|kg|g|hours|hour|hrs|hr)?\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public MeasurementParseResult Parse(string? rawValue)
@@ -62,6 +62,11 @@ public sealed class MeasurementParser
             "cm" => "cm",
             "mm" => "mm",
             "hz" => "hz",
+            "tb" => "tb",
+            "gb" => "gb",
+            "kg" => "kg",
+            "g" => "g",
+            "hours" or "hour" or "hrs" or "hr" => "hour",
             _ => null
         };
     }

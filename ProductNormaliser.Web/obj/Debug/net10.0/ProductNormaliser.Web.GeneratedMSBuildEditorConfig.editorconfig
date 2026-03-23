@@ -26,6 +26,10 @@ build_property.EnableCodeStyleSeverity =
 build_metadata.AdditionalFiles.TargetPath = UGFnZXNcQ2F0ZWdvcmllc1xJbmRleC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
+[C:/Users/xhabl/ProductNormaliser/ProductNormaliser.Web/Pages/CrawlJobs/Details.cshtml]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcQ3Jhd2xKb2JzXERldGFpbHMuY3NodG1s
+build_metadata.AdditionalFiles.CssScope = 
+
 [C:/Users/xhabl/ProductNormaliser/ProductNormaliser.Web/Pages/CrawlJobs/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = UGFnZXNcQ3Jhd2xKb2JzXEluZGV4LmNzaHRtbA==
 build_metadata.AdditionalFiles.CssScope = 
@@ -42,8 +46,40 @@ build_metadata.AdditionalFiles.CssScope =
 build_metadata.AdditionalFiles.TargetPath = UGFnZXNcUHJpdmFjeS5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
+[C:/Users/xhabl/ProductNormaliser/ProductNormaliser.Web/Pages/Products/Details.cshtml]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcUHJvZHVjdHNcRGV0YWlscy5jc2h0bWw=
+build_metadata.AdditionalFiles.CssScope = 
+
 [C:/Users/xhabl/ProductNormaliser/ProductNormaliser.Web/Pages/Products/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = UGFnZXNcUHJvZHVjdHNcSW5kZXguY3NodG1s
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/xhabl/ProductNormaliser/ProductNormaliser.Web/Pages/Products/_ProductComparisonSection.cshtml]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcUHJvZHVjdHNcX1Byb2R1Y3RDb21wYXJpc29uU2VjdGlvbi5jc2h0bWw=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/xhabl/ProductNormaliser/ProductNormaliser.Web/Pages/Products/_ProductConflictSection.cshtml]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcUHJvZHVjdHNcX1Byb2R1Y3RDb25mbGljdFNlY3Rpb24uY3NodG1s
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/xhabl/ProductNormaliser/ProductNormaliser.Web/Pages/Products/_ProductEvidenceSection.cshtml]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcUHJvZHVjdHNcX1Byb2R1Y3RFdmlkZW5jZVNlY3Rpb24uY3NodG1s
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/xhabl/ProductNormaliser/ProductNormaliser.Web/Pages/Products/_ProductKeyAttributesSection.cshtml]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcUHJvZHVjdHNcX1Byb2R1Y3RLZXlBdHRyaWJ1dGVzU2VjdGlvbi5jc2h0bWw=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/xhabl/ProductNormaliser/ProductNormaliser.Web/Pages/Products/_ProductSummarySection.cshtml]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcUHJvZHVjdHNcX1Byb2R1Y3RTdW1tYXJ5U2VjdGlvbi5jc2h0bWw=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/xhabl/ProductNormaliser/ProductNormaliser.Web/Pages/Products/_ProductTimelineSection.cshtml]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcUHJvZHVjdHNcX1Byb2R1Y3RUaW1lbGluZVNlY3Rpb24uY3NodG1s
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/xhabl/ProductNormaliser/ProductNormaliser.Web/Pages/Quality/Index.cshtml]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcUXVhbGl0eVxJbmRleC5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 
 
 [C:/Users/xhabl/ProductNormaliser/ProductNormaliser.Web/Pages/Shared/_CategorySelector.cshtml]
@@ -72,6 +108,10 @@ build_metadata.AdditionalFiles.CssScope =
 
 [C:/Users/xhabl/ProductNormaliser/ProductNormaliser.Web/Pages/Sources/Index.cshtml]
 build_metadata.AdditionalFiles.TargetPath = UGFnZXNcU291cmNlc1xJbmRleC5jc2h0bWw=
+build_metadata.AdditionalFiles.CssScope = 
+
+[C:/Users/xhabl/ProductNormaliser/ProductNormaliser.Web/Pages/Sources/Intelligence.cshtml]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcU291cmNlc1xJbnRlbGxpZ2VuY2UuY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
 [C:/Users/xhabl/ProductNormaliser/ProductNormaliser.Web/Pages/_ViewImports.cshtml]

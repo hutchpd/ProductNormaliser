@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ProductNormaliser.Domain")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+72903ecd890ce5fdf4f62ae7905dac522cdd7f53")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7ed7b326c0e888f7391180197f368e43b63e83fb")]
 [assembly: System.Reflection.AssemblyProductAttribute("ProductNormaliser.Domain")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ProductNormaliser.Domain")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

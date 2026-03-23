@@ -7,5 +7,6 @@ public sealed class CategorySchemaAttributeDto
     public string ValueType { get; init; } = default!;
     public string? Unit { get; init; }
     public bool IsRequired { get; init; }
+    public string ConflictSensitivity { get; init; } = default!;
     public string Description { get; init; } = default!;
 }

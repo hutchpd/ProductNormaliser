@@ -21,10 +21,14 @@ public sealed class TvAttributeNormaliser : CategoryAttributeNormaliserBase
                 ["screen size"] = "screen_size_inch",
                 ["screensize"] = "screen_size_inch",
                 ["display size"] = "screen_size_inch",
+                ["screen diagonal"] = "screen_size_inch",
                 ["hdmi ports"] = "hdmi_port_count",
                 ["number of hdmi ports"] = "hdmi_port_count",
                 ["smart tv"] = "smart_tv",
-                ["refresh rate"] = "refresh_rate_hz"
+                ["refresh rate"] = "refresh_rate_hz",
+                ["vesa"] = "vesa_mount_width_mm",
+                ["vesa horizontal"] = "vesa_mount_width_mm",
+                ["vesa vertical"] = "vesa_mount_height_mm"
             },
             valueMappings: new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal)
             {
@@ -39,7 +43,9 @@ public sealed class TvAttributeNormaliser : CategoryAttributeNormaliserBase
                     ["4k ultra hd"] = "4K",
                     ["ultra hd"] = "4K",
                     ["full hd"] = "1080p",
-                    ["hd ready"] = "720p"
+                    ["hd ready"] = "720p",
+                    ["3840 x 2160"] = "4K",
+                    ["1920 x 1080"] = "1080p"
                 }
             },
             attributeNameNormaliser: attributeNameNormaliser,
@@ -57,7 +63,8 @@ public sealed class TvAttributeNormaliser : CategoryAttributeNormaliserBase
             "refresh_rate_hz" => NormaliseIntegerMeasurement(rawAttribute, definition),
             "hdmi_port_count" => NormaliseInteger(rawAttribute, definition),
             "smart_tv" => NormaliseBoolean(rawAttribute, definition),
-            "width_mm" or "height_mm" or "depth_mm" or "vesa_mount_width_mm" or "vesa_mount_height_mm" => NormaliseDecimalMeasurement(rawAttribute, definition),
+            "width_mm" or "height_mm" or "depth_mm" => NormaliseDecimalMeasurement(rawAttribute, definition),
+            "vesa_mount_width_mm" or "vesa_mount_height_mm" => NormaliseIntegerMeasurement(rawAttribute, definition),
             _ => default!
         };
 

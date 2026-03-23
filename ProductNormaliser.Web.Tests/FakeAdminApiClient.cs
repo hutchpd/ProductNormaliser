@@ -17,12 +17,29 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public CrawlJobDto? CreatedJob { get; set; }
     public CrawlJobDto? CancelledJob { get; set; }
     public Exception? CreateJobException { get; set; }
+    public Exception? AnalyticsException { get; set; }
     public CreateCrawlJobRequest? LastCreatedJobRequest { get; private set; }
     public string? LastCancelledJobId { get; private set; }
     public ProductListResponseDto ProductPage { get; set; } = new();
     public ProductDetailDto? Product { get; set; }
     public IReadOnlyList<ProductChangeEventDto> ProductHistory { get; set; } = [];
     public ProductListQueryDto? LastProductQuery { get; private set; }
+    public DetailedCoverageResponseDto DetailedCoverage { get; set; } = new();
+    public IReadOnlyList<UnmappedAttributeDto> UnmappedAttributes { get; set; } = [];
+    public IReadOnlyList<SourceQualityScoreDto> SourceQualityScores { get; set; } = [];
+    public MergeInsightsResponseDto MergeInsights { get; set; } = new();
+    public IReadOnlyList<SourceQualitySnapshotDto> SourceHistory { get; set; } = [];
+    public IReadOnlyList<AttributeStabilityDto> AttributeStability { get; set; } = [];
+    public IReadOnlyList<SourceAttributeDisagreementDto> SourceDisagreements { get; set; } = [];
+    public string? LastCoverageCategoryKey { get; private set; }
+    public string? LastUnmappedCategoryKey { get; private set; }
+    public string? LastSourceQualityCategoryKey { get; private set; }
+    public string? LastMergeInsightsCategoryKey { get; private set; }
+    public string? LastSourceHistoryCategoryKey { get; private set; }
+    public string? LastSourceHistorySourceName { get; private set; }
+    public string? LastAttributeStabilityCategoryKey { get; private set; }
+    public string? LastSourceDisagreementsCategoryKey { get; private set; }
+    public string? LastSourceDisagreementsSourceName { get; private set; }
 
     public Task<StatsDto> GetStatsAsync(CancellationToken cancellationToken = default) => Task.FromResult(Stats);
     public Task<IReadOnlyList<CategoryMetadataDto>> GetCategoriesAsync(CancellationToken cancellationToken = default) => Task.FromResult(Categories);
@@ -63,4 +80,83 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     }
     public Task<ProductDetailDto?> GetProductAsync(string productId, CancellationToken cancellationToken = default) => Task.FromResult(Product);
     public Task<IReadOnlyList<ProductChangeEventDto>> GetProductHistoryAsync(string productId, CancellationToken cancellationToken = default) => Task.FromResult(ProductHistory);
+
+    public Task<DetailedCoverageResponseDto> GetDetailedCoverageAsync(string categoryKey, CancellationToken cancellationToken = default)
+    {
+        if (AnalyticsException is not null)
+        {
+            return Task.FromException<DetailedCoverageResponseDto>(AnalyticsException);
+        }
+
+        LastCoverageCategoryKey = categoryKey;
+        return Task.FromResult(DetailedCoverage);
+    }
+
+    public Task<IReadOnlyList<UnmappedAttributeDto>> GetUnmappedAttributesAsync(string categoryKey, CancellationToken cancellationToken = default)
+    {
+        if (AnalyticsException is not null)
+        {
+            return Task.FromException<IReadOnlyList<UnmappedAttributeDto>>(AnalyticsException);
+        }
+
+        LastUnmappedCategoryKey = categoryKey;
+        return Task.FromResult(UnmappedAttributes);
+    }
+
+    public Task<IReadOnlyList<SourceQualityScoreDto>> GetSourceQualityScoresAsync(string categoryKey, CancellationToken cancellationToken = default)
+    {
+        if (AnalyticsException is not null)
+        {
+            return Task.FromException<IReadOnlyList<SourceQualityScoreDto>>(AnalyticsException);
+        }
+
+        LastSourceQualityCategoryKey = categoryKey;
+        return Task.FromResult(SourceQualityScores);
+    }
+
+    public Task<MergeInsightsResponseDto> GetMergeInsightsAsync(string categoryKey, CancellationToken cancellationToken = default)
+    {
+        if (AnalyticsException is not null)
+        {
+            return Task.FromException<MergeInsightsResponseDto>(AnalyticsException);
+        }
+
+        LastMergeInsightsCategoryKey = categoryKey;
+        return Task.FromResult(MergeInsights);
+    }
+
+    public Task<IReadOnlyList<SourceQualitySnapshotDto>> GetSourceHistoryAsync(string categoryKey, string? sourceName = null, CancellationToken cancellationToken = default)
+    {
+        if (AnalyticsException is not null)
+        {
+            return Task.FromException<IReadOnlyList<SourceQualitySnapshotDto>>(AnalyticsException);
+        }
+
+        LastSourceHistoryCategoryKey = categoryKey;
+        LastSourceHistorySourceName = sourceName;
+        return Task.FromResult(SourceHistory);
+    }
+
+    public Task<IReadOnlyList<AttributeStabilityDto>> GetAttributeStabilityAsync(string categoryKey, CancellationToken cancellationToken = default)
+    {
+        if (AnalyticsException is not null)
+        {
+            return Task.FromException<IReadOnlyList<AttributeStabilityDto>>(AnalyticsException);
+        }
+
+        LastAttributeStabilityCategoryKey = categoryKey;
+        return Task.FromResult(AttributeStability);
+    }
+
+    public Task<IReadOnlyList<SourceAttributeDisagreementDto>> GetSourceDisagreementsAsync(string categoryKey, string? sourceName = null, CancellationToken cancellationToken = default)
+    {
+        if (AnalyticsException is not null)
+        {
+            return Task.FromException<IReadOnlyList<SourceAttributeDisagreementDto>>(AnalyticsException);
+        }
+
+        LastSourceDisagreementsCategoryKey = categoryKey;
+        LastSourceDisagreementsSourceName = sourceName;
+        return Task.FromResult(SourceDisagreements);
+    }
 }

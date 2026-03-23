@@ -245,6 +245,73 @@ public sealed class AdminApiClientTests
         });
     }
 
+    [Test]
+    public async Task GetDetailedCoverageAsync_DeserialisesCoverageResponseAndPreservesCategory()
+    {
+        var requestUri = string.Empty;
+        var client = CreateClient((request, _) =>
+        {
+            requestUri = request.RequestUri!.ToString();
+            return Task.FromResult(CreateJsonResponse(HttpStatusCode.OK, new DetailedCoverageResponseDto
+            {
+                CategoryKey = "monitor",
+                TotalCanonicalProducts = 12,
+                Attributes =
+                [
+                    new AttributeCoverageDetailDto
+                    {
+                        AttributeKey = "refresh_rate_hz",
+                        DisplayName = "Refresh Rate",
+                        CoveragePercent = 62m,
+                        ReliabilityScore = 58m
+                    }
+                ]
+            }));
+        });
+
+        var result = await client.GetDetailedCoverageAsync("monitor");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(requestUri, Does.Contain("api/quality/coverage/detailed"));
+            Assert.That(requestUri, Does.Contain("categoryKey=monitor"));
+            Assert.That(result.CategoryKey, Is.EqualTo("monitor"));
+            Assert.That(result.Attributes, Has.Count.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public async Task GetSourceHistoryAsync_PreservesCategoryAndSourceQuery()
+    {
+        var requestUri = string.Empty;
+        var client = CreateClient((request, _) =>
+        {
+            requestUri = request.RequestUri!.ToString();
+            return Task.FromResult(CreateJsonResponse(HttpStatusCode.OK, new[]
+            {
+                new SourceQualitySnapshotDto
+                {
+                    SourceName = "Northwind",
+                    CategoryKey = "monitor",
+                    TimestampUtc = new DateTime(2026, 03, 23, 09, 00, 00, DateTimeKind.Utc),
+                    AttributeCoverage = 84m,
+                    HistoricalTrustScore = 81m
+                }
+            }));
+        });
+
+        var result = await client.GetSourceHistoryAsync("monitor", "Northwind");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(requestUri, Does.Contain("api/quality/source-history"));
+            Assert.That(requestUri, Does.Contain("categoryKey=monitor"));
+            Assert.That(requestUri, Does.Contain("sourceName=Northwind"));
+            Assert.That(result, Has.Count.EqualTo(1));
+            Assert.That(result[0].SourceName, Is.EqualTo("Northwind"));
+        });
+    }
+
     private static ProductNormaliserAdminApiClient CreateClient(HttpStatusCode statusCode, object? payload, string mediaType = "application/json")
     {
         return CreateClient((_, _) => Task.FromResult(CreateJsonResponse(statusCode, payload, mediaType)));

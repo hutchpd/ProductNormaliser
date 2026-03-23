@@ -148,7 +148,7 @@ public sealed class IndexModel(
 
             await Task.WhenAll(categoriesTask, sourcesTask, statsTask, jobsTask);
 
-            Categories = categoriesTask.Result;
+            Categories = InteractiveCategoryFilter.Apply(categoriesTask.Result);
             Sources = sourcesTask.Result.OrderBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
             Stats = statsTask.Result;
             RecentJobs = jobsTask.Result.Items;

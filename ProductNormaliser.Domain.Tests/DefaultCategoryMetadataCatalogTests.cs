@@ -54,4 +54,18 @@ public sealed class DefaultCategoryMetadataCatalogTests
             Assert.That(category.IsEnabled, Is.True);
         });
     }
+
+    [Test]
+    public void GetAll_EnablesOnlyFirstRolloutCategories()
+    {
+        var enabledCategories = DefaultCategoryMetadataCatalog.GetAll()
+            .Where(category => category.IsEnabled)
+            .ToArray();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(enabledCategories.Select(category => category.CategoryKey), Is.EqualTo(new[] { "tv", "monitor", "laptop" }));
+            Assert.That(enabledCategories.All(category => category.CrawlSupportStatus == CrawlSupportStatus.Supported), Is.True);
+        });
+    }
 }

@@ -48,7 +48,7 @@ public sealed class IndexModel(
             var sourcesTask = adminApiClient.GetSourcesAsync(cancellationToken);
             await Task.WhenAll(categoriesTask, sourcesTask);
 
-            Categories = categoriesTask.Result.OrderBy(category => category.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
+            Categories = InteractiveCategoryFilter.Apply(categoriesTask.Result);
             var allSources = sourcesTask.Result.OrderBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
             TotalSources = allSources.Length;
 

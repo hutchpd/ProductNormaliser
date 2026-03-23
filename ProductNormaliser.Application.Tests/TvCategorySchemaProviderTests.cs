@@ -78,4 +78,17 @@ public sealed class TvCategorySchemaProviderTests
 
         Assert.That(invalidKeys, Is.Empty);
     }
+
+    [Test]
+    public void TvSchema_AssignsConflictSensitivityForMergeCriticalFields()
+    {
+        var schema = new TvCategorySchemaProvider().GetSchema();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(schema.Attributes.Single(attribute => attribute.Key == "brand").ConflictSensitivity, Is.EqualTo(ProductNormaliser.Core.Models.ConflictSensitivity.Critical));
+            Assert.That(schema.Attributes.Single(attribute => attribute.Key == "native_resolution").ConflictSensitivity, Is.EqualTo(ProductNormaliser.Core.Models.ConflictSensitivity.High));
+            Assert.That(schema.Attributes.Single(attribute => attribute.Key == "smart_platform").ConflictSensitivity, Is.EqualTo(ProductNormaliser.Core.Models.ConflictSensitivity.Low));
+        });
+    }
 }

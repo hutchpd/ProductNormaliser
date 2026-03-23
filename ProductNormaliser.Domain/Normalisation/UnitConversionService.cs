@@ -41,10 +41,12 @@ public sealed class UnitConversionService(MeasurementParser? measurementParser =
             ("inch", "mm") => Math.Round(numericValue * 25.4m, 2, MidpointRounding.AwayFromZero),
             ("cm", "mm") => Math.Round(numericValue * 10m, 2, MidpointRounding.AwayFromZero),
             ("mm", "inch") => Math.Round(numericValue / 25.4m, 2, MidpointRounding.AwayFromZero),
+            ("tb", "gb") => Math.Round(numericValue * 1024m, 2, MidpointRounding.AwayFromZero),
+            ("g", "kg") => Math.Round(numericValue / 1000m, 3, MidpointRounding.AwayFromZero),
             _ => 0m
         };
 
-        return (normalisedFromUnit, normalisedTargetUnit) is ("cm", "inch") or ("inch", "mm") or ("cm", "mm") or ("mm", "inch");
+        return (normalisedFromUnit, normalisedTargetUnit) is ("cm", "inch") or ("inch", "mm") or ("cm", "mm") or ("mm", "inch") or ("tb", "gb") or ("g", "kg");
     }
 
     private static string NormaliseUnit(string unit)

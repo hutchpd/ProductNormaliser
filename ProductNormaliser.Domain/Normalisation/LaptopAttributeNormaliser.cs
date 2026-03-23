@@ -14,21 +14,29 @@ public sealed class LaptopAttributeNormaliser : CategoryAttributeNormaliserBase
         : base(
             LaptopCategorySchemaProvider.CategoryKey,
             new LaptopCategorySchemaProvider().GetSchema(),
-            identityAttributeKeys: ["brand", "model_number", "cpu_model", "display_size_inch", "storage_capacity_gb"],
-            completenessAttributeKeys: ["brand", "model_number", "cpu_model", "ram_gb", "storage_capacity_gb", "display_size_inch", "native_resolution"],
+            identityAttributeKeys: ["gtin", "brand", "model_number", "cpu_model", "display_size_inch", "storage_capacity_gb"],
+            completenessAttributeKeys: ["brand", "model_number", "cpu_model", "ram_gb", "storage_capacity_gb", "storage_type", "display_size_inch", "native_resolution", "operating_system"],
             aliases: new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["processor"] = "cpu_model",
                 ["cpu"] = "cpu_model",
+                ["processor model"] = "cpu_model",
                 ["memory"] = "ram_gb",
                 ["ram"] = "ram_gb",
+                ["ram memory"] = "ram_gb",
                 ["storage"] = "storage_capacity_gb",
                 ["ssd"] = "storage_capacity_gb",
+                ["ssd capacity"] = "storage_capacity_gb",
+                ["storage capacity"] = "storage_capacity_gb",
+                ["drive type"] = "storage_type",
                 ["display size"] = "display_size_inch",
                 ["screen size"] = "display_size_inch",
+                ["screen resolution"] = "native_resolution",
                 ["gpu"] = "graphics_model",
                 ["graphics"] = "graphics_model",
+                ["graphics card"] = "graphics_model",
                 ["os"] = "operating_system",
+                ["battery life"] = "battery_life_hours",
                 ["weight"] = "weight_kg"
             },
             valueMappings: new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal)
@@ -46,6 +54,16 @@ public sealed class LaptopAttributeNormaliser : CategoryAttributeNormaliserBase
                     ["windows 11 pro"] = "Windows 11 Pro",
                     ["macos"] = "macOS",
                     ["chrome os"] = "ChromeOS"
+                },
+                ["native_resolution"] = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["full hd"] = "1080p",
+                    ["fhd"] = "1080p",
+                    ["qhd"] = "1440p",
+                    ["uhd"] = "4K",
+                    ["3840 x 2160"] = "4K",
+                    ["2560 x 1600"] = "1600p",
+                    ["1920 x 1080"] = "1080p"
                 }
             },
             attributeNameNormaliser: attributeNameNormaliser,
@@ -62,6 +80,7 @@ public sealed class LaptopAttributeNormaliser : CategoryAttributeNormaliserBase
             "ram_gb" => NormaliseIntegerMeasurement(rawAttribute, definition),
             "storage_capacity_gb" => NormaliseIntegerMeasurement(rawAttribute, definition),
             "display_size_inch" => NormaliseScreenSize(rawAttribute, definition),
+            "battery_life_hours" => NormaliseDecimalMeasurement(rawAttribute, definition),
             "weight_kg" => NormaliseDecimalMeasurement(rawAttribute, definition),
             _ => default!
         };

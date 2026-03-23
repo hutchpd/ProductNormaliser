@@ -1,6 +1,7 @@
 using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Core.Normalisation;
+using ProductNormaliser.Core.Schemas;
 
 namespace ProductNormaliser.Core.Merging;
 
@@ -8,13 +9,20 @@ public sealed class MergeWeightCalculator(
     ISourceTrustService? sourceTrustService = null,
     IAttributeStabilityService? attributeStabilityService = null,
     ISourceDisagreementService? sourceDisagreementService = null,
-    ICategoryAttributeNormaliserRegistry? categoryAttributeNormaliserRegistry = null)
+    ICategoryAttributeNormaliserRegistry? categoryAttributeNormaliserRegistry = null,
+    ICategorySchemaRegistry? categorySchemaRegistry = null)
 {
     private readonly ICategoryAttributeNormaliserRegistry categoryAttributeNormaliserRegistry = categoryAttributeNormaliserRegistry ?? new CategoryAttributeNormaliserRegistry([
         new TvAttributeNormaliser(),
         new MonitorAttributeNormaliser(),
         new LaptopAttributeNormaliser(),
         new RefrigeratorAttributeNormaliser()
+    ]);
+    private readonly ICategorySchemaRegistry categorySchemaRegistry = categorySchemaRegistry ?? new CategorySchemaRegistry([
+        new TvCategorySchemaProvider(),
+        new MonitorCategorySchemaProvider(),
+        new LaptopCategorySchemaProvider(),
+        new RefrigeratorCategorySchemaProvider()
     ]);
 
     public decimal CalculateSourceQuality(SourceProduct sourceProduct)
@@ -30,7 +38,7 @@ public sealed class MergeWeightCalculator(
         return Clamp(decimal.Round(averageConfidence * 0.70m + completeness * 0.30m, 4, MidpointRounding.AwayFromZero));
     }
 
-    public decimal CalculateAttributeReliability(NormalisedAttributeValue attribute, CanonicalAttributeValue? existingAttribute)
+    public decimal CalculateAttributeReliability(NormalisedAttributeValue attribute, CanonicalAttributeValue? existingAttribute, string? categoryKey = null)
     {
         ArgumentNullException.ThrowIfNull(attribute);
 
@@ -42,7 +50,10 @@ public sealed class MergeWeightCalculator(
         var evidenceConfidence = existingAttribute.Evidence.Count == 0
             ? existingAttribute.Confidence
             : existingAttribute.Evidence.Average(evidence => evidence.Confidence);
-        var agreementFactor = existingAttribute.HasConflict ? 0.55m : 0.95m;
+        var sensitivity = GetConflictSensitivity(attribute.AttributeKey, categoryKey);
+        var agreementFactor = existingAttribute.HasConflict
+            ? GetConflictPenalty(sensitivity)
+            : GetAgreementBonus(sensitivity);
         var continuityFactor = existingAttribute.Evidence.Count >= 2 ? 1.00m : 0.90m;
 
         return Clamp(decimal.Round(
@@ -87,7 +98,7 @@ public sealed class MergeWeightCalculator(
         return Clamp(decimal.Round(
             historicalTrust
             * CalculateSourceQuality(sourceProduct)
-            * CalculateAttributeReliability(attribute, existingAttribute)
+            * CalculateAttributeReliability(attribute, existingAttribute, sourceProduct.CategoryKey)
             * stabilityScore
             * disagreementAdjustment
             * CalculateRecencyFactor(sourceProduct.FetchedUtc, referenceUtc),
@@ -221,5 +232,49 @@ public sealed class MergeWeightCalculator(
     private static decimal Clamp(decimal value)
     {
         return Math.Min(1.00m, Math.Max(0.05m, value));
+    }
+
+    private ConflictSensitivity GetConflictSensitivity(string attributeKey, string? categoryKey)
+    {
+        if (string.IsNullOrWhiteSpace(attributeKey))
+        {
+            return ConflictSensitivity.Medium;
+        }
+
+        if (!string.IsNullOrWhiteSpace(categoryKey))
+        {
+            var definition = categorySchemaRegistry.GetSchema(categoryKey)?.Attributes
+                .FirstOrDefault(attribute => string.Equals(attribute.Key, attributeKey, StringComparison.OrdinalIgnoreCase));
+            if (definition is not null)
+            {
+                return definition.ConflictSensitivity;
+            }
+        }
+
+        return ConflictSensitivity.Medium;
+    }
+
+    private static decimal GetAgreementBonus(ConflictSensitivity sensitivity)
+    {
+        return sensitivity switch
+        {
+            ConflictSensitivity.Low => 0.97m,
+            ConflictSensitivity.Medium => 0.95m,
+            ConflictSensitivity.High => 0.92m,
+            ConflictSensitivity.Critical => 0.90m,
+            _ => 0.95m
+        };
+    }
+
+    private static decimal GetConflictPenalty(ConflictSensitivity sensitivity)
+    {
+        return sensitivity switch
+        {
+            ConflictSensitivity.Low => 0.65m,
+            ConflictSensitivity.Medium => 0.55m,
+            ConflictSensitivity.High => 0.45m,
+            ConflictSensitivity.Critical => 0.35m,
+            _ => 0.55m
+        };
     }
 }

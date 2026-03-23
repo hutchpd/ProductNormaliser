@@ -13,8 +13,8 @@ public sealed class CategoryManagementServiceTests
             new FakeCategoryMetadataService(
             [
                 CreateCategory("tv", "TVs", "display", "Display", CrawlSupportStatus.Supported, true),
-                CreateCategory("monitor", "Monitors", "display", "Display", CrawlSupportStatus.Experimental, true),
-                CreateCategory("laptop", "Laptops", "computing", "Computing", CrawlSupportStatus.Planned, false)
+                CreateCategory("monitor", "Monitors", "display", "Display", CrawlSupportStatus.Supported, true),
+                CreateCategory("laptop", "Laptops", "computing", "Computing", CrawlSupportStatus.Supported, true)
             ]),
             new CategorySchemaRegistry([new TvCategorySchemaProvider(), new MonitorCategorySchemaProvider(), new LaptopCategorySchemaProvider()]));
 
@@ -35,15 +35,15 @@ public sealed class CategoryManagementServiceTests
             new FakeCategoryMetadataService(
             [
                 CreateCategory("tv", "TVs", "display", "Display", CrawlSupportStatus.Supported, true),
-                CreateCategory("monitor", "Monitors", "display", "Display", CrawlSupportStatus.Experimental, true),
-                CreateCategory("laptop", "Laptops", "computing", "Computing", CrawlSupportStatus.Planned, true),
+                CreateCategory("monitor", "Monitors", "display", "Display", CrawlSupportStatus.Supported, true),
+                CreateCategory("laptop", "Laptops", "computing", "Computing", CrawlSupportStatus.Supported, true),
                 CreateCategory("refrigerator", "Refrigerators", "kitchen_appliances", "Kitchen Appliances", CrawlSupportStatus.Disabled, true)
             ]),
             new CategorySchemaRegistry([new TvCategorySchemaProvider(), new MonitorCategorySchemaProvider(), new LaptopCategorySchemaProvider(), new RefrigeratorCategorySchemaProvider()]));
 
         var result = await service.ListEnabledAsync();
 
-        Assert.That(result.Select(category => category.CategoryKey), Is.EqualTo(new[] { "monitor", "tv" }));
+        Assert.That(result.Select(category => category.CategoryKey), Is.EqualTo(new[] { "laptop", "monitor", "tv" }));
     }
 
     [Test]

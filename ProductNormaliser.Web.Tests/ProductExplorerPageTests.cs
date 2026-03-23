@@ -12,7 +12,7 @@ public sealed class ProductExplorerPageTests
     {
         var client = new FakeAdminApiClient
         {
-            Categories = [new CategoryMetadataDto { CategoryKey = "tv", DisplayName = "TVs", IsEnabled = true }],
+            Categories = [new CategoryMetadataDto { CategoryKey = "tv", DisplayName = "TVs", IsEnabled = true, CrawlSupportStatus = "Supported" }],
             ProductPage = new ProductListResponseDto { Page = 2, PageSize = 12, TotalCount = 0, TotalPages = 0 }
         };
 
@@ -47,7 +47,7 @@ public sealed class ProductExplorerPageTests
     {
         var client = new FakeAdminApiClient
         {
-            Categories = [new CategoryMetadataDto { CategoryKey = "tv", DisplayName = "TVs", IsEnabled = true }],
+            Categories = [new CategoryMetadataDto { CategoryKey = "tv", DisplayName = "TVs", IsEnabled = true, CrawlSupportStatus = "Supported" }],
             ProductPage = new ProductListResponseDto
             {
                 Items =
@@ -94,6 +94,27 @@ public sealed class ProductExplorerPageTests
             Assert.That(model.StaleProducts, Is.EqualTo(1));
             Assert.That(model.AverageCompleteness, Is.EqualTo(0.75m));
         });
+    }
+
+    [Test]
+    public async Task ProductsIndex_OnGetAsync_FiltersCategorySelectorToRolloutCategories()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories =
+            [
+                new CategoryMetadataDto { CategoryKey = "tv", DisplayName = "TVs", IsEnabled = true, CrawlSupportStatus = "Supported" },
+                new CategoryMetadataDto { CategoryKey = "monitor", DisplayName = "Monitors", IsEnabled = true, CrawlSupportStatus = "Supported" },
+                new CategoryMetadataDto { CategoryKey = "laptop", DisplayName = "Laptops", IsEnabled = true, CrawlSupportStatus = "Supported" },
+                new CategoryMetadataDto { CategoryKey = "refrigerator", DisplayName = "Refrigerators", IsEnabled = false, CrawlSupportStatus = "Planned" }
+            ]
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Products.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Products.IndexModel>.Instance);
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.That(model.Categories.Select(category => category.CategoryKey), Is.EqualTo(new[] { "laptop", "monitor", "tv" }));
     }
 
     [Test]
@@ -166,5 +187,12 @@ public sealed class ProductExplorerPageTests
         public Task<ProductListResponseDto> GetProductsAsync(ProductListQueryDto? query = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<ProductDetailDto?> GetProductAsync(string productId, CancellationToken cancellationToken = default) => Task.FromException<ProductDetailDto?>(new AdminApiException("Admin API is unavailable."));
         public Task<IReadOnlyList<ProductChangeEventDto>> GetProductHistoryAsync(string productId, CancellationToken cancellationToken = default) => Task.FromException<IReadOnlyList<ProductChangeEventDto>>(new AdminApiException("Admin API is unavailable."));
+        public Task<DetailedCoverageResponseDto> GetDetailedCoverageAsync(string categoryKey, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<IReadOnlyList<UnmappedAttributeDto>> GetUnmappedAttributesAsync(string categoryKey, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<IReadOnlyList<SourceQualityScoreDto>> GetSourceQualityScoresAsync(string categoryKey, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<MergeInsightsResponseDto> GetMergeInsightsAsync(string categoryKey, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<IReadOnlyList<SourceQualitySnapshotDto>> GetSourceHistoryAsync(string categoryKey, string? sourceName = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<IReadOnlyList<AttributeStabilityDto>> GetAttributeStabilityAsync(string categoryKey, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<IReadOnlyList<SourceAttributeDisagreementDto>> GetSourceDisagreementsAsync(string categoryKey, string? sourceName = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
     }
 }

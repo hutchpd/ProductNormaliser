@@ -48,6 +48,7 @@ public sealed class CategorySchemaAttributeDto
     public string ValueType { get; init; } = string.Empty;
     public string? Unit { get; init; }
     public bool IsRequired { get; init; }
+    public string ConflictSensitivity { get; init; } = string.Empty;
     public string Description { get; init; } = string.Empty;
 }
 
@@ -296,4 +297,128 @@ public sealed class ProductChangeEventDto
     public object? NewValue { get; init; }
     public string SourceName { get; init; } = string.Empty;
     public DateTime TimestampUtc { get; init; }
+}
+
+public sealed class DetailedCoverageResponseDto
+{
+    public string CategoryKey { get; init; } = string.Empty;
+    public int TotalCanonicalProducts { get; init; }
+    public int TotalSourceProducts { get; init; }
+    public IReadOnlyList<AttributeCoverageDetailDto> Attributes { get; init; } = [];
+    public IReadOnlyList<AttributeGapDto> MostMissingAttributes { get; init; } = [];
+    public IReadOnlyList<AttributeGapDto> MostConflictedAttributes { get; init; } = [];
+}
+
+public sealed class AttributeCoverageDetailDto
+{
+    public string AttributeKey { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public int PresentProductCount { get; init; }
+    public int MissingProductCount { get; init; }
+    public decimal CoveragePercent { get; init; }
+    public int ConflictProductCount { get; init; }
+    public decimal ConflictPercent { get; init; }
+    public decimal AverageConfidence { get; init; }
+    public decimal AgreementPercent { get; init; }
+    public decimal ReliabilityScore { get; init; }
+}
+
+public sealed class AttributeGapDto
+{
+    public string AttributeKey { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public int ProductCount { get; init; }
+    public decimal Percentage { get; init; }
+}
+
+public sealed class UnmappedAttributeDto
+{
+    public string CanonicalKey { get; init; } = string.Empty;
+    public string RawAttributeKey { get; init; } = string.Empty;
+    public int OccurrenceCount { get; init; }
+    public IReadOnlyList<string> SourceNames { get; init; } = [];
+    public IReadOnlyList<string> SampleValues { get; init; } = [];
+    public DateTime LastSeenUtc { get; init; }
+}
+
+public sealed class MergeInsightsResponseDto
+{
+    public string CategoryKey { get; init; } = string.Empty;
+    public IReadOnlyList<MergeConflictInsightDto> OpenConflicts { get; init; } = [];
+    public IReadOnlyList<AttributeMappingSuggestionDto> AttributeSuggestions { get; init; } = [];
+}
+
+public sealed class MergeConflictInsightDto
+{
+    public string Id { get; init; } = string.Empty;
+    public string CanonicalProductId { get; init; } = string.Empty;
+    public string AttributeKey { get; init; } = string.Empty;
+    public object? CurrentValue { get; init; }
+    public object? IncomingValue { get; init; }
+    public string Reason { get; init; } = string.Empty;
+    public decimal Severity { get; init; }
+    public object? SuggestedValue { get; init; }
+    public string? SuggestedSourceName { get; init; }
+    public decimal SuggestedConfidence { get; init; }
+    public object? HighestConfidenceValue { get; init; }
+    public DateTime CreatedUtc { get; init; }
+}
+
+public sealed class AttributeMappingSuggestionDto
+{
+    public string RawAttributeKey { get; init; } = string.Empty;
+    public string SuggestedCanonicalKey { get; init; } = string.Empty;
+    public decimal Confidence { get; init; }
+    public int OccurrenceCount { get; init; }
+    public IReadOnlyList<string> SourceNames { get; init; } = [];
+}
+
+public sealed class SourceQualityScoreDto
+{
+    public string SourceName { get; init; } = string.Empty;
+    public int SourceProductCount { get; init; }
+    public decimal AverageMappedAttributes { get; init; }
+    public decimal CoveragePercent { get; init; }
+    public decimal AverageAttributeConfidence { get; init; }
+    public decimal AgreementPercent { get; init; }
+    public decimal QualityScore { get; init; }
+}
+
+public sealed class SourceQualitySnapshotDto
+{
+    public string SourceName { get; init; } = string.Empty;
+    public string CategoryKey { get; init; } = string.Empty;
+    public DateTime TimestampUtc { get; init; }
+    public decimal AttributeCoverage { get; init; }
+    public decimal ConflictRate { get; init; }
+    public decimal AgreementRate { get; init; }
+    public decimal SuccessfulCrawlRate { get; init; }
+    public decimal PriceVolatilityScore { get; init; }
+    public decimal SpecStabilityScore { get; init; }
+    public decimal HistoricalTrustScore { get; init; }
+}
+
+public sealed class AttributeStabilityDto
+{
+    public string CategoryKey { get; init; } = string.Empty;
+    public string AttributeKey { get; init; } = string.Empty;
+    public int ChangeCount { get; init; }
+    public int OscillationCount { get; init; }
+    public int DistinctValueCount { get; init; }
+    public decimal StabilityScore { get; init; }
+    public bool IsSuspicious { get; init; }
+    public string? SuspicionReason { get; init; }
+}
+
+public sealed class SourceAttributeDisagreementDto
+{
+    public string SourceName { get; init; } = string.Empty;
+    public string CategoryKey { get; init; } = string.Empty;
+    public string AttributeKey { get; init; } = string.Empty;
+    public int TotalComparisons { get; init; }
+    public int TimesDisagreed { get; init; }
+    public int TimesWon { get; init; }
+    public decimal DisagreementRate { get; init; }
+    public decimal WinRate { get; init; }
+    public DateTime LastUpdatedUtc { get; init; }
 }

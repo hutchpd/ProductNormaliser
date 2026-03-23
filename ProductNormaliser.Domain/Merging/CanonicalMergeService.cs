@@ -59,7 +59,7 @@ public sealed class CanonicalMergeService(
                 var initialIncomingWeight = mergeWeightCalculator.CalculateIncomingWeight(incoming, incomingAttribute, null);
                 var sourceQuality = mergeWeightCalculator.CalculateSourceQuality(incoming);
                 var historicalTrust = mergeWeightCalculator.GetHistoricalTrust(incoming.SourceName, incoming.CategoryKey);
-                var reliability = mergeWeightCalculator.CalculateAttributeReliability(incomingAttribute, null);
+                var reliability = mergeWeightCalculator.CalculateAttributeReliability(incomingAttribute, null, incoming.CategoryKey);
                 var stabilityScore = mergeWeightCalculator.GetAttributeStability(incoming.CategoryKey, incomingAttribute.AttributeKey);
 
                 canonical.Attributes[incomingAttribute.AttributeKey] = new CanonicalAttributeValue
@@ -93,7 +93,7 @@ public sealed class CanonicalMergeService(
                     mergeWeightCalculator.CalculateIncomingWeight(incoming, incomingAttribute, canonicalAttribute));
                 canonicalAttribute.ReliabilityScore = Math.Max(
                     canonicalAttribute.ReliabilityScore,
-                    mergeWeightCalculator.CalculateAttributeReliability(incomingAttribute, canonicalAttribute));
+                    mergeWeightCalculator.CalculateAttributeReliability(incomingAttribute, canonicalAttribute, incoming.CategoryKey));
                 canonicalAttribute.SourceQualityScore = Math.Max(
                     canonicalAttribute.SourceQualityScore,
                     mergeWeightCalculator.CalculateSourceQuality(incoming));
@@ -118,6 +118,7 @@ public sealed class CanonicalMergeService(
             var incomingWeight = mergeWeightCalculator.CalculateIncomingWeight(incoming, incomingAttribute, canonicalAttribute);
             var existingWeight = mergeWeightCalculator.CalculateExistingWeight(canonicalAttribute, incoming.FetchedUtc == default ? DateTime.UtcNow : incoming.FetchedUtc);
             var shouldReplace = incomingWeight > existingWeight
+                || (incomingWeight >= existingWeight * 0.98m && incoming.FetchedUtc > canonicalAttribute.LastObservedUtc)
                 || canonicalAttribute.Value is null;
 
             if (shouldReplace)
@@ -133,7 +134,7 @@ public sealed class CanonicalMergeService(
 
             canonicalAttribute.HasConflict = true;
             canonicalAttribute.MergeWeight = shouldReplace ? incomingWeight : Math.Max(existingWeight, incomingWeight);
-            canonicalAttribute.ReliabilityScore = mergeWeightCalculator.CalculateAttributeReliability(incomingAttribute, canonicalAttribute);
+            canonicalAttribute.ReliabilityScore = mergeWeightCalculator.CalculateAttributeReliability(incomingAttribute, canonicalAttribute, incoming.CategoryKey);
             canonicalAttribute.StabilityScore = mergeWeightCalculator.GetAttributeStability(incoming.CategoryKey, incomingAttribute.AttributeKey);
             if (canonicalAttribute.LastObservedUtc == default)
             {

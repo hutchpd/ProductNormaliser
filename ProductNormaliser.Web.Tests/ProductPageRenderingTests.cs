@@ -16,7 +16,9 @@ public sealed class ProductPageRenderingTests
                 new CategoryMetadataDto
                 {
                     CategoryKey = "tv",
-                    DisplayName = "TVs"
+                    DisplayName = "TVs",
+                    IsEnabled = true,
+                    CrawlSupportStatus = "Supported"
                 }
             ],
             ProductPage = new ProductListResponseDto
@@ -79,6 +81,38 @@ public sealed class ProductPageRenderingTests
         Assert.That(html, Does.Contain("HDMI 2.1"));
         Assert.That(html, Does.Contain("/Products/Details?productId=prod_tv_oled_001"));
         Assert.That(html, Does.Contain("sort=stale"));
+    }
+
+    [Test]
+    public async Task ExplorerPage_RendersOnlyRolloutCategoryOptions()
+    {
+        var fakeAdminApiClient = new FakeAdminApiClient
+        {
+            Categories =
+            [
+                new CategoryMetadataDto { CategoryKey = "tv", DisplayName = "TVs", IsEnabled = true, CrawlSupportStatus = "Supported" },
+                new CategoryMetadataDto { CategoryKey = "monitor", DisplayName = "Monitors", IsEnabled = true, CrawlSupportStatus = "Supported" },
+                new CategoryMetadataDto { CategoryKey = "laptop", DisplayName = "Laptops", IsEnabled = true, CrawlSupportStatus = "Supported" },
+                new CategoryMetadataDto { CategoryKey = "refrigerator", DisplayName = "Refrigerators", IsEnabled = false, CrawlSupportStatus = "Planned" }
+            ],
+            ProductPage = new ProductListResponseDto { Page = 1, PageSize = 12, TotalCount = 0, TotalPages = 0 }
+        };
+
+        await using var factory = new ProductWebApplicationFactory(fakeAdminApiClient);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        var html = await client.GetStringAsync("/Products");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(html, Does.Contain(">TVs<"));
+            Assert.That(html, Does.Contain(">Monitors<"));
+            Assert.That(html, Does.Contain(">Laptops<"));
+            Assert.That(html, Does.Not.Contain(">Refrigerators<"));
+        });
     }
 
     [Test]

@@ -1,0 +1,225 @@
+@page
+@model ProductNormaliser.Web.Pages.Sources.IntelligenceModel
+@{
+    ViewData["Title"] = "Source Intelligence";
+}
+
+<section class="dashboard-shell">
+    <partial name="_PageHero" model="Model.Hero" />
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="notice error">@Model.ErrorMessage</div>
+    }
+
+    <section class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Source Lens</p>
+                <h2>Choose a category and source</h2>
+                <p class="subtle-copy">Category selection controls every metric on this page. Source selection narrows the trend analysis without changing the category-wide ranking cards.</p>
+            </div>
+        </div>
+
+        <form method="get" class="analytics-filter-grid two-up">
+            <div>
+                <label asp-for="CategoryKey" class="form-label">Category</label>
+                <select asp-for="CategoryKey" class="form-select">
+                    <option value="">Select a category</option>
+                    @foreach (var category in Model.Categories)
+                    {
+                        <option value="@category.CategoryKey">@category.DisplayName</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label asp-for="SourceName" class="form-label">Source</label>
+                <select asp-for="SourceName" class="form-select">
+                    <option value="">Highest-signal source</option>
+                    @foreach (var sourceName in Model.AvailableSourceNames)
+                    {
+                        <option value="@sourceName">@sourceName</option>
+                    }
+                </select>
+            </div>
+            <div class="actions-bar analytics-filter-actions">
+                <button type="submit" class="btn btn-dark">Load intelligence</button>
+                <a asp-page="/Sources/Intelligence" class="btn btn-outline-secondary">Reset</a>
+            </div>
+        </form>
+    </section>
+
+    @if (Model.IsAwaitingSelection)
+    {
+        <section class="panel panel-muted">
+            <div class="empty-panel">
+                <p class="empty-state">Select a category to load source trust, disagreement, completeness, and change activity trends.</p>
+            </div>
+        </section>
+    }
+    else if (Model.IsEmpty)
+    {
+        <section class="panel panel-muted">
+            <div class="empty-panel">
+                <p class="empty-state">No source intelligence is available for @Model.SelectedCategory?.DisplayName yet.</p>
+            </div>
+        </section>
+    }
+    else
+    {
+        <section class="panel panel-muted inspector-section">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Source Ranking</p>
+                    <h2>Quality and trust overview</h2>
+                </div>
+            </div>
+
+            <div class="analytics-card-grid">
+                @foreach (var score in Model.SourceOverview)
+                {
+                    <article class="analytics-card @(string.Equals(score.SourceName, Model.EffectiveSourceName, StringComparison.OrdinalIgnoreCase) ? "attention" : string.Empty)">
+                        <div class="analytics-card-header">
+                            <div>
+                                <strong>@score.SourceName</strong>
+                                <p class="subtle-copy">@score.SourceProductCount products in @Model.SelectedCategory?.DisplayName</p>
+                            </div>
+                            <span class="status-pill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetPositiveTone(score.QualityScore)">@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(score.QualityScore)</span>
+                        </div>
+                        <dl class="job-meta-grid compact">
+                            <div>
+                                <dt>Coverage</dt>
+                                <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(score.CoveragePercent)</dd>
+                            </div>
+                            <div>
+                                <dt>Agreement</dt>
+                                <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(score.AgreementPercent)</dd>
+                            </div>
+                            <div>
+                                <dt>Mapped attrs</dt>
+                                <dd>@score.AverageMappedAttributes</dd>
+                            </div>
+                            <div>
+                                <dt>Confidence</dt>
+                                <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(score.AverageAttributeConfidence)</dd>
+                            </div>
+                        </dl>
+                    </article>
+                }
+            </div>
+        </section>
+
+        <section class="panel panel-muted inspector-section">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Trust Over Time</p>
+                    <h2>@(Model.EffectiveSourceName ?? "Selected source") trust timeline</h2>
+                </div>
+            </div>
+
+            @if (Model.TrendSnapshots.Count == 0)
+            {
+                <div class="empty-panel">
+                    <p class="empty-state">No trust history is available for the current category and source.</p>
+                </div>
+            }
+            else
+            {
+                <div class="trend-stack">
+                    @foreach (var snapshot in Model.TrendSnapshots)
+                    {
+                        var changeActivity = ProductNormaliser.Web.Models.AnalyticsPresentation.GetChangeActivity(snapshot);
+
+                        <article class="trend-card">
+                            <div class="trend-card-header">
+                                <div>
+                                    <strong>@snapshot.SourceName</strong>
+                                    <p class="subtle-copy">@snapshot.TimestampUtc.ToString("u")</p>
+                                </div>
+                                <span class="status-pill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetPositiveTone(snapshot.HistoricalTrustScore)">@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(snapshot.HistoricalTrustScore)</span>
+                            </div>
+
+                            <div class="analytics-trend-grid">
+                                <div>
+                                    <span>Trust</span>
+                                    <div class="analytics-meter-shell"><div class="analytics-meter-fill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetPositiveTone(snapshot.HistoricalTrustScore)" style="@ProductNormaliser.Web.Models.AnalyticsPresentation.GetWidthStyle(snapshot.HistoricalTrustScore)"></div></div>
+                                </div>
+                                <div>
+                                    <span>Completeness</span>
+                                    <div class="analytics-meter-shell"><div class="analytics-meter-fill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetPositiveTone(snapshot.AttributeCoverage)" style="@ProductNormaliser.Web.Models.AnalyticsPresentation.GetWidthStyle(snapshot.AttributeCoverage)"></div></div>
+                                </div>
+                                <div>
+                                    <span>Change activity</span>
+                                    <div class="analytics-meter-shell"><div class="analytics-meter-fill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetInverseTone(changeActivity)" style="@ProductNormaliser.Web.Models.AnalyticsPresentation.GetWidthStyle(changeActivity)"></div></div>
+                                </div>
+                            </div>
+
+                            <dl class="job-meta-grid compact">
+                                <div>
+                                    <dt>Agreement</dt>
+                                    <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(snapshot.AgreementRate)</dd>
+                                </div>
+                                <div>
+                                    <dt>Conflict</dt>
+                                    <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(snapshot.ConflictRate)</dd>
+                                </div>
+                                <div>
+                                    <dt>Crawl success</dt>
+                                    <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(snapshot.SuccessfulCrawlRate)</dd>
+                                </div>
+                                <div>
+                                    <dt>Spec stability</dt>
+                                    <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(snapshot.SpecStabilityScore)</dd>
+                                </div>
+                            </dl>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="panel panel-muted inspector-section">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Hotspots</p>
+                    <h2>Disagreement hotspots</h2>
+                </div>
+            </div>
+
+            @if (Model.DisagreementHotspots.Count == 0)
+            {
+                <div class="empty-panel">
+                    <p class="empty-state">No disagreement hotspots are available for the current selection.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table dashboard-table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Attribute</th>
+                                <th>Disagreement rate</th>
+                                <th>Wins</th>
+                                <th>Comparisons</th>
+                                <th>Last updated</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.DisagreementHotspots)
+                            {
+                                <tr>
+                                    <td class="mono">@item.AttributeKey</td>
+                                    <td><span class="status-pill @ProductNormaliser.Web.Models.AnalyticsPresentation.GetInverseTone(item.DisagreementRate)">@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(item.DisagreementRate)</span></td>
+                                    <td>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(item.WinRate)</td>
+                                    <td>@item.TotalComparisons</td>
+                                    <td>@item.LastUpdatedUtc.ToString("u")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    }
+</section>
