@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using ProductNormaliser.Web.Contracts;
+using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
 
 namespace ProductNormaliser.Web.Pages.Sources;
@@ -27,6 +28,19 @@ public sealed class DetailsModel(
     public SourceDto? CurrentSource { get; private set; }
 
     public IReadOnlyList<CategoryMetadataDto> AvailableCategories { get; private set; } = [];
+
+    public IReadOnlyDictionary<string, CategoryMetadataDto> CategoryLookup
+        => AvailableCategories.ToDictionary(category => category.CategoryKey, StringComparer.OrdinalIgnoreCase);
+
+    public IReadOnlyList<string> AssignedCategoryLabels => CurrentSource is null
+        ? []
+        : CurrentSource.SupportedCategoryKeys
+            .Select(categoryKey => CategoryLookup.TryGetValue(categoryKey, out var category) ? category.DisplayName : categoryKey)
+            .ToArray();
+
+    public string IntelligenceUrl => CurrentSource is null || CurrentSource.SupportedCategoryKeys.Count == 0
+        ? "/Sources/Intelligence"
+        : $"/Sources/Intelligence?category={Uri.EscapeDataString(CurrentSource.SupportedCategoryKeys[0])}&source={Uri.EscapeDataString(CurrentSource.DisplayName)}";
 
     public async Task<IActionResult> OnGetAsync(string sourceId, CancellationToken cancellationToken)
     {
@@ -164,7 +178,9 @@ public sealed class DetailsModel(
     {
         try
         {
-            AvailableCategories = await adminApiClient.GetEnabledCategoriesAsync(cancellationToken);
+            AvailableCategories = (await adminApiClient.GetCategoriesAsync(cancellationToken))
+                .OrderBy(category => category.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
             CurrentSource = await adminApiClient.GetSourceAsync(sourceId, cancellationToken);
             if (CurrentSource is null)
             {

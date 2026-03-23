@@ -7,6 +7,11 @@
 <section class="dashboard-shell">
     <partial name="_PageHero" model="Model.Hero" />
 
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="notice success">@Model.StatusMessage</div>
+    }
+
     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
     {
         <div class="notice error">@Model.ErrorMessage</div>
@@ -16,7 +21,7 @@
         <div class="panel-heading">
             <div>
                 <p class="eyebrow">Filters</p>
-                <h2>Refine the source registry</h2>
+                <h2>Refine the operational source registry</h2>
             </div>
         </div>
 
@@ -45,15 +50,37 @@
             </div>
             <div class="actions-bar">
                 <button type="submit" class="btn btn-dark">Apply Filters</button>
+                <a asp-page="/Sources/Index" class="btn btn-outline-secondary">Reset</a>
             </div>
         </form>
+    </section>
+
+    <section class="panel panel-muted">
+        <div class="metric-strip">
+            <article>
+                <span>Ready sources</span>
+                <strong>@Model.ReadySources</strong>
+            </article>
+            <article>
+                <span>Need attention</span>
+                <strong>@Model.AttentionSources</strong>
+            </article>
+            <article>
+                <span>Enabled in view</span>
+                <strong>@Model.Sources.Count(source => source.IsEnabled)</strong>
+            </article>
+            <article>
+                <span>Disabled in view</span>
+                <strong>@Model.Sources.Count(source => !source.IsEnabled)</strong>
+            </article>
+        </div>
     </section>
 
     <section class="panel">
         <div class="panel-heading">
             <div>
                 <p class="eyebrow">Sources</p>
-                <h2>Managed source hosts</h2>
+                <h2>Managed source hosts and health</h2>
             </div>
         </div>
 
@@ -72,6 +99,9 @@
                             <th>Source</th>
                             <th>Categories</th>
                             <th>Throttling</th>
+                            <th>Crawl readiness</th>
+                            <th>Health</th>
+                            <th>Last crawl</th>
                             <th>Status</th>
                             <th class="actions-col">Actions</th>
                         </tr>
@@ -85,13 +115,44 @@
                                 <div class="text-muted small mono">@source.SourceId</div>
                                 <div class="text-muted small">@source.Host</div>
                             </td>
-                            <td>@string.Join(", ", source.SupportedCategoryKeys)</td>
-                            <td>@source.ThrottlingPolicy.RequestsPerMinute rpm, @source.ThrottlingPolicy.MaxConcurrentRequests concurrent</td>
                             <td>
-                                <partial name="_StatusBadge" model='new StatusBadgeModel { Text = source.IsEnabled ? "Enabled" : "Disabled", Tone = source.IsEnabled ? "completed" : "danger" }' />
+                                <div class="chip-row compact-wrap">
+                                @foreach (var categoryLabel in Model.GetAssignedCategoryLabels(source))
+                                {
+                                    <span class="chip">@categoryLabel</span>
+                                }
+                                </div>
+                            </td>
+                            <td>
+                                <div>@ProductNormaliser.Web.Models.SourceManagementPresentation.FormatThrottlingProfile(source.ThrottlingPolicy)</div>
+                                <div class="text-muted small">robots @(source.ThrottlingPolicy.RespectRobotsTxt ? "on" : "off")</div>
+                            </td>
+                            <td>
+                                <partial name="_StatusBadge" model="ProductNormaliser.Web.Models.SourceManagementPresentation.GetReadinessBadge(source.Readiness)" />
+                                <div class="text-muted small">@source.Readiness.Summary</div>
+                            </td>
+                            <td>
+                                <partial name="_StatusBadge" model="ProductNormaliser.Web.Models.SourceManagementPresentation.GetHealthBadge(source.Health)" />
+                                <div class="text-muted small">@ProductNormaliser.Web.Models.SourceManagementPresentation.FormatHealthSummary(source.Health)</div>
+                            </td>
+                            <td>
+                                <partial name="_StatusBadge" model="ProductNormaliser.Web.Models.SourceManagementPresentation.GetLastActivityBadge(source.LastActivity)" />
+                                <div class="text-muted small">@ProductNormaliser.Web.Models.SourceManagementPresentation.FormatLastActivity(source.LastActivity)</div>
+                            </td>
+                            <td>
+                                <partial name="_StatusBadge" model="ProductNormaliser.Web.Models.SourceManagementPresentation.GetEnabledBadge(source.IsEnabled)" />
                             </td>
                             <td class="actions-col">
+                                <form method="post" asp-page-handler="Toggle" class="inline-form">
+                                    <input type="hidden" name="sourceId" value="@source.SourceId" />
+                                    <input type="hidden" name="currentlyEnabled" value="@source.IsEnabled" />
+                                    <input type="hidden" name="category" value="@Model.CategoryKey" />
+                                    <input type="hidden" name="search" value="@Model.Search" />
+                                    <input type="hidden" name="enabled" value="@Model.Enabled" />
+                                    <button type="submit" class="btn @(source.IsEnabled ? "btn-outline-danger" : "btn-outline-success") btn-sm">@(source.IsEnabled ? "Disable" : "Enable")</button>
+                                </form>
                                 <a class="btn btn-outline-dark btn-sm" asp-page="/Sources/Details" asp-route-sourceId="@source.SourceId">Manage</a>
+                                <a class="btn btn-outline-secondary btn-sm" href="@Model.BuildIntelligenceUrl(source)">Health</a>
                             </td>
                         </tr>
                     }

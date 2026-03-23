@@ -17,6 +17,14 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public CategoryDetailDto? CategoryDetail { get; set; }
     public IReadOnlyList<SourceDto> Sources { get; set; } = [];
     public SourceDto? Source { get; set; }
+    public UpdateSourceRequest? LastUpdatedSourceRequest { get; private set; }
+    public string? LastUpdatedSourceId { get; private set; }
+    public string? LastEnabledSourceId { get; private set; }
+    public string? LastDisabledSourceId { get; private set; }
+    public AssignSourceCategoriesRequest? LastAssignedCategoriesRequest { get; private set; }
+    public string? LastAssignedCategoriesSourceId { get; private set; }
+    public UpdateSourceThrottlingRequest? LastUpdatedThrottlingRequest { get; private set; }
+    public string? LastUpdatedThrottlingSourceId { get; private set; }
     public CrawlJobListResponseDto CrawlJobsPage { get; set; } = new();
     public CrawlJobDto? CrawlJob { get; set; }
     public CrawlJobDto? CreatedJob { get; set; }
@@ -55,19 +63,78 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public Task<IReadOnlyList<CategoryMetadataDto>> GetCategoriesAsync(CancellationToken cancellationToken = default)
         => CategoriesException is null ? Task.FromResult(Categories) : Task.FromException<IReadOnlyList<CategoryMetadataDto>>(CategoriesException);
     public Task<IReadOnlyList<CategoryFamilyDto>> GetCategoryFamiliesAsync(CancellationToken cancellationToken = default) => Task.FromResult(CategoryFamilies);
-    public Task<IReadOnlyList<CategoryMetadataDto>> GetEnabledCategoriesAsync(CancellationToken cancellationToken = default) => Task.FromResult(EnabledCategories);
+    public Task<IReadOnlyList<CategoryMetadataDto>> GetEnabledCategoriesAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(EnabledCategories.Count == 0
+            ? Categories.Where(category => category.IsEnabled).ToArray()
+            : EnabledCategories);
     public Task<CategoryDetailDto?> GetCategoryDetailAsync(string categoryKey, CancellationToken cancellationToken = default)
         => CategoryDetailException is null ? Task.FromResult(CategoryDetail) : Task.FromException<CategoryDetailDto?>(CategoryDetailException);
 
     public Task<IReadOnlyList<SourceDto>> GetSourcesAsync(CancellationToken cancellationToken = default)
         => SourcesException is null ? Task.FromResult(Sources) : Task.FromException<IReadOnlyList<SourceDto>>(SourcesException);
-    public Task<SourceDto?> GetSourceAsync(string sourceId, CancellationToken cancellationToken = default) => Task.FromResult(Source);
+    public Task<SourceDto?> GetSourceAsync(string sourceId, CancellationToken cancellationToken = default)
+        => Task.FromResult(Source ?? Sources.FirstOrDefault(item => string.Equals(item.SourceId, sourceId, StringComparison.OrdinalIgnoreCase)));
     public Task<SourceDto> RegisterSourceAsync(RegisterSourceRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-    public Task<SourceDto> UpdateSourceAsync(string sourceId, UpdateSourceRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-    public Task<SourceDto> EnableSourceAsync(string sourceId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-    public Task<SourceDto> DisableSourceAsync(string sourceId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-    public Task<SourceDto> AssignCategoriesAsync(string sourceId, AssignSourceCategoriesRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-    public Task<SourceDto> UpdateThrottlingAsync(string sourceId, UpdateSourceThrottlingRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+    public Task<SourceDto> UpdateSourceAsync(string sourceId, UpdateSourceRequest request, CancellationToken cancellationToken = default)
+    {
+        LastUpdatedSourceId = sourceId;
+        LastUpdatedSourceRequest = request;
+        var source = RequireSource(sourceId);
+        var updated = Clone(source, request.DisplayName, request.BaseUrl, new Uri(request.BaseUrl).Host, request.Description, source.IsEnabled, source.SupportedCategoryKeys, source.ThrottlingPolicy, DateTime.UtcNow);
+        UpsertSource(updated);
+        return Task.FromResult(updated);
+    }
+
+    public Task<SourceDto> EnableSourceAsync(string sourceId, CancellationToken cancellationToken = default)
+    {
+        LastEnabledSourceId = sourceId;
+        var source = RequireSource(sourceId);
+        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, true, source.SupportedCategoryKeys, source.ThrottlingPolicy, DateTime.UtcNow);
+        UpsertSource(updated);
+        return Task.FromResult(updated);
+    }
+
+    public Task<SourceDto> DisableSourceAsync(string sourceId, CancellationToken cancellationToken = default)
+    {
+        LastDisabledSourceId = sourceId;
+        var source = RequireSource(sourceId);
+        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, false, source.SupportedCategoryKeys, source.ThrottlingPolicy, DateTime.UtcNow);
+        UpsertSource(updated);
+        return Task.FromResult(updated);
+    }
+
+    public Task<SourceDto> AssignCategoriesAsync(string sourceId, AssignSourceCategoriesRequest request, CancellationToken cancellationToken = default)
+    {
+        LastAssignedCategoriesSourceId = sourceId;
+        LastAssignedCategoriesRequest = request;
+        var source = RequireSource(sourceId);
+        var categoryKeys = request.CategoryKeys
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, source.IsEnabled, categoryKeys, source.ThrottlingPolicy, DateTime.UtcNow);
+        UpsertSource(updated);
+        return Task.FromResult(updated);
+    }
+
+    public Task<SourceDto> UpdateThrottlingAsync(string sourceId, UpdateSourceThrottlingRequest request, CancellationToken cancellationToken = default)
+    {
+        LastUpdatedThrottlingSourceId = sourceId;
+        LastUpdatedThrottlingRequest = request;
+        var source = RequireSource(sourceId);
+        var throttling = new SourceThrottlingPolicyDto
+        {
+            MinDelayMs = request.MinDelayMs,
+            MaxDelayMs = request.MaxDelayMs,
+            MaxConcurrentRequests = request.MaxConcurrentRequests,
+            RequestsPerMinute = request.RequestsPerMinute,
+            RespectRobotsTxt = request.RespectRobotsTxt
+        };
+        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, source.IsEnabled, source.SupportedCategoryKeys, throttling, DateTime.UtcNow);
+        UpsertSource(updated);
+        return Task.FromResult(updated);
+    }
     public Task<CrawlJobListResponseDto> GetCrawlJobsAsync(CrawlJobQueryDto? query = null, CancellationToken cancellationToken = default)
         => CrawlJobsException is null ? Task.FromResult(CrawlJobsPage) : Task.FromException<CrawlJobListResponseDto>(CrawlJobsException);
     public Task<CrawlJobDto?> GetCrawlJobAsync(string jobId, CancellationToken cancellationToken = default)
@@ -186,5 +253,87 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         LastSourceDisagreementsCategoryKey = categoryKey;
         LastSourceDisagreementsSourceName = sourceName;
         return Task.FromResult(SourceDisagreements);
+    }
+
+    private SourceDto RequireSource(string sourceId)
+    {
+        return Source
+            ?? Sources.FirstOrDefault(item => string.Equals(item.SourceId, sourceId, StringComparison.OrdinalIgnoreCase))
+            ?? throw new KeyNotFoundException(sourceId);
+    }
+
+    private void UpsertSource(SourceDto source)
+    {
+        Source = source;
+        var items = Sources.ToList();
+        var index = items.FindIndex(item => string.Equals(item.SourceId, source.SourceId, StringComparison.OrdinalIgnoreCase));
+        if (index >= 0)
+        {
+            items[index] = source;
+        }
+        else
+        {
+            items.Add(source);
+        }
+
+        Sources = items.ToArray();
+    }
+
+    private static SourceDto Clone(
+        SourceDto source,
+        string displayName,
+        string baseUrl,
+        string host,
+        string? description,
+        bool isEnabled,
+        IReadOnlyList<string> supportedCategoryKeys,
+        SourceThrottlingPolicyDto throttlingPolicy,
+        DateTime updatedUtc)
+    {
+        return new SourceDto
+        {
+            SourceId = source.SourceId,
+            DisplayName = displayName,
+            BaseUrl = baseUrl,
+            Host = host,
+            Description = description,
+            IsEnabled = isEnabled,
+            SupportedCategoryKeys = supportedCategoryKeys.ToArray(),
+            ThrottlingPolicy = new SourceThrottlingPolicyDto
+            {
+                MinDelayMs = throttlingPolicy.MinDelayMs,
+                MaxDelayMs = throttlingPolicy.MaxDelayMs,
+                MaxConcurrentRequests = throttlingPolicy.MaxConcurrentRequests,
+                RequestsPerMinute = throttlingPolicy.RequestsPerMinute,
+                RespectRobotsTxt = throttlingPolicy.RespectRobotsTxt
+            },
+            Readiness = new SourceReadinessDto
+            {
+                Status = source.Readiness.Status,
+                AssignedCategoryCount = source.Readiness.AssignedCategoryCount,
+                CrawlableCategoryCount = source.Readiness.CrawlableCategoryCount,
+                Summary = source.Readiness.Summary
+            },
+            Health = new SourceHealthSummaryDto
+            {
+                Status = source.Health.Status,
+                TrustScore = source.Health.TrustScore,
+                CoveragePercent = source.Health.CoveragePercent,
+                SuccessfulCrawlRate = source.Health.SuccessfulCrawlRate,
+                SnapshotUtc = source.Health.SnapshotUtc
+            },
+            LastActivity = source.LastActivity is null ? null : new SourceLastActivityDto
+            {
+                TimestampUtc = source.LastActivity.TimestampUtc,
+                Status = source.LastActivity.Status,
+                DurationMs = source.LastActivity.DurationMs,
+                ExtractedProductCount = source.LastActivity.ExtractedProductCount,
+                HadMeaningfulChange = source.LastActivity.HadMeaningfulChange,
+                MeaningfulChangeSummary = source.LastActivity.MeaningfulChangeSummary,
+                ErrorMessage = source.LastActivity.ErrorMessage
+            },
+            CreatedUtc = source.CreatedUtc,
+            UpdatedUtc = updatedUtc
+        };
     }
 }

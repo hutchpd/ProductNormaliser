@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using ProductNormaliser.AdminApi.Contracts;
 using ProductNormaliser.AdminApi.Controllers;
+using ProductNormaliser.AdminApi.Services;
 using ProductNormaliser.Application.Sources;
 using ProductNormaliser.Core.Models;
 
@@ -11,7 +12,7 @@ public sealed class SourcesControllerTests
     [Test]
     public async Task GetSources_ReturnsMappedDtos()
     {
-        var controller = new SourcesController(new FakeSourceManagementService(CreateSource("alpha")));
+        var controller = new SourcesController(new FakeSourceManagementService(CreateSource("alpha")), new FakeSourceOperationalInsightsProvider());
 
         var result = await controller.GetSources();
 
@@ -24,13 +25,15 @@ public sealed class SourcesControllerTests
             Assert.That(payload!, Has.Length.EqualTo(1));
             Assert.That(payload[0].SourceId, Is.EqualTo("alpha"));
             Assert.That(payload[0].ThrottlingPolicy.MaxConcurrentRequests, Is.EqualTo(1));
+            Assert.That(payload[0].Readiness.Status, Is.EqualTo("Ready"));
+            Assert.That(payload[0].Health.Status, Is.EqualTo("Healthy"));
         });
     }
 
     [Test]
     public async Task GetSource_ReturnsNotFoundForUnknownSource()
     {
-        var controller = new SourcesController(new FakeSourceManagementService());
+        var controller = new SourcesController(new FakeSourceManagementService(), new FakeSourceOperationalInsightsProvider());
 
         var result = await controller.GetSource("missing");
 
@@ -41,7 +44,7 @@ public sealed class SourcesControllerTests
     public async Task RegisterSource_ReturnsCreatedResult()
     {
         var service = new FakeSourceManagementService();
-        var controller = new SourcesController(service);
+        var controller = new SourcesController(service, new FakeSourceOperationalInsightsProvider());
 
         var result = await controller.RegisterSource(new RegisterSourceRequest
         {
@@ -61,7 +64,7 @@ public sealed class SourcesControllerTests
     [Test]
     public async Task AssignCategories_ReturnsValidationProblemForUnknownCategory()
     {
-        var controller = new SourcesController(new FakeSourceManagementService(assignCategoriesException: new ArgumentException("Unknown category keys: smartwatch.", "categoryKeys")));
+        var controller = new SourcesController(new FakeSourceManagementService(assignCategoriesException: new ArgumentException("Unknown category keys: smartwatch.", "categoryKeys")), new FakeSourceOperationalInsightsProvider());
 
         var result = await controller.AssignCategories("alpha", new AssignSourceCategoriesRequest
         {
@@ -76,7 +79,7 @@ public sealed class SourcesControllerTests
     [Test]
     public async Task UpdateThrottling_ReturnsNotFoundForUnknownSource()
     {
-        var controller = new SourcesController(new FakeSourceManagementService(throttlingException: new KeyNotFoundException("missing")));
+        var controller = new SourcesController(new FakeSourceManagementService(throttlingException: new KeyNotFoundException("missing")), new FakeSourceOperationalInsightsProvider());
 
         var result = await controller.UpdateThrottling("missing", new UpdateSourceThrottlingRequest
         {
@@ -93,7 +96,7 @@ public sealed class SourcesControllerTests
     [Test]
     public async Task EnableAndDisable_ReturnUpdatedSource()
     {
-        var controller = new SourcesController(new FakeSourceManagementService(CreateSource("alpha", isEnabled: false)));
+        var controller = new SourcesController(new FakeSourceManagementService(CreateSource("alpha", isEnabled: false)), new FakeSourceOperationalInsightsProvider());
 
         var enabled = await controller.EnableSource("alpha") as OkObjectResult;
         var disabled = await controller.DisableSource("alpha") as OkObjectResult;
@@ -212,6 +215,45 @@ public sealed class SourcesControllerTests
                 ?? throw new KeyNotFoundException(sourceId);
             existing.ThrottlingPolicy = policy;
             return Task.FromResult(existing);
+        }
+    }
+
+    private sealed class FakeSourceOperationalInsightsProvider : ISourceOperationalInsightsProvider
+    {
+        public Task<IReadOnlyDictionary<string, SourceOperationalInsights>> BuildAsync(IReadOnlyList<CrawlSource> sources, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyDictionary<string, SourceOperationalInsights>>(sources.ToDictionary(
+                source => source.Id,
+                source => new SourceOperationalInsights
+                {
+                    Readiness = new SourceReadinessDto
+                    {
+                        Status = source.SupportedCategoryKeys.Count == 0 ? "Unassigned" : "Ready",
+                        AssignedCategoryCount = source.SupportedCategoryKeys.Count,
+                        CrawlableCategoryCount = source.SupportedCategoryKeys.Count,
+                        Summary = source.SupportedCategoryKeys.Count == 0
+                            ? "No categories are currently assigned."
+                            : $"All {source.SupportedCategoryKeys.Count} assigned categories are crawl-ready."
+                    },
+                    Health = new SourceHealthSummaryDto
+                    {
+                        Status = "Healthy",
+                        TrustScore = 90m,
+                        CoveragePercent = 85m,
+                        SuccessfulCrawlRate = 95m,
+                        SnapshotUtc = new DateTime(2026, 03, 23, 08, 00, 00, DateTimeKind.Utc)
+                    },
+                    LastActivity = new SourceLastActivityDto
+                    {
+                        TimestampUtc = new DateTime(2026, 03, 23, 09, 00, 00, DateTimeKind.Utc),
+                        Status = "succeeded",
+                        DurationMs = 1200,
+                        ExtractedProductCount = 10,
+                        HadMeaningfulChange = true,
+                        MeaningfulChangeSummary = "Observed updated product content."
+                    }
+                },
+                StringComparer.OrdinalIgnoreCase));
         }
     }
 }

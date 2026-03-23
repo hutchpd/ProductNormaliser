@@ -33,6 +33,7 @@ builder.Services.AddSingleton<ICategoryMetadataService, CategoryMetadataService>
 builder.Services.AddSingleton<ICategoryManagementService, CategoryManagementService>();
 builder.Services.AddSingleton<ICrawlJobService, CrawlJobService>();
 builder.Services.AddSingleton<ISourceManagementService, SourceManagementService>();
+builder.Services.AddSingleton<ISourceOperationalInsightsProvider, SourceOperationalInsightsProvider>();
 builder.Services.AddSingleton<IAdminQueryService, AdminQueryService>();
 builder.Services.AddSingleton<IDataIntelligenceService, DataIntelligenceService>();
 builder.Services.AddSingleton<IManagementActorContext, HttpContextManagementActorContext>();

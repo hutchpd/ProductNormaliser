@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using ProductNormaliser.AdminApi.Contracts;
+using ProductNormaliser.AdminApi.Services;
 using ProductNormaliser.Application.Sources;
 using ProductNormaliser.Core.Models;
 
@@ -8,14 +9,17 @@ namespace ProductNormaliser.AdminApi.Controllers;
 [ApiController]
 [Produces("application/json")]
 [Route("api/sources")]
-public sealed class SourcesController(ISourceManagementService sourceManagementService) : ControllerBase
+public sealed class SourcesController(
+    ISourceManagementService sourceManagementService,
+    ISourceOperationalInsightsProvider sourceOperationalInsightsProvider) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(SourceDto[]), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetSources(CancellationToken cancellationToken = default)
     {
         var sources = await sourceManagementService.ListAsync(cancellationToken);
-        return Ok(sources.Select(Map).ToArray());
+        var insights = await sourceOperationalInsightsProvider.BuildAsync(sources, cancellationToken);
+        return Ok(sources.Select(source => Map(source, insights)).ToArray());
     }
 
     [HttpGet("{sourceId}")]
@@ -24,7 +28,13 @@ public sealed class SourcesController(ISourceManagementService sourceManagementS
     public async Task<IActionResult> GetSource(string sourceId, CancellationToken cancellationToken = default)
     {
         var source = await sourceManagementService.GetAsync(sourceId, cancellationToken);
-        return source is null ? NotFound() : Ok(Map(source));
+        if (source is null)
+        {
+            return NotFound();
+        }
+
+        var insights = await sourceOperationalInsightsProvider.BuildAsync([source], cancellationToken);
+        return Ok(Map(source, insights));
     }
 
     [HttpPost]
@@ -46,7 +56,8 @@ public sealed class SourcesController(ISourceManagementService sourceManagementS
                 ThrottlingPolicy = request.ThrottlingPolicy is null ? null : Map(request.ThrottlingPolicy)
             }, cancellationToken);
 
-            return CreatedAtAction(nameof(GetSource), new { sourceId = source.Id }, Map(source));
+            var insights = await sourceOperationalInsightsProvider.BuildAsync([source], cancellationToken);
+            return CreatedAtAction(nameof(GetSource), new { sourceId = source.Id }, Map(source, insights));
         }
         catch (ArgumentException exception)
         {
@@ -70,7 +81,8 @@ public sealed class SourcesController(ISourceManagementService sourceManagementS
                 Description = request.Description
             }, cancellationToken);
 
-            return Ok(Map(source));
+            var insights = await sourceOperationalInsightsProvider.BuildAsync([source], cancellationToken);
+            return Ok(Map(source, insights));
         }
         catch (KeyNotFoundException)
         {
@@ -89,7 +101,9 @@ public sealed class SourcesController(ISourceManagementService sourceManagementS
     {
         try
         {
-            return Ok(Map(await sourceManagementService.EnableAsync(sourceId, cancellationToken)));
+            var source = await sourceManagementService.EnableAsync(sourceId, cancellationToken);
+            var insights = await sourceOperationalInsightsProvider.BuildAsync([source], cancellationToken);
+            return Ok(Map(source, insights));
         }
         catch (KeyNotFoundException)
         {
@@ -104,7 +118,9 @@ public sealed class SourcesController(ISourceManagementService sourceManagementS
     {
         try
         {
-            return Ok(Map(await sourceManagementService.DisableAsync(sourceId, cancellationToken)));
+            var source = await sourceManagementService.DisableAsync(sourceId, cancellationToken);
+            var insights = await sourceOperationalInsightsProvider.BuildAsync([source], cancellationToken);
+            return Ok(Map(source, insights));
         }
         catch (KeyNotFoundException)
         {
@@ -121,7 +137,9 @@ public sealed class SourcesController(ISourceManagementService sourceManagementS
     {
         try
         {
-            return Ok(Map(await sourceManagementService.AssignCategoriesAsync(sourceId, request.CategoryKeys, cancellationToken)));
+            var source = await sourceManagementService.AssignCategoriesAsync(sourceId, request.CategoryKeys, cancellationToken);
+            var insights = await sourceOperationalInsightsProvider.BuildAsync([source], cancellationToken);
+            return Ok(Map(source, insights));
         }
         catch (KeyNotFoundException)
         {
@@ -142,14 +160,16 @@ public sealed class SourcesController(ISourceManagementService sourceManagementS
     {
         try
         {
-            return Ok(Map(await sourceManagementService.SetThrottlingAsync(sourceId, new SourceThrottlingPolicy
+            var source = await sourceManagementService.SetThrottlingAsync(sourceId, new SourceThrottlingPolicy
             {
                 MinDelayMs = request.MinDelayMs,
                 MaxDelayMs = request.MaxDelayMs,
                 MaxConcurrentRequests = request.MaxConcurrentRequests,
                 RequestsPerMinute = request.RequestsPerMinute,
                 RespectRobotsTxt = request.RespectRobotsTxt
-            }, cancellationToken)));
+            }, cancellationToken);
+            var insights = await sourceOperationalInsightsProvider.BuildAsync([source], cancellationToken);
+            return Ok(Map(source, insights));
         }
         catch (KeyNotFoundException)
         {
@@ -161,8 +181,11 @@ public sealed class SourcesController(ISourceManagementService sourceManagementS
         }
     }
 
-    private static SourceDto Map(CrawlSource source)
+    private static SourceDto Map(CrawlSource source, IReadOnlyDictionary<string, SourceOperationalInsights> insights)
     {
+        insights.TryGetValue(source.Id, out var operationalInsights);
+        operationalInsights ??= new SourceOperationalInsights();
+
         return new SourceDto
         {
             SourceId = source.Id,
@@ -180,6 +203,9 @@ public sealed class SourcesController(ISourceManagementService sourceManagementS
                 RequestsPerMinute = source.ThrottlingPolicy.RequestsPerMinute,
                 RespectRobotsTxt = source.ThrottlingPolicy.RespectRobotsTxt
             },
+            Readiness = operationalInsights.Readiness,
+            Health = operationalInsights.Health,
+            LastActivity = operationalInsights.LastActivity,
             CreatedUtc = source.CreatedUtc,
             UpdatedUtc = source.UpdatedUtc
         };

@@ -62,8 +62,39 @@ public sealed class SourceDto
     public bool IsEnabled { get; init; }
     public IReadOnlyList<string> SupportedCategoryKeys { get; init; } = [];
     public SourceThrottlingPolicyDto ThrottlingPolicy { get; init; } = new();
+    public SourceReadinessDto Readiness { get; init; } = new();
+    public SourceHealthSummaryDto Health { get; init; } = new();
+    public SourceLastActivityDto? LastActivity { get; init; }
     public DateTime CreatedUtc { get; init; }
     public DateTime UpdatedUtc { get; init; }
+}
+
+public sealed class SourceReadinessDto
+{
+    public string Status { get; init; } = string.Empty;
+    public int AssignedCategoryCount { get; init; }
+    public int CrawlableCategoryCount { get; init; }
+    public string Summary { get; init; } = string.Empty;
+}
+
+public sealed class SourceHealthSummaryDto
+{
+    public string Status { get; init; } = string.Empty;
+    public decimal TrustScore { get; init; }
+    public decimal CoveragePercent { get; init; }
+    public decimal SuccessfulCrawlRate { get; init; }
+    public DateTime? SnapshotUtc { get; init; }
+}
+
+public sealed class SourceLastActivityDto
+{
+    public DateTime TimestampUtc { get; init; }
+    public string Status { get; init; } = string.Empty;
+    public long DurationMs { get; init; }
+    public int ExtractedProductCount { get; init; }
+    public bool HadMeaningfulChange { get; init; }
+    public string? MeaningfulChangeSummary { get; init; }
+    public string? ErrorMessage { get; init; }
 }
 
 public sealed class SourceThrottlingPolicyDto

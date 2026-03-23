@@ -9,7 +9,7 @@
         <div>
             <p class="eyebrow">Source Management</p>
             <h1>@(Model.CurrentSource?.DisplayName ?? "Unknown Source")</h1>
-            <p class="hero-copy">This page is wired to the source detail, update, enable or disable, categories, and throttling Admin API endpoints so the dashboard can manage crawl sources without direct database access.</p>
+            <p class="hero-copy">This page combines source configuration with operational readiness, recent health signals, and latest crawl activity so operators can decide whether a source is safe to leave enabled.</p>
         </div>
         @if (Model.CurrentSource is not null)
         {
@@ -19,12 +19,16 @@
                     <strong>@Model.CurrentSource.Host</strong>
                 </article>
                 <article>
-                    <span>Categories</span>
-                    <strong>@Model.CurrentSource.SupportedCategoryKeys.Count</strong>
+                    <span>Readiness</span>
+                    <strong>@Model.CurrentSource.Readiness.Status</strong>
                 </article>
                 <article>
-                    <span>Status</span>
-                    <strong>@(Model.CurrentSource.IsEnabled ? "Enabled" : "Disabled")</strong>
+                    <span>Health</span>
+                    <strong>@Model.CurrentSource.Health.Status</strong>
+                </article>
+                <article>
+                    <span>Last crawl</span>
+                    <strong>@(Model.CurrentSource.LastActivity is null ? "None" : Model.CurrentSource.LastActivity.TimestampUtc.ToString("u"))</strong>
                 </article>
             </div>
         }
@@ -57,12 +61,15 @@
                         <p class="eyebrow">Identity</p>
                         <h2>Edit core source settings</h2>
                     </div>
-                    <form method="post" asp-page-handler="Toggle" class="inline-form">
-                        <input type="hidden" name="currentlyEnabled" value="@Model.CurrentSource.IsEnabled" />
-                        <button type="submit" class="btn @(Model.CurrentSource.IsEnabled ? "btn-outline-danger" : "btn-outline-success")">
-                            @(Model.CurrentSource.IsEnabled ? "Disable source" : "Enable source")
-                        </button>
-                    </form>
+                    <div class="inline-actions">
+                        <partial name="_StatusBadge" model="ProductNormaliser.Web.Models.SourceManagementPresentation.GetEnabledBadge(Model.CurrentSource.IsEnabled)" />
+                        <form method="post" asp-page-handler="Toggle" class="inline-form">
+                            <input type="hidden" name="currentlyEnabled" value="@Model.CurrentSource.IsEnabled" />
+                            <button type="submit" class="btn @(Model.CurrentSource.IsEnabled ? "btn-outline-danger" : "btn-outline-success")">
+                                @(Model.CurrentSource.IsEnabled ? "Disable source" : "Enable source")
+                            </button>
+                        </form>
+                    </div>
                 </div>
 
                 <form method="post" asp-page-handler="Update" class="source-form">
@@ -91,6 +98,54 @@
             <section class="panel">
                 <div class="panel-heading">
                     <div>
+                        <p class="eyebrow">Operational Readiness</p>
+                        <h2>Current crawl support and health</h2>
+                    </div>
+                    <a href="@Model.IntelligenceUrl" class="btn btn-outline-dark">Open source intelligence</a>
+                </div>
+
+                <div class="metric-strip">
+                    <article>
+                        <span>Readiness</span>
+                        <strong>@Model.CurrentSource.Readiness.Status</strong>
+                    </article>
+                    <article>
+                        <span>Health</span>
+                        <strong>@Model.CurrentSource.Health.Status</strong>
+                    </article>
+                    <article>
+                        <span>Trust</span>
+                        <strong>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(Model.CurrentSource.Health.TrustScore)</strong>
+                    </article>
+                    <article>
+                        <span>Crawl success</span>
+                        <strong>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(Model.CurrentSource.Health.SuccessfulCrawlRate)</strong>
+                    </article>
+                </div>
+
+                <dl class="detail-grid">
+                    <div>
+                        <dt>Readiness summary</dt>
+                        <dd>@Model.CurrentSource.Readiness.Summary</dd>
+                    </div>
+                    <div>
+                        <dt>Last health snapshot</dt>
+                        <dd>@(Model.CurrentSource.Health.SnapshotUtc?.ToString("u") ?? "No snapshot recorded")</dd>
+                    </div>
+                    <div>
+                        <dt>Recent health</dt>
+                        <dd>@ProductNormaliser.Web.Models.SourceManagementPresentation.FormatHealthSummary(Model.CurrentSource.Health)</dd>
+                    </div>
+                    <div>
+                        <dt>Last crawl activity</dt>
+                        <dd>@ProductNormaliser.Web.Models.SourceManagementPresentation.FormatLastActivity(Model.CurrentSource.LastActivity)</dd>
+                    </div>
+                </dl>
+            </section>
+
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
                         <p class="eyebrow">Categories</p>
                         <h2>Assign supported product families</h2>
                     </div>
@@ -100,9 +155,13 @@
                     <div class="check-grid">
                     @foreach (var category in Model.AvailableCategories)
                     {
-                        <label class="check-card">
+                        <label class="check-card @(category.IsEnabled ? string.Empty : "disabled")">
                             <input type="checkbox" name="CategoriesForm.CategoryKeys" value="@category.CategoryKey" checked="@Model.CategoriesForm.CategoryKeys.Contains(category.CategoryKey)" />
-                            <span>@category.DisplayName</span>
+                            <span>
+                                <strong>@category.DisplayName</strong>
+                                <span class="subtle-copy d-block">@category.FamilyDisplayName</span>
+                                <span class="subtle-copy d-block">@category.CrawlSupportStatus</span>
+                            </span>
                         </label>
                     }
                     </div>
@@ -176,7 +235,15 @@
                     </div>
                     <div>
                         <dt>Current categories</dt>
-                        <dd>@string.Join(", ", Model.CurrentSource.SupportedCategoryKeys)</dd>
+                        <dd>@string.Join(", ", Model.AssignedCategoryLabels)</dd>
+                    </div>
+                    <div>
+                        <dt>Crawlable categories</dt>
+                        <dd>@Model.CurrentSource.Readiness.CrawlableCategoryCount / @Model.CurrentSource.Readiness.AssignedCategoryCount</dd>
+                    </div>
+                    <div>
+                        <dt>Latest crawl status</dt>
+                        <dd>@(Model.CurrentSource.LastActivity?.Status ?? "No recent crawl")</dd>
                     </div>
                 </dl>
             </section>

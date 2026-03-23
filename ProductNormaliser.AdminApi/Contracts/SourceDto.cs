@@ -10,6 +10,9 @@ public sealed class SourceDto
     public bool IsEnabled { get; init; }
     public IReadOnlyList<string> SupportedCategoryKeys { get; init; } = [];
     public SourceThrottlingPolicyDto ThrottlingPolicy { get; init; } = default!;
+    public SourceReadinessDto Readiness { get; init; } = default!;
+    public SourceHealthSummaryDto Health { get; init; } = default!;
+    public SourceLastActivityDto? LastActivity { get; init; }
     public DateTime CreatedUtc { get; init; }
     public DateTime UpdatedUtc { get; init; }
 }
