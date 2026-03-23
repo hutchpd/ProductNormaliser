@@ -2,7 +2,7 @@
 
 ProductNormaliser is an open product-intelligence engine for turning messy retail and manufacturer page data into clean, canonical, comparable product records. It crawls source pages, extracts structured product evidence, normalises attributes into a category schema, resolves identity across sources, merges competing claims into a canonical product, and keeps learning over time from quality history, disagreement patterns, and page volatility.
 
-The platform started with televisions and now includes category metadata, schema, and normalisation extension points that support broader electrical goods. `tv` remains the most mature category, with `monitor`, `laptop`, and `refrigerator` now represented in the category and normaliser infrastructure so the system can expand safely.
+Milestone 1 is centered on an end-to-end operator workflow for three rollout categories: `tv`, `monitor`, and `laptop`. The platform still keeps category and normalisation extension points broad enough for future electrical-goods expansion, but the completed milestone scope is the crawl, management, product, and quality experience for those three categories.
 
 ## What problem this solves
 
@@ -92,7 +92,8 @@ The solution now contains ten projects:
 The solution currently includes:
 
 - category metadata and schema discovery for electrical-goods families
-- schema-driven attribute normalisation for TV, with category-specific providers in place for monitors, laptops, and refrigerators
+- category registry support for the Milestone 1 rollout set: TVs, Monitors, and Laptops
+- schema-driven attribute normalisation with category-specific providers for TVs, Monitors, and Laptops
 - alias handling and measurement parsing
 - structured data extraction from HTML and JSON-LD
 - MongoDB persistence for source and canonical records
@@ -103,11 +104,13 @@ The solution currently includes:
 - worker orchestration with retry and skip/fail handling
 - admin endpoints for operational observability
 - admin endpoints for category catalog management and crawl-source management
+- admin endpoints for crawl job launch and tracking
+- admin endpoints for product list, product detail, and product history inspection
 - quality analytics for coverage, unmapped attributes, source quality, and merge insights
 - temporal intelligence for source trust history, attribute stability, and product change timelines
 - adaptive crawl scheduling based on volatility, stability, freshness, and source behavior
 - per-source disagreement tracking that feeds back into trust and merge decisions
-- a Razor Pages web dashboard that reads category detail and source management data from the Admin API
+- a Razor Pages operator console with category selection, quick crawl launch, crawl-job monitoring, product exploration, product detail explainability, quality dashboards, and source management
 
 ## Prerequisites
 
@@ -205,6 +208,15 @@ OpenAPI is mapped in development builds.
 - `PUT /api/sources/{sourceId}/categories`: update assigned category keys
 - `PUT /api/sources/{sourceId}/throttling`: update host throttling policy
 
+### Crawl-job and product endpoints
+
+- `GET /api/crawljobs`: list crawl jobs with filter and paging support
+- `POST /api/crawljobs`: create a crawl job for categories, sources, or products
+- `GET /api/crawljobs/{jobId}`: inspect one crawl job and its progress
+- `GET /api/products`: list canonical products with quality-aware filtering and sorting
+- `GET /api/products/{id}`: canonical product detail
+- `GET /api/products/{id}/history`: product change timeline
+
 ### Quality and intelligence endpoints
 
 - `GET /api/quality/coverage/detailed`: category coverage against the schema
@@ -235,9 +247,9 @@ The quality endpoints default to the `tv` category, which remains the current fi
 
 ## Current limitations
 
-- TV remains the most mature category; monitor, laptop, and refrigerator support are currently thinner and should be extended with deeper extraction and normalisation rules over time
-- queue write flows are still not exposed as a public management API
-- authentication and role-based access are not configured for the admin surface
+- TV remains the deepest category implementation; monitor and laptop support are included in the Milestone 1 rollout but still need broader extraction coverage and richer normalisation rules over time
+- queue write flows are currently aimed at internal operator use rather than a public ingestion API
+- the admin surface now has API-key authentication and role-based operator access, but production identity, secret rotation, and perimeter hardening are still not fully formalized
 - production deployment concerns such as distributed workers, secret management, and externalized observability are not yet formalized in the repo
 
 ## Why the project structure matters

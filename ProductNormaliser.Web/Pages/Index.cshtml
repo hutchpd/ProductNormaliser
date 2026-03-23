@@ -73,7 +73,7 @@
                     <article class="operator-context-card">
                         <span class="eyebrow">Source Coverage</span>
                         <strong>@Model.CategorySources.Count sources in scope</strong>
-                        <p class="subtle-copy">@Model.EnabledCategorySourceCount enabled, @Model.RobotsProtectedSourceCount respecting robots.txt.</p>
+                        <p class="subtle-copy">@Model.ReadyCategorySourceCount crawl-ready, @Model.AttentionCategorySourceCount needing attention.</p>
                     </article>
                 </div>
             }
@@ -238,9 +238,10 @@
                             <thead>
                                 <tr>
                                     <th>Source</th>
-                                    <th>Status</th>
-                                    <th>Requests/min</th>
-                                    <th>Robots</th>
+                                    <th>Enabled</th>
+                                    <th>Readiness</th>
+                                    <th>Health</th>
+                                    <th>Last activity</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -250,10 +251,21 @@
                                     <td>
                                         <strong>@source.DisplayName</strong>
                                         <div class="subtle-copy mono">@source.SourceId</div>
+                                        <div class="subtle-copy">@source.ThrottlingPolicy.RequestsPerMinute rpm, @(source.ThrottlingPolicy.RespectRobotsTxt ? "robots respected" : "robots ignored")</div>
                                     </td>
-                                    <td>@(source.IsEnabled ? "Enabled" : "Disabled")</td>
-                                    <td>@source.ThrottlingPolicy.RequestsPerMinute</td>
-                                    <td>@(source.ThrottlingPolicy.RespectRobotsTxt ? "Respect" : "Ignore")</td>
+                                    <td><partial name="_StatusBadge" model="ProductNormaliser.Web.Models.SourceManagementPresentation.GetEnabledBadge(source.IsEnabled)" /></td>
+                                    <td>
+                                        <partial name="_StatusBadge" model="ProductNormaliser.Web.Models.SourceManagementPresentation.GetReadinessBadge(source.Readiness)" />
+                                        <div class="subtle-copy mt-2">@source.Readiness.Summary</div>
+                                    </td>
+                                    <td>
+                                        <partial name="_StatusBadge" model="ProductNormaliser.Web.Models.SourceManagementPresentation.GetHealthBadge(source.Health)" />
+                                        <div class="subtle-copy mt-2">@ProductNormaliser.Web.Models.SourceManagementPresentation.FormatHealthSummary(source.Health)</div>
+                                    </td>
+                                    <td>
+                                        <partial name="_StatusBadge" model="ProductNormaliser.Web.Models.SourceManagementPresentation.GetLastActivityBadge(source.LastActivity)" />
+                                        <div class="subtle-copy mt-2">@ProductNormaliser.Web.Models.SourceManagementPresentation.FormatLastActivity(source.LastActivity)</div>
+                                    </td>
                                 </tr>
                             }
                             </tbody>

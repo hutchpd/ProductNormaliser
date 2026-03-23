@@ -61,6 +61,11 @@ public sealed class IndexModel(
 
     public int EnabledCategorySourceCount => CategorySources.Count(source => source.IsEnabled);
 
+    public int ReadyCategorySourceCount => CategorySources.Count(source => string.Equals(source.Readiness.Status, "Ready", StringComparison.OrdinalIgnoreCase));
+
+    public int AttentionCategorySourceCount => CategorySources.Count(source => string.Equals(source.Health.Status, "Watch", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(source.Health.Status, "Attention", StringComparison.OrdinalIgnoreCase));
+
     public int RobotsProtectedSourceCount => CategorySources.Count(source => source.ThrottlingPolicy.RespectRobotsTxt);
 
     public decimal AverageRequestsPerMinute => CategorySources.Count == 0
@@ -142,17 +147,17 @@ public sealed class IndexModel(
         },
         new OperatorSummaryCardModel
         {
-            Title = "Enabled",
-            Value = EnabledCategorySourceCount.ToString(),
-            Description = "Sources currently available for crawl launch.",
-            Tone = EnabledCategorySourceCount == 0 ? "warning" : "completed"
+            Title = "Crawl-ready",
+            Value = ReadyCategorySourceCount.ToString(),
+            Description = "Sources with assigned category coverage ready for crawl launch.",
+            Tone = ReadyCategorySourceCount == 0 ? "warning" : "completed"
         },
         new OperatorSummaryCardModel
         {
-            Title = "Robots protected",
-            Value = RobotsProtectedSourceCount.ToString(),
-            Description = "Sources configured to respect robots.txt.",
-            Tone = RobotsProtectedSourceCount < CategorySources.Count ? "warning" : "completed"
+            Title = "Needs attention",
+            Value = AttentionCategorySourceCount.ToString(),
+            Description = "Sources currently reporting watch or attention health posture.",
+            Tone = AttentionCategorySourceCount == 0 ? "completed" : "warning"
         },
         new OperatorSummaryCardModel
         {

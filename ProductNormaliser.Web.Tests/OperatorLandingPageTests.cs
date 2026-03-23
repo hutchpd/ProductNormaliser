@@ -44,7 +44,12 @@ public sealed class OperatorLandingPageTests
             Assert.That(html, Does.Contain("job_active_1"));
             Assert.That(html, Does.Contain("Canonical products"));
             Assert.That(html, Does.Contain("Schema readiness"));
-            Assert.That(html, Does.Contain("Robots protected"));
+            Assert.That(html, Does.Contain("Crawl-ready"));
+            Assert.That(html, Does.Contain("Needs attention"));
+            Assert.That(html, Does.Contain("Ready"));
+            Assert.That(html, Does.Contain("Healthy"));
+            Assert.That(html, Does.Contain("Last crawl succeeded"));
+            Assert.That(html, Does.Contain("Last crawl failed"));
         });
     }
 
@@ -156,7 +161,31 @@ public sealed class OperatorLandingPageTests
                     DisplayName = "AO UK",
                     IsEnabled = true,
                     SupportedCategoryKeys = ["tv", "monitor"],
-                    ThrottlingPolicy = new SourceThrottlingPolicyDto { RequestsPerMinute = 30, RespectRobotsTxt = true }
+                    ThrottlingPolicy = new SourceThrottlingPolicyDto { RequestsPerMinute = 30, RespectRobotsTxt = true },
+                    Readiness = new SourceReadinessDto
+                    {
+                        Status = "Ready",
+                        AssignedCategoryCount = 2,
+                        CrawlableCategoryCount = 2,
+                        Summary = "All 2 assigned categories are crawl-ready."
+                    },
+                    Health = new SourceHealthSummaryDto
+                    {
+                        Status = "Healthy",
+                        TrustScore = 91m,
+                        CoveragePercent = 86m,
+                        SuccessfulCrawlRate = 97m,
+                        SnapshotUtc = new DateTime(2026, 3, 23, 8, 0, 0, DateTimeKind.Utc)
+                    },
+                    LastActivity = new SourceLastActivityDto
+                    {
+                        TimestampUtc = new DateTime(2026, 3, 23, 9, 0, 0, DateTimeKind.Utc),
+                        Status = "succeeded",
+                        DurationMs = 1100,
+                        ExtractedProductCount = 18,
+                        HadMeaningfulChange = true,
+                        MeaningfulChangeSummary = "Observed updated product content."
+                    }
                 },
                 new SourceDto
                 {
@@ -164,7 +193,31 @@ public sealed class OperatorLandingPageTests
                     DisplayName = "Northwind",
                     IsEnabled = true,
                     SupportedCategoryKeys = ["monitor"],
-                    ThrottlingPolicy = new SourceThrottlingPolicyDto { RequestsPerMinute = 45, RespectRobotsTxt = true }
+                    ThrottlingPolicy = new SourceThrottlingPolicyDto { RequestsPerMinute = 45, RespectRobotsTxt = true },
+                    Readiness = new SourceReadinessDto
+                    {
+                        Status = "Limited",
+                        AssignedCategoryCount = 1,
+                        CrawlableCategoryCount = 1,
+                        Summary = "Assigned category is crawlable, but health signals need review."
+                    },
+                    Health = new SourceHealthSummaryDto
+                    {
+                        Status = "Attention",
+                        TrustScore = 63m,
+                        CoveragePercent = 58m,
+                        SuccessfulCrawlRate = 71m,
+                        SnapshotUtc = new DateTime(2026, 3, 23, 8, 30, 0, DateTimeKind.Utc)
+                    },
+                    LastActivity = new SourceLastActivityDto
+                    {
+                        TimestampUtc = new DateTime(2026, 3, 23, 9, 15, 0, DateTimeKind.Utc),
+                        Status = "failed",
+                        DurationMs = 950,
+                        ExtractedProductCount = 0,
+                        HadMeaningfulChange = false,
+                        ErrorMessage = "Navigation timeout."
+                    }
                 }
             ],
             Stats = new StatsDto

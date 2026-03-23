@@ -24,6 +24,7 @@ At startup the API registers:
 - `IDataIntelligenceService` for quality and historical intelligence read models
 - `ICategoryManagementService` for category catalog and combined detail lookups
 - `ISourceManagementService` for source registration, validation, and policy updates
+- `ISourceOperationalInsightsProvider` for source readiness, health, and recent-activity summaries
 
 ## Main controllers and endpoints
 
@@ -55,10 +56,19 @@ Returns merge conflicts where evidence is competing or ambiguous.
 
 ### Products
 
+- `GET /api/products`
 - `GET /api/products/{id}`
 - `GET /api/products/{id}/history`
 
-These endpoints let you inspect the canonical record and the time series of meaningful change events.
+These endpoints let you inspect filtered product lists, individual canonical records, and the time series of meaningful change events.
+
+### Crawl jobs
+
+- `GET /api/crawljobs`
+- `POST /api/crawljobs`
+- `GET /api/crawljobs/{jobId}`
+
+These endpoints support the operator crawl console and quick-launch flow.
 
 ### Categories
 
@@ -83,6 +93,8 @@ These endpoints exist so the dashboard can discover supported electrical-goods c
 - `PUT /api/sources/{sourceId}/throttling`
 
 These endpoints manage the dedicated crawl-source registry used by the web UI. They include OpenAPI response annotations and concrete example payloads in the generated document so dashboard and client developers can inspect the expected shapes directly.
+
+The source payloads now include readiness, health, and recent activity summaries so the operator UI can surface crawl posture without separately stitching together telemetry.
 
 ### Quality and intelligence
 
@@ -139,7 +151,7 @@ The included HTTP scratch file suggests a local development base address of `htt
 ## Current scope and limitations
 
 - queue write flows are still not exposed as a public ingestion API
-- authentication and authorization are not configured as a complete security model yet
+- the API uses API-key authentication and operator or viewer roles for internal access, but it is not yet a fully hardened public security model
 - it is best treated as an operational admin surface, not a public internet API
 
 ## Build

@@ -1,30 +1,33 @@
 # ProductNormaliser.Web
 
-ProductNormaliser.Web is the web UI host for the platform.
+ProductNormaliser.Web is the operator-facing Razor Pages host for Milestone 1. It consumes the Admin API over HTTP and gives operators one consistent workflow surface for category context, crawl launch, job monitoring, product inspection, quality review, and source management.
 
-Its purpose is to provide the user-facing dashboard for category selection, crawl-source management, progress tracking, and product inspection while consuming backend APIs over HTTP instead of coupling directly to MongoDB or repository code.
+## Milestone 1 scope
 
-## Why this project exists
+The web host currently delivers:
 
-- establish a dedicated UI layer in the solution
-- keep the frontend separate from persistence and worker logic
-- provide a home for dashboard pages, visualisations, product exploration, and operational workflows
-- support category and source management across TVs and broader electrical goods
+- an operator landing page that keeps the active category context visible
+- category selection for the rollout set: TVs, Monitors, and Laptops
+- quick crawl launch and crawl-job monitoring
+- canonical product exploration with quality-aware filters and paging
+- product detail pages with source comparison, evidence, conflicts, and history
+- a quality dashboard for schema coverage, unmapped attributes, stability, and disagreements
+- source registry and source detail pages with readiness, health, last-activity, enable or disable, category assignment, and throttling controls
 
 ## Architectural role
 
-This project should talk to backend API endpoints and shared UI-level models only. It should not reference Infrastructure or interact with database concerns directly.
+This project talks to backend API endpoints and UI-level models only. It does not reference Infrastructure and does not talk directly to MongoDB or repository implementations.
 
-## Current dashboard wiring
+## Admin API dependencies
 
-The web host now contains a first dashboard slice that calls the Admin API for:
+The web host calls the Admin API for:
 
-- `GET /api/categories/enabled` to populate category selection
-- `GET /api/categories/{categoryKey}/detail` to render metadata plus schema in one request
-- `GET /api/sources` and `GET /api/sources/{sourceId}` for managed source views
-- source registration, enable or disable, category assignment, and throttling updates
-
-The main dashboard page shows category detail and the live source registry. The source detail page wires through the update, category assignment, and throttling workflows.
+- category discovery and category detail
+- crawl job list, launch, and job detail
+- product list, product detail, and product history
+- quality dashboards and analytics
+- source registry, source detail, and source management actions
+- high-level stats used by the operator landing page
 
 ## Configuration
 

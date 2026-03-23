@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using ProductNormaliser.AdminApi.Contracts;
+using ProductNormaliser.AdminApi.Services;
 using ProductNormaliser.Application.Sources;
 using ProductNormaliser.Core.Models;
 
@@ -30,6 +32,8 @@ internal sealed class AdminApiWebApplicationFactory : WebApplicationFactory<Prog
         {
             services.RemoveAll<ISourceManagementService>();
             services.AddSingleton<ISourceManagementService>(new FakeSourceManagementService());
+            services.RemoveAll<ISourceOperationalInsightsProvider>();
+            services.AddSingleton<ISourceOperationalInsightsProvider>(new FakeSourceOperationalInsightsProvider());
         });
     }
 
@@ -74,5 +78,44 @@ internal sealed class AdminApiWebApplicationFactory : WebApplicationFactory<Prog
 
         public Task<CrawlSource> SetThrottlingAsync(string sourceId, SourceThrottlingPolicy policy, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
+    }
+
+    private sealed class FakeSourceOperationalInsightsProvider : ISourceOperationalInsightsProvider
+    {
+        public Task<IReadOnlyDictionary<string, SourceOperationalInsights>> BuildAsync(IReadOnlyList<CrawlSource> sources, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyDictionary<string, SourceOperationalInsights>>(sources.ToDictionary(
+                source => source.Id,
+                source => new SourceOperationalInsights
+                {
+                    Readiness = new SourceReadinessDto
+                    {
+                        Status = source.SupportedCategoryKeys.Count == 0 ? "Unassigned" : "Ready",
+                        AssignedCategoryCount = source.SupportedCategoryKeys.Count,
+                        CrawlableCategoryCount = source.SupportedCategoryKeys.Count,
+                        Summary = source.SupportedCategoryKeys.Count == 0
+                            ? "No categories are currently assigned."
+                            : $"All {source.SupportedCategoryKeys.Count} assigned categories are crawl-ready."
+                    },
+                    Health = new SourceHealthSummaryDto
+                    {
+                        Status = "Healthy",
+                        TrustScore = 90m,
+                        CoveragePercent = 85m,
+                        SuccessfulCrawlRate = 95m,
+                        SnapshotUtc = new DateTime(2026, 03, 23, 08, 00, 00, DateTimeKind.Utc)
+                    },
+                    LastActivity = new SourceLastActivityDto
+                    {
+                        TimestampUtc = new DateTime(2026, 03, 23, 09, 00, 00, DateTimeKind.Utc),
+                        Status = "succeeded",
+                        DurationMs = 1200,
+                        ExtractedProductCount = 10,
+                        HadMeaningfulChange = true,
+                        MeaningfulChangeSummary = "Observed updated product content."
+                    }
+                },
+                StringComparer.OrdinalIgnoreCase));
+        }
     }
 }
