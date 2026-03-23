@@ -212,8 +212,99 @@ public sealed class ProductPageRenderingTests
         Assert.That(html, Does.Contain("Source comparison"));
         Assert.That(html, Does.Contain("Evidence Inspector"));
         Assert.That(html, Does.Contain("Conflict panel"));
-        Assert.That(html, Does.Contain("Product history"));
+        Assert.That(html, Does.Contain("Analyst workflow"));
+        Assert.That(html, Does.Contain("Source drift indicators"));
+        Assert.That(html, Does.Contain("Canonical value change explanations"));
+        Assert.That(html, Does.Contain("Product history timeline"));
+        Assert.That(html, Does.Contain("Attribute-level change history"));
+        Assert.That(html, Does.Contain("Strongest current support comes from Contoso"));
+        Assert.That(html, Does.Contain("Still aligns"));
         Assert.That(html, Does.Contain("Open source page"));
         Assert.That(html, Does.Contain("/Products?category=tv&amp;search=OLED&amp;page=3&amp;minSourceCount=2&amp;freshness=aging&amp;conflictStatus=with_conflicts&amp;completeness=partial&amp;sort=conflicts_desc"));
+    }
+
+    [Test]
+    public async Task DetailPage_RendersNoHistoryStates()
+    {
+        var fakeAdminApiClient = new FakeAdminApiClient
+        {
+            Product = new ProductDetailDto
+            {
+                Id = "prod_tv_lcd_002",
+                CategoryKey = "tv",
+                Brand = "Northwind",
+                ModelNumber = "NW-42-LCD",
+                DisplayName = "Northwind LCD 42",
+                CreatedUtc = new DateTime(2025, 1, 1, 8, 0, 0, DateTimeKind.Utc),
+                UpdatedUtc = new DateTime(2025, 1, 18, 9, 15, 0, DateTimeKind.Utc),
+                SourceCount = 1,
+                EvidenceCount = 1,
+                ConflictAttributeCount = 0,
+                HasConflict = false,
+                CompletenessScore = 0.8m,
+                CompletenessStatus = "complete",
+                FreshnessStatus = "fresh",
+                FreshnessAgeDays = 1,
+                Attributes =
+                [
+                    new ProductAttributeDetailDto
+                    {
+                        AttributeKey = "resolution",
+                        Value = "4K",
+                        ValueType = "string",
+                        Confidence = 0.98m,
+                        HasConflict = false,
+                        Evidence =
+                        [
+                            new AttributeEvidenceDto
+                            {
+                                SourceName = "Contoso",
+                                SourceUrl = "https://example.test/products/2",
+                                SourceProductId = "src-2",
+                                SourceAttributeKey = "specs.resolution",
+                                RawValue = "4K",
+                                SelectorOrPath = "specs.resolution",
+                                Confidence = 0.98m,
+                                ObservedUtc = new DateTime(2025, 1, 18, 9, 0, 0, DateTimeKind.Utc)
+                            }
+                        ]
+                    }
+                ],
+                SourceProducts =
+                [
+                    new SourceProductDetailDto
+                    {
+                        Id = "src-2",
+                        SourceName = "Contoso",
+                        SourceUrl = "https://example.test/products/2",
+                        Title = "Northwind LCD 42",
+                        RawSchemaJson = "{}",
+                        RawAttributes =
+                        [
+                            new SourceAttributeValueDto
+                            {
+                                AttributeKey = "resolution",
+                                Value = "4K",
+                                ValueType = "string",
+                                SourcePath = "specs.resolution"
+                            }
+                        ]
+                    }
+                ]
+            },
+            ProductHistory = []
+        };
+
+        await using var factory = new ProductWebApplicationFactory(fakeAdminApiClient);
+        using var client = await factory.CreateOperatorClientAsync();
+
+        var html = await client.GetStringAsync("/Products/Details?productId=prod_tv_lcd_002&category=tv");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(html, Does.Contain("Product history timeline"));
+            Assert.That(html, Does.Contain("No history events are recorded for this product yet."));
+            Assert.That(html, Does.Contain("No attribute-level changes are recorded for this product yet."));
+        });
     }
 }

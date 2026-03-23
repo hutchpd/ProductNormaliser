@@ -50,6 +50,63 @@ public sealed class ProductInspectionPageTests
             Assert.That(model.ConflictRows.Select(row => row.AttributeKey), Is.EqualTo(new[] { "screen_size" }));
             Assert.That(model.Timeline, Has.Count.EqualTo(1));
             Assert.That(model.Timeline[0].ChangeSummary, Is.EqualTo("Changed from 54.6 to 55"));
+            Assert.That(model.Timeline[0].SourceAlignmentBadge.Text, Is.EqualTo("Still aligns"));
+            Assert.That(model.AttributeHistory, Has.Count.EqualTo(1));
+            Assert.That(model.SourceDriftIndicators, Has.Count.EqualTo(2));
+            Assert.That(model.CanonicalExplanations, Has.Count.EqualTo(2));
+        });
+    }
+
+    [Test]
+    public void ProductInspectionPresentation_BuildsAttributeHistorySourceDriftAndCanonicalExplanationState()
+    {
+        var history = new[]
+        {
+            new ProductChangeEventDto
+            {
+                CanonicalProductId = "canon-1",
+                CategoryKey = "tv",
+                AttributeKey = "screen_size",
+                OldValue = 54.6,
+                NewValue = 55,
+                SourceName = "AO UK",
+                TimestampUtc = new DateTime(2026, 03, 22, 10, 05, 00, DateTimeKind.Utc)
+            },
+            new ProductChangeEventDto
+            {
+                CanonicalProductId = "canon-1",
+                CategoryKey = "tv",
+                AttributeKey = "screen_size",
+                OldValue = 55,
+                NewValue = 54.6,
+                SourceName = "Currys",
+                TimestampUtc = new DateTime(2026, 03, 22, 09, 58, 00, DateTimeKind.Utc)
+            }
+        };
+
+        var attributeHistory = ProductInspectionPresentation.GetAttributeHistory(CreateProduct(), history);
+        var sourceDrift = ProductInspectionPresentation.GetSourceDriftIndicators(CreateProduct(), history);
+        var explanations = ProductInspectionPresentation.GetCanonicalExplanations(CreateProduct(), history);
+
+        var screenSizeHistory = attributeHistory.Single(group => group.AttributeKey == "screen_size");
+        var currysDrift = sourceDrift.Single(indicator => indicator.SourceName == "Currys");
+        var screenSizeExplanation = explanations.Single(explanation => explanation.AttributeKey == "screen_size");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(screenSizeHistory.HasConflictingHistory, Is.True);
+            Assert.That(screenSizeHistory.HistoryBadge.Text, Is.EqualTo("Conflicting history"));
+            Assert.That(screenSizeHistory.Events, Has.Count.EqualTo(2));
+
+            Assert.That(currysDrift.DriftBadge.Text, Is.EqualTo("Watch"));
+            Assert.That(currysDrift.DivergingAttributeCount, Is.EqualTo(1));
+            Assert.That(currysDrift.DivergingAttributes, Is.EqualTo(new[] { "screen_size" }));
+
+            Assert.That(screenSizeExplanation.DecisionBadge.Text, Is.EqualTo("Contested"));
+            Assert.That(screenSizeExplanation.SupportingSources, Is.EqualTo(new[] { "AO UK" }));
+            Assert.That(screenSizeExplanation.OpposingSources, Is.EqualTo(new[] { "Currys" }));
+            Assert.That(screenSizeExplanation.StrongestSupportSummary, Does.Contain("AO UK"));
+            Assert.That(screenSizeExplanation.LastChangedSummary, Does.Contain("AO UK"));
         });
     }
 

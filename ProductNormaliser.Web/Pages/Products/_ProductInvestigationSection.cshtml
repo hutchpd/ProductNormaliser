@@ -1,0 +1,162 @@
+@model ProductNormaliser.Web.Pages.Products.DetailsModel
+
+<section id="investigation" class="panel panel-muted inspector-section">
+    <div class="panel-heading">
+        <div>
+            <p class="eyebrow">Change Investigation</p>
+            <h2>Analyst workflow</h2>
+            <p class="subtle-copy">Use this section to answer what changed, when it changed, which source moved it, and why the canonical value is currently in force.</p>
+        </div>
+    </div>
+
+    <div class="product-analysis-strip product-investigation-strip">
+        <article class="product-result-card">
+            <div>
+                <p class="eyebrow">Latest change</p>
+                <strong>@(Model.InvestigationSummary.LatestChange is null ? "No history" : Model.InvestigationSummary.LatestChange.AttributeKey)</strong>
+            </div>
+            <p class="subtle-copy">@(Model.InvestigationSummary.LatestChange is null ? "No change events have been recorded yet." : $"{Model.InvestigationSummary.LatestChange.TimestampUtc:u} by {Model.InvestigationSummary.LatestChange.SourceName}.")</p>
+        </article>
+
+        <article class="product-result-card">
+            <div>
+                <p class="eyebrow">Changed attributes</p>
+                <strong>@Model.InvestigationSummary.ChangedAttributeCount</strong>
+            </div>
+            <p class="subtle-copy">@Model.InvestigationSummary.TotalChanges total canonical change event@(Model.InvestigationSummary.TotalChanges == 1 ? string.Empty : "s") tracked for this product.</p>
+        </article>
+
+        <article class="product-result-card">
+            <div>
+                <p class="eyebrow">Sources involved</p>
+                <strong>@Model.InvestigationSummary.InvolvedSourceCount</strong>
+            </div>
+            <p class="subtle-copy">Distinct sources currently represented in the recorded canonical change timeline.</p>
+        </article>
+
+        <article class="product-result-card @(Model.InvestigationSummary.DriftingSourceCount > 0 ? "attention" : string.Empty)">
+            <div>
+                <p class="eyebrow">Drifting sources</p>
+                <strong>@Model.InvestigationSummary.DriftingSourceCount</strong>
+            </div>
+            <p class="subtle-copy">Sources whose current claims or recent change pattern suggest drift from the current canonical state.</p>
+        </article>
+    </div>
+
+    <div class="product-investigation-grid">
+        <article class="investigation-subpanel">
+            <div class="panel-heading compact-panel-heading">
+                <div>
+                    <p class="eyebrow">Source Drift Indicators</p>
+                    <h3>Source drift indicators</h3>
+                </div>
+            </div>
+
+            @if (Model.SourceDriftIndicators.Count == 0)
+            {
+                <div class="empty-panel">
+                    <p class="empty-state">No source drift indicators are available for this product.</p>
+                </div>
+            }
+            else
+            {
+                <div class="drift-card-stack">
+                    @foreach (var source in Model.SourceDriftIndicators)
+                    {
+                        <article class="drift-card @(source.DriftBadge.Tone)">
+                            <div class="drift-card-header">
+                                <div>
+                                    <strong>@source.SourceName</strong>
+                                    <p class="subtle-copy">@source.Summary</p>
+                                </div>
+                                <partial name="_StatusBadge" model="source.DriftBadge" />
+                            </div>
+
+                            <div class="evidence-meta-grid">
+                                <div>
+                                    <dt>Change events</dt>
+                                    <dd>@source.ChangeCount</dd>
+                                </div>
+                                <div>
+                                    <dt>Changed attributes</dt>
+                                    <dd>@source.ChangedAttributeCount</dd>
+                                </div>
+                                <div>
+                                    <dt>Current divergence</dt>
+                                    <dd>@source.DivergingAttributeCount</dd>
+                                </div>
+                                <div>
+                                    <dt>Last change</dt>
+                                    <dd>@(source.LastChangedUtc?.ToString("u") ?? "No recorded change")</dd>
+                                </div>
+                            </div>
+
+                            @if (source.DivergingAttributes.Count > 0)
+                            {
+                                <div class="chip-row mt-3">
+                                    @foreach (var attributeKey in source.DivergingAttributes)
+                                    {
+                                        <span class="chip">@attributeKey</span>
+                                    }
+                                </div>
+                            }
+                        </article>
+                    }
+                </div>
+            }
+        </article>
+
+        <article class="investigation-subpanel">
+            <div class="panel-heading compact-panel-heading">
+                <div>
+                    <p class="eyebrow">Canonical Reasoning</p>
+                    <h3>Canonical value change explanations</h3>
+                </div>
+            </div>
+
+            @if (Model.CanonicalExplanations.Count == 0)
+            {
+                <div class="empty-panel">
+                    <p class="empty-state">No canonical value explanations are available for this product.</p>
+                </div>
+            }
+            else
+            {
+                <div class="evidence-stack">
+                    @foreach (var explanation in Model.CanonicalExplanations)
+                    {
+                        <details class="evidence-item @(explanation.DecisionBadge.Tone is "warning" or "danger" ? "attention" : string.Empty)">
+                            <summary>
+                                <div>
+                                    <strong class="mono">@explanation.AttributeKey</strong>
+                                    <span class="subtle-copy">Canonical: @explanation.CanonicalValue</span>
+                                </div>
+                                <div class="chip-row">
+                                    <partial name="_StatusBadge" model="explanation.DecisionBadge" />
+                                    <span class="status-pill neutral">@explanation.SupportingSources.Count support / @explanation.OpposingSources.Count oppose</span>
+                                </div>
+                            </summary>
+
+                            <div class="explanation-stack">
+                                <p>@explanation.WhyCurrentSummary</p>
+                                <p class="subtle-copy">@explanation.StrongestSupportSummary</p>
+                                <p class="subtle-copy">@explanation.LastChangedSummary</p>
+
+                                <div class="evidence-meta-grid">
+                                    <div>
+                                        <dt>Supporting sources</dt>
+                                        <dd>@(explanation.SupportingSources.Count == 0 ? "None" : string.Join(", ", explanation.SupportingSources))</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Opposing sources</dt>
+                                        <dd>@(explanation.OpposingSources.Count == 0 ? "None" : string.Join(", ", explanation.OpposingSources))</dd>
+                                    </div>
+                                </div>
+                            </div>
+                        </details>
+                    }
+                </div>
+            }
+        </article>
+    </div>
+</section>

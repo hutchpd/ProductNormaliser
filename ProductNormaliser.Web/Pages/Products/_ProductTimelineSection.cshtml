@@ -4,7 +4,8 @@
     <div class="panel-heading">
         <div>
             <p class="eyebrow">Timeline</p>
-            <h2>Product history</h2>
+            <h2>Product history timeline</h2>
+            <p class="subtle-copy">Review what changed, when it changed, and whether the driving source still aligns with the current canonical value.</p>
         </div>
     </div>
 
@@ -30,6 +31,10 @@
                             <time>@change.TimestampUtc.ToString("u")</time>
                         </div>
                         <p>@change.ChangeSummary</p>
+                        <div class="chip-row mb-3">
+                            <partial name="_StatusBadge" model="change.SourceAlignmentBadge" />
+                        </div>
+                        <p class="subtle-copy">@change.SourceAlignmentSummary</p>
                         <div class="timeline-value-grid">
                             <div>
                                 <dt>Old</dt>
@@ -39,10 +44,89 @@
                                 <dt>New</dt>
                                 <dd>@change.NewValue</dd>
                             </div>
+                            <div>
+                                <dt>Current canonical</dt>
+                                <dd>@change.CurrentCanonicalValue</dd>
+                            </div>
                         </div>
                     </article>
                 </li>
             }
         </ol>
+    }
+
+    <div class="panel-heading compact-panel-heading mt-4">
+        <div>
+            <p class="eyebrow">Attribute History</p>
+            <h3>Attribute-level change history</h3>
+        </div>
+    </div>
+
+    @if (Model.AttributeHistory.Count == 0)
+    {
+        <div id="attribute-history" class="empty-panel">
+            <p class="empty-state">No attribute-level changes are recorded for this product yet.</p>
+        </div>
+    }
+    else
+    {
+        <div id="attribute-history" class="history-group-stack">
+            @foreach (var historyGroup in Model.AttributeHistory)
+            {
+                <details class="evidence-item @(historyGroup.HasConflictingHistory ? "attention" : string.Empty)">
+                    <summary>
+                        <div>
+                            <strong class="mono">@historyGroup.AttributeKey</strong>
+                            <span class="subtle-copy">Current canonical: @historyGroup.CurrentCanonicalValue</span>
+                        </div>
+                        <div class="chip-row">
+                            <partial name="_StatusBadge" model="historyGroup.HistoryBadge" />
+                            <span class="status-pill neutral">@historyGroup.Events.Count event@(historyGroup.Events.Count == 1 ? string.Empty : "s")</span>
+                        </div>
+                    </summary>
+
+                    <div class="explanation-stack">
+                        <p>@historyGroup.Summary</p>
+                        <p class="subtle-copy">@historyGroup.LatestChangeSummary</p>
+                    </div>
+
+                    <div class="history-event-stack">
+                        @foreach (var change in historyGroup.Events)
+                        {
+                            <article class="history-event-card">
+                                <div class="timeline-card-header">
+                                    <div>
+                                        <strong>@change.SourceName</strong>
+                                        <p class="subtle-copy">@change.ChangeSummary</p>
+                                    </div>
+                                    <time>@change.TimestampUtc.ToString("u")</time>
+                                </div>
+                                <div class="chip-row mt-3 mb-3">
+                                    <partial name="_StatusBadge" model="change.SourceAlignmentBadge" />
+                                </div>
+                                <div class="timeline-value-grid">
+                                    <div>
+                                        <dt>Old</dt>
+                                        <dd>@change.OldValue</dd>
+                                    </div>
+                                    <div>
+                                        <dt>New</dt>
+                                        <dd>@change.NewValue</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Current canonical</dt>
+                                        <dd>@change.CurrentCanonicalValue</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Current source posture</dt>
+                                        <dd>@change.SourceAlignmentSummary</dd>
+                                    </div>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                </details>
+            }
+        </div>
     }
 </section>

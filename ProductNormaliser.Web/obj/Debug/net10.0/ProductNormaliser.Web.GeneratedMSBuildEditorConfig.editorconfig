@@ -74,6 +74,10 @@ build_metadata.AdditionalFiles.CssScope =
 build_metadata.AdditionalFiles.TargetPath = UGFnZXNcUHJvZHVjdHNcX1Byb2R1Y3RFdmlkZW5jZVNlY3Rpb24uY3NodG1s
 build_metadata.AdditionalFiles.CssScope = 
 
+[C:/Users/xhabl/ProductNormaliser/ProductNormaliser.Web/Pages/Products/_ProductInvestigationSection.cshtml]
+build_metadata.AdditionalFiles.TargetPath = UGFnZXNcUHJvZHVjdHNcX1Byb2R1Y3RJbnZlc3RpZ2F0aW9uU2VjdGlvbi5jc2h0bWw=
+build_metadata.AdditionalFiles.CssScope = 
+
 [C:/Users/xhabl/ProductNormaliser/ProductNormaliser.Web/Pages/Products/_ProductKeyAttributesSection.cshtml]
 build_metadata.AdditionalFiles.TargetPath = UGFnZXNcUHJvZHVjdHNcX1Byb2R1Y3RLZXlBdHRyaWJ1dGVzU2VjdGlvbi5jc2h0bWw=
 build_metadata.AdditionalFiles.CssScope = 

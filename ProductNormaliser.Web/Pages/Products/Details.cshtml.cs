@@ -60,7 +60,25 @@ public sealed class DetailsModel(
         ? []
         : ProductInspectionPresentation.GetConflictRows(Product);
 
-    public IReadOnlyList<ProductHistoryTimelineEntryModel> Timeline => ProductInspectionPresentation.GetHistoryTimeline(ProductHistory);
+    public ProductInvestigationSummaryModel InvestigationSummary => Product is null
+        ? new ProductInvestigationSummaryModel()
+        : ProductInspectionPresentation.GetInvestigationSummary(Product, ProductHistory);
+
+    public IReadOnlyList<ProductSourceDriftIndicatorModel> SourceDriftIndicators => Product is null
+        ? []
+        : ProductInspectionPresentation.GetSourceDriftIndicators(Product, ProductHistory);
+
+    public IReadOnlyList<ProductCanonicalExplanationModel> CanonicalExplanations => Product is null
+        ? []
+        : ProductInspectionPresentation.GetCanonicalExplanations(Product, ProductHistory);
+
+    public IReadOnlyList<ProductHistoryTimelineEntryModel> Timeline => Product is null
+        ? []
+        : ProductInspectionPresentation.GetHistoryTimeline(Product, ProductHistory);
+
+    public IReadOnlyList<ProductAttributeHistoryGroupModel> AttributeHistory => Product is null
+        ? []
+        : ProductInspectionPresentation.GetAttributeHistory(Product, ProductHistory);
 
     public StatusBadgeModel FreshnessBadge => Product is null
         ? new StatusBadgeModel { Text = "Unknown freshness", Tone = "neutral" }
@@ -86,7 +104,7 @@ public sealed class DetailsModel(
         {
             Eyebrow = "Product Detail",
             Title = Product.DisplayName,
-            Description = "Review the canonical summary, key attributes, source comparison, raw evidence, disagreements, and change history in one place.",
+            Description = "Review the canonical summary, value explanations, source drift, raw evidence, disagreements, and change history in one place.",
             Metrics =
             [
                 new HeroMetricModel { Label = "Sources", Value = Product.SourceCount.ToString() },
