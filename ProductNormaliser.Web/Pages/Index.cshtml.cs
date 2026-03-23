@@ -122,7 +122,7 @@ public sealed class IndexModel(
             Value = HasCategoryContext ? $"{SchemaCompletenessPercent:0}%" : "No category",
             Description = HasCategoryContext
                 ? $"{SelectedCategory?.Schema.Attributes.Count ?? 0} tracked attributes in the active primary category."
-                : "Select a rollout category to inspect schema readiness.",
+                : "Select an enabled category to inspect schema readiness.",
             Tone = SchemaCompletenessPercent >= 85m ? "completed" : "warning"
         },
         new OperatorSummaryCardModel
@@ -237,7 +237,7 @@ public sealed class IndexModel(
             : "Milestone 1 operator landing",
         Description = HasCategoryContext
             ? "Use the current category context to launch crawl work, monitor active jobs, inspect product health, and review source posture without leaving the control surface."
-            : "This console is the deliberate entry point for crawl, quality, products, and sources. Select rollout categories first, then move into the main operating paths.",
+            : "This console is the deliberate entry point for crawl, quality, products, and sources. Select active categories first, then move into the main operating paths.",
         Metrics =
         [
             new HeroMetricModel { Label = "Context", Value = HasCategoryContext ? CurrentCategoryContext!.SelectionSummary : "No category" },

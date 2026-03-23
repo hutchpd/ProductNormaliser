@@ -5,21 +5,19 @@ namespace ProductNormaliser.Domain.Tests;
 public sealed class CategorySchemaRegistryTests
 {
     [Test]
-    public void Registry_ResolvesExpectedProviders_ForTvMonitorLaptopAndRefrigerator()
+    public void Registry_ResolvesExpectedProviders_ForDefaultCategoryWave()
     {
-        var registry = new CategorySchemaRegistry(
-        [
-            new TvCategorySchemaProvider(),
-            new MonitorCategorySchemaProvider(),
-            new LaptopCategorySchemaProvider(),
-            new RefrigeratorCategorySchemaProvider()
-        ]);
+        var registry = DefaultCategoryRegistries.CreateSchemaRegistry();
 
         Assert.Multiple(() =>
         {
             Assert.That(registry.GetProvider("tv"), Is.TypeOf<TvCategorySchemaProvider>());
             Assert.That(registry.GetProvider("monitor"), Is.TypeOf<MonitorCategorySchemaProvider>());
             Assert.That(registry.GetProvider("laptop"), Is.TypeOf<LaptopCategorySchemaProvider>());
+            Assert.That(registry.GetProvider("tablet"), Is.TypeOf<TabletCategorySchemaProvider>());
+            Assert.That(registry.GetProvider("smartphone"), Is.TypeOf<SmartphoneCategorySchemaProvider>());
+            Assert.That(registry.GetProvider("headphones"), Is.TypeOf<HeadphonesCategorySchemaProvider>());
+            Assert.That(registry.GetProvider("speakers"), Is.TypeOf<SpeakersCategorySchemaProvider>());
             Assert.That(registry.GetProvider("refrigerator"), Is.TypeOf<RefrigeratorCategorySchemaProvider>());
         });
     }

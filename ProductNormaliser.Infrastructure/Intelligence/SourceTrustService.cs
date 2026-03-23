@@ -22,13 +22,8 @@ public sealed class SourceTrustService : ISourceTrustService
     {
         this.mongoDbContext = mongoDbContext;
         this.sourceDisagreementService = sourceDisagreementService;
-        this.categorySchemaRegistry = categorySchemaRegistry ?? new CategorySchemaRegistry([new TvCategorySchemaProvider(), new MonitorCategorySchemaProvider(), new LaptopCategorySchemaProvider(), new RefrigeratorCategorySchemaProvider()]);
-        this.categoryAttributeNormaliserRegistry = categoryAttributeNormaliserRegistry ?? new CategoryAttributeNormaliserRegistry([
-            new TvAttributeNormaliser(),
-            new MonitorAttributeNormaliser(),
-            new LaptopAttributeNormaliser(),
-            new RefrigeratorAttributeNormaliser()
-        ]);
+        this.categorySchemaRegistry = categorySchemaRegistry ?? DefaultCategoryRegistries.CreateSchemaRegistry();
+        this.categoryAttributeNormaliserRegistry = categoryAttributeNormaliserRegistry ?? DefaultCategoryRegistries.CreateAttributeNormaliserRegistry();
     }
 
     public decimal GetHistoricalTrustScore(string sourceName, string categoryKey)

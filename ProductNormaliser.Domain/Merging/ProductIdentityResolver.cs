@@ -1,6 +1,7 @@
 using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Core.Normalisation;
+using ProductNormaliser.Core.Schemas;
 
 namespace ProductNormaliser.Core.Merging;
 
@@ -11,12 +12,7 @@ public sealed class ProductIdentityResolver(
 {
     private readonly ProductFingerprintBuilder fingerprintBuilder = fingerprintBuilder ?? new ProductFingerprintBuilder();
     private readonly ConfidenceScorer confidenceScorer = confidenceScorer ?? new ConfidenceScorer();
-    private readonly ICategoryAttributeNormaliserRegistry categoryAttributeNormaliserRegistry = categoryAttributeNormaliserRegistry ?? new CategoryAttributeNormaliserRegistry([
-        new TvAttributeNormaliser(),
-        new MonitorAttributeNormaliser(),
-        new LaptopAttributeNormaliser(),
-        new RefrigeratorAttributeNormaliser()
-    ]);
+    private readonly ICategoryAttributeNormaliserRegistry categoryAttributeNormaliserRegistry = categoryAttributeNormaliserRegistry ?? DefaultCategoryRegistries.CreateAttributeNormaliserRegistry();
 
     public ProductIdentityMatchResult Match(SourceProduct sourceProduct, IReadOnlyCollection<CanonicalProduct> candidates)
     {

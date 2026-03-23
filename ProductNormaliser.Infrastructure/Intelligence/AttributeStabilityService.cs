@@ -8,7 +8,7 @@ namespace ProductNormaliser.Infrastructure.Intelligence;
 
 public sealed class AttributeStabilityService(MongoDbContext mongoDbContext, ICategorySchemaRegistry? categorySchemaRegistry = null) : IAttributeStabilityService
 {
-    private readonly ICategorySchemaRegistry categorySchemaRegistry = categorySchemaRegistry ?? new CategorySchemaRegistry([new TvCategorySchemaProvider(), new MonitorCategorySchemaProvider(), new LaptopCategorySchemaProvider(), new RefrigeratorCategorySchemaProvider()]);
+    private readonly ICategorySchemaRegistry categorySchemaRegistry = categorySchemaRegistry ?? DefaultCategoryRegistries.CreateSchemaRegistry();
 
     public decimal GetStabilityScore(string categoryKey, string attributeKey)
     {

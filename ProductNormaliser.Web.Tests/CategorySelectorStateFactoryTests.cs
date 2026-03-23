@@ -84,7 +84,7 @@ public sealed class CategorySelectorStateFactoryTests
             },
             new CategoryMetadataDto
             {
-                CategoryKey = "speaker",
+                CategoryKey = "speakers",
                 DisplayName = "Speakers",
                 FamilyKey = "audio",
                 FamilyDisplayName = "Audio",

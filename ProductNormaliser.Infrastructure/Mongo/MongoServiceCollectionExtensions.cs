@@ -80,15 +80,15 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<ISourceDisagreementService, SourceDisagreementService>();
         services.AddSingleton<ISourceTrustService, SourceTrustService>();
         services.AddSingleton<IAttributeStabilityService, AttributeStabilityService>();
-        services.AddSingleton<ICategorySchemaProvider, TvCategorySchemaProvider>();
-        services.AddSingleton<ICategorySchemaProvider, MonitorCategorySchemaProvider>();
-        services.AddSingleton<ICategorySchemaProvider, LaptopCategorySchemaProvider>();
-        services.AddSingleton<ICategorySchemaProvider, RefrigeratorCategorySchemaProvider>();
+        foreach (var schemaProvider in DefaultCategoryRegistries.CreateSchemaProviders())
+        {
+            services.AddSingleton(typeof(ICategorySchemaProvider), schemaProvider);
+        }
         services.AddSingleton<ICategorySchemaRegistry, CategorySchemaRegistry>();
-        services.AddSingleton<ICategoryAttributeNormaliser, TvAttributeNormaliser>();
-        services.AddSingleton<ICategoryAttributeNormaliser, MonitorAttributeNormaliser>();
-        services.AddSingleton<ICategoryAttributeNormaliser, LaptopAttributeNormaliser>();
-        services.AddSingleton<ICategoryAttributeNormaliser, RefrigeratorAttributeNormaliser>();
+        foreach (var normaliser in DefaultCategoryRegistries.CreateAttributeNormalisers())
+        {
+            services.AddSingleton(typeof(ICategoryAttributeNormaliser), normaliser);
+        }
         services.AddSingleton<CategoryAttributeNormaliserRegistry>();
         services.AddSingleton<ICategoryAttributeNormaliserRegistry>(serviceProvider => serviceProvider.GetRequiredService<CategoryAttributeNormaliserRegistry>());
         services.AddSingleton<IAttributeNormaliser>(serviceProvider => serviceProvider.GetRequiredService<CategoryAttributeNormaliserRegistry>());

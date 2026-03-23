@@ -11,13 +11,8 @@ public sealed class CrawlPriorityService(
     ICategorySchemaRegistry? categorySchemaRegistry = null,
     ICategoryAttributeNormaliserRegistry? categoryAttributeNormaliserRegistry = null) : ICrawlPriorityService
 {
-    private readonly ICategorySchemaRegistry categorySchemaRegistry = categorySchemaRegistry ?? new CategorySchemaRegistry([new TvCategorySchemaProvider(), new MonitorCategorySchemaProvider(), new LaptopCategorySchemaProvider(), new RefrigeratorCategorySchemaProvider()]);
-    private readonly ICategoryAttributeNormaliserRegistry categoryAttributeNormaliserRegistry = categoryAttributeNormaliserRegistry ?? new CategoryAttributeNormaliserRegistry([
-        new TvAttributeNormaliser(),
-        new MonitorAttributeNormaliser(),
-        new LaptopAttributeNormaliser(),
-        new RefrigeratorAttributeNormaliser()
-    ]);
+    private readonly ICategorySchemaRegistry categorySchemaRegistry = categorySchemaRegistry ?? DefaultCategoryRegistries.CreateSchemaRegistry();
+    private readonly ICategoryAttributeNormaliserRegistry categoryAttributeNormaliserRegistry = categoryAttributeNormaliserRegistry ?? DefaultCategoryRegistries.CreateAttributeNormaliserRegistry();
 
     public async Task<IReadOnlyList<CrawlPriorityAssessment>> GetPrioritiesAsync(DateTime utcNow, CancellationToken cancellationToken)
     {

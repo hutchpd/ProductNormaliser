@@ -65,21 +65,11 @@ public sealed class ProductAnalysisProjectionTests
 
     private static CategorySchemaRegistry CreateSchemaRegistry()
     {
-        return new CategorySchemaRegistry([
-            new TvCategorySchemaProvider(),
-            new MonitorCategorySchemaProvider(),
-            new LaptopCategorySchemaProvider(),
-            new RefrigeratorCategorySchemaProvider()
-        ]);
+        return DefaultCategoryRegistries.CreateSchemaRegistry();
     }
 
     private static CategoryAttributeNormaliserRegistry CreateAttributeRegistry()
     {
-        return new CategoryAttributeNormaliserRegistry([
-            new TvAttributeNormaliser(),
-            new MonitorAttributeNormaliser(),
-            new LaptopAttributeNormaliser(),
-            new RefrigeratorAttributeNormaliser()
-        ]);
+        return DefaultCategoryRegistries.CreateAttributeNormaliserRegistry();
     }
 }

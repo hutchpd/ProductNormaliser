@@ -56,7 +56,7 @@ public sealed class DefaultCategoryMetadataCatalogTests
     }
 
     [Test]
-    public void GetAll_EnablesOnlyFirstRolloutCategories()
+    public void GetAll_EnablesSupportedAndExperimentalActiveCategories()
     {
         var enabledCategories = DefaultCategoryMetadataCatalog.GetAll()
             .Where(category => category.IsEnabled)
@@ -64,8 +64,9 @@ public sealed class DefaultCategoryMetadataCatalogTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(enabledCategories.Select(category => category.CategoryKey), Is.EqualTo(new[] { "tv", "monitor", "laptop" }));
-            Assert.That(enabledCategories.All(category => category.CrawlSupportStatus == CrawlSupportStatus.Supported), Is.True);
+            Assert.That(enabledCategories.Select(category => category.CategoryKey), Is.EqualTo(new[] { "tv", "monitor", "laptop", "tablet", "smartphone", "headphones", "speakers" }));
+            Assert.That(enabledCategories.Count(category => category.CrawlSupportStatus == CrawlSupportStatus.Supported), Is.EqualTo(3));
+            Assert.That(enabledCategories.Count(category => category.CrawlSupportStatus == CrawlSupportStatus.Experimental), Is.EqualTo(4));
         });
     }
 }
