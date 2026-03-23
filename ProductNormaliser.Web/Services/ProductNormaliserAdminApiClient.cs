@@ -16,67 +16,67 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
 
     public Task<StatsDto> GetStatsAsync(CancellationToken cancellationToken = default)
     {
-        return GetRequiredAsync<StatsDto>("api/stats", cancellationToken)!;
+        return GetRequiredAsync<StatsDto>("api/stats", AdminApiContractValidator.ValidateStats, cancellationToken);
     }
 
     public async Task<IReadOnlyList<CategoryMetadataDto>> GetCategoriesAsync(CancellationToken cancellationToken = default)
     {
-        return await GetRequiredAsync<CategoryMetadataDto[]>("api/categories", cancellationToken) ?? [];
+        return await GetRequiredAsync<CategoryMetadataDto[]>("api/categories", AdminApiContractValidator.ValidateCategories, cancellationToken);
     }
 
     public async Task<IReadOnlyList<CategoryFamilyDto>> GetCategoryFamiliesAsync(CancellationToken cancellationToken = default)
     {
-        return await GetRequiredAsync<CategoryFamilyDto[]>("api/categories/families", cancellationToken) ?? [];
+        return await GetRequiredAsync<CategoryFamilyDto[]>("api/categories/families", AdminApiContractValidator.ValidateCategoryFamilies, cancellationToken);
     }
 
     public async Task<IReadOnlyList<CategoryMetadataDto>> GetEnabledCategoriesAsync(CancellationToken cancellationToken = default)
     {
-        return await GetRequiredAsync<CategoryMetadataDto[]>("api/categories/enabled", cancellationToken) ?? [];
+        return await GetRequiredAsync<CategoryMetadataDto[]>("api/categories/enabled", AdminApiContractValidator.ValidateCategories, cancellationToken);
     }
 
     public Task<CategoryDetailDto?> GetCategoryDetailAsync(string categoryKey, CancellationToken cancellationToken = default)
     {
-        return GetOptionalAsync<CategoryDetailDto>($"api/categories/{Uri.EscapeDataString(categoryKey)}/detail", cancellationToken);
+        return GetOptionalAsync<CategoryDetailDto>($"api/categories/{Uri.EscapeDataString(categoryKey)}/detail", AdminApiContractValidator.ValidateCategoryDetail, cancellationToken);
     }
 
     public async Task<IReadOnlyList<SourceDto>> GetSourcesAsync(CancellationToken cancellationToken = default)
     {
-        return await GetRequiredAsync<SourceDto[]>("api/sources", cancellationToken) ?? [];
+        return await GetRequiredAsync<SourceDto[]>("api/sources", AdminApiContractValidator.ValidateSources, cancellationToken);
     }
 
     public Task<SourceDto?> GetSourceAsync(string sourceId, CancellationToken cancellationToken = default)
     {
-        return GetOptionalAsync<SourceDto>($"api/sources/{Uri.EscapeDataString(sourceId)}", cancellationToken);
+        return GetOptionalAsync<SourceDto>($"api/sources/{Uri.EscapeDataString(sourceId)}", AdminApiContractValidator.ValidateSource, cancellationToken);
     }
 
     public Task<SourceDto> RegisterSourceAsync(RegisterSourceRequest request, CancellationToken cancellationToken = default)
     {
-        return SendAsync<SourceDto>(HttpMethod.Post, "api/sources", request, cancellationToken);
+        return SendAsync<SourceDto>(HttpMethod.Post, "api/sources", request, AdminApiContractValidator.ValidateSource, cancellationToken);
     }
 
     public Task<SourceDto> UpdateSourceAsync(string sourceId, UpdateSourceRequest request, CancellationToken cancellationToken = default)
     {
-        return SendAsync<SourceDto>(HttpMethod.Put, $"api/sources/{Uri.EscapeDataString(sourceId)}", request, cancellationToken);
+        return SendAsync<SourceDto>(HttpMethod.Put, $"api/sources/{Uri.EscapeDataString(sourceId)}", request, AdminApiContractValidator.ValidateSource, cancellationToken);
     }
 
     public Task<SourceDto> EnableSourceAsync(string sourceId, CancellationToken cancellationToken = default)
     {
-        return SendAsync<SourceDto>(HttpMethod.Post, $"api/sources/{Uri.EscapeDataString(sourceId)}/enable", body: null, cancellationToken);
+        return SendAsync<SourceDto>(HttpMethod.Post, $"api/sources/{Uri.EscapeDataString(sourceId)}/enable", body: null, AdminApiContractValidator.ValidateSource, cancellationToken);
     }
 
     public Task<SourceDto> DisableSourceAsync(string sourceId, CancellationToken cancellationToken = default)
     {
-        return SendAsync<SourceDto>(HttpMethod.Post, $"api/sources/{Uri.EscapeDataString(sourceId)}/disable", body: null, cancellationToken);
+        return SendAsync<SourceDto>(HttpMethod.Post, $"api/sources/{Uri.EscapeDataString(sourceId)}/disable", body: null, AdminApiContractValidator.ValidateSource, cancellationToken);
     }
 
     public Task<SourceDto> AssignCategoriesAsync(string sourceId, AssignSourceCategoriesRequest request, CancellationToken cancellationToken = default)
     {
-        return SendAsync<SourceDto>(HttpMethod.Put, $"api/sources/{Uri.EscapeDataString(sourceId)}/categories", request, cancellationToken);
+        return SendAsync<SourceDto>(HttpMethod.Put, $"api/sources/{Uri.EscapeDataString(sourceId)}/categories", request, AdminApiContractValidator.ValidateSource, cancellationToken);
     }
 
     public Task<SourceDto> UpdateThrottlingAsync(string sourceId, UpdateSourceThrottlingRequest request, CancellationToken cancellationToken = default)
     {
-        return SendAsync<SourceDto>(HttpMethod.Put, $"api/sources/{Uri.EscapeDataString(sourceId)}/throttling", request, cancellationToken);
+        return SendAsync<SourceDto>(HttpMethod.Put, $"api/sources/{Uri.EscapeDataString(sourceId)}/throttling", request, AdminApiContractValidator.ValidateSource, cancellationToken);
     }
 
     public Task<CrawlJobListResponseDto> GetCrawlJobsAsync(CrawlJobQueryDto? query = null, CancellationToken cancellationToken = default)
@@ -90,22 +90,22 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
             ["pageSize"] = query?.PageSize.ToString(CultureInfo.InvariantCulture)
         });
 
-        return GetRequiredAsync<CrawlJobListResponseDto>(relativeUri, cancellationToken)!;
+        return GetRequiredAsync<CrawlJobListResponseDto>(relativeUri, AdminApiContractValidator.ValidateCrawlJobList, cancellationToken);
     }
 
     public Task<CrawlJobDto?> GetCrawlJobAsync(string jobId, CancellationToken cancellationToken = default)
     {
-        return GetOptionalAsync<CrawlJobDto>($"api/crawl/jobs/{Uri.EscapeDataString(jobId)}", cancellationToken);
+        return GetOptionalAsync<CrawlJobDto>($"api/crawl/jobs/{Uri.EscapeDataString(jobId)}", AdminApiContractValidator.ValidateCrawlJob, cancellationToken);
     }
 
     public Task<CrawlJobDto> CreateCrawlJobAsync(CreateCrawlJobRequest request, CancellationToken cancellationToken = default)
     {
-        return SendAsync<CrawlJobDto>(HttpMethod.Post, "api/crawl/jobs", request, cancellationToken);
+        return SendAsync<CrawlJobDto>(HttpMethod.Post, "api/crawl/jobs", request, AdminApiContractValidator.ValidateCrawlJob, cancellationToken);
     }
 
     public Task<CrawlJobDto> CancelCrawlJobAsync(string jobId, CancellationToken cancellationToken = default)
     {
-        return SendAsync<CrawlJobDto>(HttpMethod.Post, $"api/crawl/jobs/{Uri.EscapeDataString(jobId)}/cancel", body: null, cancellationToken);
+        return SendAsync<CrawlJobDto>(HttpMethod.Post, $"api/crawl/jobs/{Uri.EscapeDataString(jobId)}/cancel", body: null, AdminApiContractValidator.ValidateCrawlJob, cancellationToken);
     }
 
     public Task<ProductListResponseDto> GetProductsAsync(ProductListQueryDto? query = null, CancellationToken cancellationToken = default)
@@ -123,17 +123,17 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
             ["pageSize"] = query?.PageSize.ToString(CultureInfo.InvariantCulture)
         });
 
-        return GetRequiredAsync<ProductListResponseDto>(relativeUri, cancellationToken)!;
+        return GetRequiredAsync<ProductListResponseDto>(relativeUri, AdminApiContractValidator.ValidateProductList, cancellationToken);
     }
 
     public Task<ProductDetailDto?> GetProductAsync(string productId, CancellationToken cancellationToken = default)
     {
-        return GetOptionalAsync<ProductDetailDto>($"api/products/{Uri.EscapeDataString(productId)}", cancellationToken);
+        return GetOptionalAsync<ProductDetailDto>($"api/products/{Uri.EscapeDataString(productId)}", AdminApiContractValidator.ValidateProductDetail, cancellationToken);
     }
 
     public async Task<IReadOnlyList<ProductChangeEventDto>> GetProductHistoryAsync(string productId, CancellationToken cancellationToken = default)
     {
-        return await GetRequiredAsync<ProductChangeEventDto[]>($"api/products/{Uri.EscapeDataString(productId)}/history", cancellationToken) ?? [];
+        return await GetRequiredAsync<ProductChangeEventDto[]>($"api/products/{Uri.EscapeDataString(productId)}/history", AdminApiContractValidator.ValidateProductHistory, cancellationToken);
     }
 
     public Task<DetailedCoverageResponseDto> GetDetailedCoverageAsync(string categoryKey, CancellationToken cancellationToken = default)
@@ -143,7 +143,7 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
             ["categoryKey"] = categoryKey
         });
 
-        return GetRequiredAsync<DetailedCoverageResponseDto>(relativeUri, cancellationToken)!;
+        return GetRequiredAsync<DetailedCoverageResponseDto>(relativeUri, AdminApiContractValidator.ValidateDetailedCoverage, cancellationToken);
     }
 
     public async Task<IReadOnlyList<UnmappedAttributeDto>> GetUnmappedAttributesAsync(string categoryKey, CancellationToken cancellationToken = default)
@@ -153,7 +153,7 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
             ["categoryKey"] = categoryKey
         });
 
-        return await GetRequiredAsync<UnmappedAttributeDto[]>(relativeUri, cancellationToken) ?? [];
+        return await GetRequiredAsync<UnmappedAttributeDto[]>(relativeUri, AdminApiContractValidator.ValidateUnmappedAttributes, cancellationToken);
     }
 
     public async Task<IReadOnlyList<SourceQualityScoreDto>> GetSourceQualityScoresAsync(string categoryKey, CancellationToken cancellationToken = default)
@@ -163,7 +163,7 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
             ["categoryKey"] = categoryKey
         });
 
-        return await GetRequiredAsync<SourceQualityScoreDto[]>(relativeUri, cancellationToken) ?? [];
+        return await GetRequiredAsync<SourceQualityScoreDto[]>(relativeUri, AdminApiContractValidator.ValidateSourceQualityScores, cancellationToken);
     }
 
     public Task<MergeInsightsResponseDto> GetMergeInsightsAsync(string categoryKey, CancellationToken cancellationToken = default)
@@ -173,7 +173,7 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
             ["categoryKey"] = categoryKey
         });
 
-        return GetRequiredAsync<MergeInsightsResponseDto>(relativeUri, cancellationToken)!;
+        return GetRequiredAsync<MergeInsightsResponseDto>(relativeUri, AdminApiContractValidator.ValidateMergeInsights, cancellationToken);
     }
 
     public async Task<IReadOnlyList<SourceQualitySnapshotDto>> GetSourceHistoryAsync(string categoryKey, string? sourceName = null, CancellationToken cancellationToken = default)
@@ -184,7 +184,7 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
             ["sourceName"] = sourceName
         });
 
-        return await GetRequiredAsync<SourceQualitySnapshotDto[]>(relativeUri, cancellationToken) ?? [];
+        return await GetRequiredAsync<SourceQualitySnapshotDto[]>(relativeUri, AdminApiContractValidator.ValidateSourceHistory, cancellationToken);
     }
 
     public async Task<IReadOnlyList<AttributeStabilityDto>> GetAttributeStabilityAsync(string categoryKey, CancellationToken cancellationToken = default)
@@ -194,7 +194,7 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
             ["categoryKey"] = categoryKey
         });
 
-        return await GetRequiredAsync<AttributeStabilityDto[]>(relativeUri, cancellationToken) ?? [];
+        return await GetRequiredAsync<AttributeStabilityDto[]>(relativeUri, AdminApiContractValidator.ValidateAttributeStability, cancellationToken);
     }
 
     public async Task<IReadOnlyList<SourceAttributeDisagreementDto>> GetSourceDisagreementsAsync(string categoryKey, string? sourceName = null, CancellationToken cancellationToken = default)
@@ -205,10 +205,11 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
             ["sourceName"] = sourceName
         });
 
-        return await GetRequiredAsync<SourceAttributeDisagreementDto[]>(relativeUri, cancellationToken) ?? [];
+        return await GetRequiredAsync<SourceAttributeDisagreementDto[]>(relativeUri, AdminApiContractValidator.ValidateSourceDisagreements, cancellationToken);
     }
 
-    private async Task<T?> GetOptionalAsync<T>(string relativeUri, CancellationToken cancellationToken)
+    private async Task<T?> GetOptionalAsync<T>(string relativeUri, Action<T> validate, CancellationToken cancellationToken)
+        where T : class
     {
         using var response = await httpClient.GetAsync(relativeUri, cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
@@ -217,17 +218,21 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
         }
 
         await EnsureSuccessAsync(response, cancellationToken);
-        return await ReadRequiredAsync<T>(response, cancellationToken);
+        var payload = await ReadRequiredAsync<T>(response, cancellationToken);
+        validate(payload);
+        return payload;
     }
 
-    private async Task<T?> GetRequiredAsync<T>(string relativeUri, CancellationToken cancellationToken)
+    private async Task<T> GetRequiredAsync<T>(string relativeUri, Action<T> validate, CancellationToken cancellationToken)
     {
         using var response = await httpClient.GetAsync(relativeUri, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await ReadRequiredAsync<T>(response, cancellationToken);
+        var payload = await ReadRequiredAsync<T>(response, cancellationToken);
+        validate(payload);
+        return payload;
     }
 
-    private async Task<T> SendAsync<T>(HttpMethod method, string relativeUri, object? body, CancellationToken cancellationToken)
+    private async Task<T> SendAsync<T>(HttpMethod method, string relativeUri, object? body, Action<T> validate, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(method, relativeUri);
         if (body is not null)
@@ -237,7 +242,9 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
 
         using var response = await httpClient.SendAsync(request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await ReadRequiredAsync<T>(response, cancellationToken);
+        var payload = await ReadRequiredAsync<T>(response, cancellationToken);
+        validate(payload);
+        return payload;
     }
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
@@ -266,8 +273,21 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
 
     private static async Task<T> ReadRequiredAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken)
     {
-        var payload = await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
-        return payload ?? throw new AdminApiException("Admin API response body was empty.");
+        var rawContent = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(rawContent))
+        {
+            throw new AdminApiException("Admin API response body was empty.");
+        }
+
+        try
+        {
+            var payload = JsonSerializer.Deserialize<T>(rawContent, JsonOptions);
+            return payload ?? throw new AdminApiException("Admin API response body was empty.");
+        }
+        catch (JsonException exception)
+        {
+            throw new AdminApiException($"Admin API response body was invalid JSON. {exception.Message}");
+        }
     }
 
     private static string BuildRelativeUri(string path, IReadOnlyDictionary<string, string?> queryValues)

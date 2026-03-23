@@ -22,6 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ProductNormaliser.AdminApi\ProductNormaliser.AdminApi.csproj" Aliases="AdminApiContracts" />
     <ProjectReference Include="..\ProductNormaliser.Web\ProductNormaliser.Web.csproj" />
   </ItemGroup>
 

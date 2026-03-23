@@ -260,7 +260,7 @@ public sealed class AttributeEvidenceDto
     public string SourceUrl { get; init; } = string.Empty;
     public string SourceProductId { get; init; } = string.Empty;
     public string SourceAttributeKey { get; init; } = string.Empty;
-    public object? RawValue { get; init; }
+    public string? RawValue { get; init; }
     public string? SelectorOrPath { get; init; }
     public decimal Confidence { get; init; }
     public DateTime ObservedUtc { get; init; }
@@ -282,7 +282,7 @@ public sealed class SourceProductDetailDto
 public sealed class SourceAttributeValueDto
 {
     public string AttributeKey { get; init; } = string.Empty;
-    public object? Value { get; init; }
+    public string? Value { get; init; }
     public string ValueType { get; init; } = string.Empty;
     public string? Unit { get; init; }
     public string? SourcePath { get; init; }

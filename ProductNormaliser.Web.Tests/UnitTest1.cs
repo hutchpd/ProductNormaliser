@@ -83,6 +83,205 @@ public sealed class AdminApiClientTests
         Assert.That(action, Throws.TypeOf<AdminApiValidationException>());
     }
 
+        [Test]
+        public void GetDetailedCoverageAsync_ThrowsWhenResponseBodyIsEmpty()
+        {
+                var client = CreateClient(HttpStatusCode.OK, payload: null);
+
+                var action = async () => await client.GetDetailedCoverageAsync("monitor");
+
+                Assert.That(action, Throws.TypeOf<AdminApiException>()
+                        .With.Message.Contains("response body was empty"));
+        }
+
+        [Test]
+        public void GetCategoriesAsync_ThrowsWhenCrawlSupportStatusIsUnsupported()
+        {
+                const string payload = """
+                        [
+                            {
+                                "categoryKey": "tv",
+                                "displayName": "TVs",
+                                "familyKey": "display",
+                                "familyDisplayName": "Display",
+                                "iconKey": "tv",
+                                "crawlSupportStatus": "Retired",
+                                "schemaCompletenessScore": 1.0,
+                                "isEnabled": true
+                            }
+                        ]
+                        """;
+
+                var client = CreateRawClient(HttpStatusCode.OK, payload);
+
+                var action = async () => await client.GetCategoriesAsync();
+
+                Assert.That(action, Throws.TypeOf<AdminApiException>()
+                        .With.Message.Contains("crawlSupportStatus"));
+        }
+
+        [Test]
+        public void GetSourcesAsync_ThrowsWhenRequiredFieldsAreMissing()
+        {
+                const string payload = """
+                        [
+                            {
+                                "displayName": "AO UK",
+                                "baseUrl": "https://ao.com/",
+                                "host": "ao.com",
+                                "isEnabled": true,
+                                "supportedCategoryKeys": ["tv"],
+                                "throttlingPolicy": {
+                                    "minDelayMs": 1000,
+                                    "maxDelayMs": 4000,
+                                    "maxConcurrentRequests": 2,
+                                    "requestsPerMinute": 24,
+                                    "respectRobotsTxt": true
+                                },
+                                "createdUtc": "2026-03-20T10:00:00Z",
+                                "updatedUtc": "2026-03-20T10:10:00Z"
+                            }
+                        ]
+                        """;
+
+                var client = CreateRawClient(HttpStatusCode.OK, payload);
+
+                var action = async () => await client.GetSourcesAsync();
+
+                Assert.That(action, Throws.TypeOf<AdminApiException>()
+                        .With.Message.Contains("sourceId"));
+        }
+
+        [Test]
+        public void GetCrawlJobsAsync_ThrowsWhenJobStatusIsUnsupported()
+        {
+                const string payload = """
+                        {
+                            "items": [
+                                {
+                                    "jobId": "job_1",
+                                    "requestType": "category",
+                                    "requestedCategories": ["tv"],
+                                    "requestedSources": [],
+                                    "requestedProductIds": [],
+                                    "totalTargets": 10,
+                                    "processedTargets": 4,
+                                    "successCount": 4,
+                                    "skippedCount": 0,
+                                    "failedCount": 0,
+                                    "cancelledCount": 0,
+                                    "startedAt": "2026-03-20T10:00:00Z",
+                                    "lastUpdatedAt": "2026-03-20T10:05:00Z",
+                                    "estimatedCompletion": "2026-03-20T10:15:00Z",
+                                    "status": "paused",
+                                    "perCategoryBreakdown": []
+                                }
+                            ],
+                            "page": 1,
+                            "pageSize": 10,
+                            "totalCount": 1,
+                            "totalPages": 1
+                        }
+                        """;
+
+                var client = CreateRawClient(HttpStatusCode.OK, payload);
+
+                var action = async () => await client.GetCrawlJobsAsync();
+
+                Assert.That(action, Throws.TypeOf<AdminApiException>()
+                        .With.Message.Contains("crawlJobs.items[0].status"));
+        }
+
+        [Test]
+        public void GetProductAsync_ThrowsWhenProductStatusesAreUnsupported()
+        {
+                const string payload = """
+                        {
+                            "id": "canon-1",
+                            "categoryKey": "tv",
+                            "brand": "Sony",
+                            "displayName": "Sony Bravia XR",
+                            "createdUtc": "2026-03-20T10:00:00Z",
+                            "updatedUtc": "2026-03-20T10:10:00Z",
+                            "sourceCount": 3,
+                            "evidenceCount": 8,
+                            "conflictAttributeCount": 2,
+                            "hasConflict": true,
+                            "completenessScore": 0.75,
+                            "completenessStatus": "unknown",
+                            "populatedKeyAttributeCount": 6,
+                            "expectedKeyAttributeCount": 8,
+                            "freshnessStatus": "decaying",
+                            "freshnessAgeDays": 40,
+                            "keyAttributes": [],
+                            "attributes": [],
+                            "sourceProducts": []
+                        }
+                        """;
+
+                var client = CreateRawClient(HttpStatusCode.OK, payload);
+
+                var action = async () => await client.GetProductAsync("canon-1");
+
+                Assert.That(action, Throws.TypeOf<AdminApiException>()
+                        .With.Message.Contains("completenessStatus"));
+        }
+
+        [Test]
+        public async Task GetDetailedCoverageAsync_ToleratesUnknownFields()
+        {
+                const string payload = """
+                        {
+                            "categoryKey": "monitor",
+                            "totalCanonicalProducts": 12,
+                            "totalSourceProducts": 18,
+                            "attributes": [
+                                {
+                                    "attributeKey": "refresh_rate_hz",
+                                    "displayName": "Refresh Rate",
+                                    "presentProductCount": 8,
+                                    "missingProductCount": 4,
+                                    "coveragePercent": 62,
+                                    "conflictProductCount": 1,
+                                    "conflictPercent": 8,
+                                    "averageConfidence": 77,
+                                    "agreementPercent": 71,
+                                    "reliabilityScore": 58,
+                                    "futureMetric": 99
+                                }
+                            ],
+                            "mostMissingAttributes": [],
+                            "mostConflictedAttributes": [],
+                            "futureSection": {
+                                "enabled": true
+                            }
+                        }
+                        """;
+
+                var client = CreateRawClient(HttpStatusCode.OK, payload);
+
+                var result = await client.GetDetailedCoverageAsync("monitor");
+
+                Assert.Multiple(() =>
+                {
+                        Assert.That(result.CategoryKey, Is.EqualTo("monitor"));
+                        Assert.That(result.Attributes, Has.Count.EqualTo(1));
+                        Assert.That(result.Attributes[0].AttributeKey, Is.EqualTo("refresh_rate_hz"));
+                });
+        }
+
+        [Test]
+        public void GetProductsAsync_ThrowsAdminApiExceptionForServerErrors()
+        {
+                var client = CreateRawClient(HttpStatusCode.InternalServerError, "server exploded", "text/plain");
+
+                var action = async () => await client.GetProductsAsync();
+
+                Assert.That(action, Throws.TypeOf<AdminApiException>()
+                        .With.Message.Contains("500")
+                        .And.Message.Contains("server exploded"));
+        }
+
     [Test]
     public async Task GetCrawlJobsAsync_DeserialisesPagedResponseAndPreservesQueryParameters()
     {
@@ -206,7 +405,7 @@ public sealed class AdminApiClientTests
         {
             requestUri = request.RequestUri!.ToString();
             requestPayload = await request.Content!.ReadFromJsonAsync<CreateCrawlJobRequest>(cancellationToken: cancellationToken);
-            return CreateJsonResponse(HttpStatusCode.Created, new CrawlJobDto { JobId = "job_22", Status = "pending" });
+            return CreateJsonResponse(HttpStatusCode.Created, new CrawlJobDto { JobId = "job_22", RequestType = "category", Status = "pending" });
         });
 
         var result = await client.CreateCrawlJobAsync(new CreateCrawlJobRequest
@@ -233,7 +432,7 @@ public sealed class AdminApiClientTests
         var client = CreateClient((request, _) =>
         {
             requestUri = request.RequestUri!.ToString();
-            return Task.FromResult(CreateJsonResponse(HttpStatusCode.OK, new CrawlJobDto { JobId = "job_1", Status = "cancel_requested" }));
+            return Task.FromResult(CreateJsonResponse(HttpStatusCode.OK, new CrawlJobDto { JobId = "job_1", RequestType = "category", Status = "cancel_requested" }));
         });
 
         var result = await client.CancelCrawlJobAsync("job_1");
@@ -317,6 +516,11 @@ public sealed class AdminApiClientTests
         return CreateClient((_, _) => Task.FromResult(CreateJsonResponse(statusCode, payload, mediaType)));
     }
 
+    private static ProductNormaliserAdminApiClient CreateRawClient(HttpStatusCode statusCode, string payload, string mediaType = "application/json")
+    {
+        return CreateClient((_, _) => Task.FromResult(CreateRawResponse(statusCode, payload, mediaType)));
+    }
+
     private static ProductNormaliserAdminApiClient CreateClient(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler)
     {
         return new ProductNormaliserAdminApiClient(new HttpClient(new StubHttpMessageHandler(handler))
@@ -335,6 +539,14 @@ public sealed class AdminApiClientTests
         }
 
         return response;
+    }
+
+    private static HttpResponseMessage CreateRawResponse(HttpStatusCode statusCode, string payload, string mediaType = "application/json")
+    {
+        return new HttpResponseMessage(statusCode)
+        {
+            Content = new StringContent(payload, Encoding.UTF8, mediaType)
+        };
     }
 
     private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler) : HttpMessageHandler

@@ -163,7 +163,7 @@ public sealed class ProductInspectionPageTests
                             SourceUrl = "https://ao.example/p/ao-1",
                             SourceProductId = "ao-1",
                             SourceAttributeKey = "screen_size",
-                            RawValue = 55,
+                            RawValue = "55",
                             SelectorOrPath = "specs.screenSize",
                             Confidence = 0.94m,
                             ObservedUtc = new DateTime(2026, 03, 22, 10, 01, 00, DateTimeKind.Utc)
@@ -174,7 +174,7 @@ public sealed class ProductInspectionPageTests
                             SourceUrl = "https://currys.example/p/c-1",
                             SourceProductId = "currys-1",
                             SourceAttributeKey = "screen_size",
-                            RawValue = 54.6,
+                            RawValue = "54.6",
                             SelectorOrPath = "specifications.screenSize",
                             Confidence = 0.89m,
                             ObservedUtc = new DateTime(2026, 03, 22, 10, 02, 00, DateTimeKind.Utc)
@@ -196,7 +196,7 @@ public sealed class ProductInspectionPageTests
                     RawAttributes =
                     [
                         new SourceAttributeValueDto { AttributeKey = "panel_type", Value = "OLED", ValueType = "string", SourcePath = "specs.panelType" },
-                        new SourceAttributeValueDto { AttributeKey = "screen_size", Value = 55, ValueType = "number", Unit = "in", SourcePath = "specs.screenSize" }
+                        new SourceAttributeValueDto { AttributeKey = "screen_size", Value = "55", ValueType = "number", Unit = "in", SourcePath = "specs.screenSize" }
                     ]
                 },
                 new SourceProductDetailDto
@@ -210,7 +210,7 @@ public sealed class ProductInspectionPageTests
                     RawSchemaJson = "{}",
                     RawAttributes =
                     [
-                        new SourceAttributeValueDto { AttributeKey = "screen_size", Value = 54.6, ValueType = "number", Unit = "in", SourcePath = "specifications.screenSize" }
+                        new SourceAttributeValueDto { AttributeKey = "screen_size", Value = "54.6", ValueType = "number", Unit = "in", SourcePath = "specifications.screenSize" }
                     ]
                 }
             ]
