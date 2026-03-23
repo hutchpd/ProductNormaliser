@@ -4,7 +4,7 @@ using ProductNormaliser.Infrastructure.Crawling;
 
 namespace ProductNormaliser.Infrastructure.Discovery;
 
-public sealed class SitemapLocator(IHttpFetcher httpFetcher, DiscoveryLinkPolicy discoveryLinkPolicy) : ISitemapLocator
+public sealed class SitemapLocator(IRobotsTxtCache robotsTxtCache, DiscoveryLinkPolicy discoveryLinkPolicy) : ISitemapLocator
 {
     public async Task<IReadOnlyList<string>> LocateAsync(CrawlSource source, CancellationToken cancellationToken)
     {
@@ -14,7 +14,8 @@ public sealed class SitemapLocator(IHttpFetcher httpFetcher, DiscoveryLinkPolicy
         var sitemapUrls = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var sitemapUrl in await LoadRobotsSitemapsAsync(source, baseUri, cancellationToken))
+        var robotsSnapshot = await robotsTxtCache.GetForSourceAsync(source, cancellationToken);
+        foreach (var sitemapUrl in robotsSnapshot.SitemapUrls)
         {
             AddSitemap(sitemapUrl);
         }
@@ -41,49 +42,16 @@ public sealed class SitemapLocator(IHttpFetcher httpFetcher, DiscoveryLinkPolicy
 
         void AddSitemap(string candidate)
         {
-            if (discoveryLinkPolicy.TryNormalizeAndValidate(source, string.Empty, candidate, depth: 0, out var normalized)
+            if (!Uri.TryCreate(baseUri, candidate, out var sitemapUri))
+            {
+                return;
+            }
+
+            if (discoveryLinkPolicy.TryNormalizeAndValidate(source, string.Empty, sitemapUri.ToString(), depth: 0, out var normalized)
                 && seen.Add(normalized))
             {
                 sitemapUrls.Add(normalized);
             }
         }
-    }
-
-    private async Task<IReadOnlyList<string>> LoadRobotsSitemapsAsync(CrawlSource source, Uri baseUri, CancellationToken cancellationToken)
-    {
-        var robotsUrl = new Uri(baseUri, "/robots.txt").ToString();
-        var fetchResult = await httpFetcher.FetchAsync(new CrawlTarget
-        {
-            Url = robotsUrl,
-            CategoryKey = string.Empty,
-            Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["sourceName"] = source.Id
-            }
-        }, cancellationToken);
-
-        if (!fetchResult.IsSuccess || string.IsNullOrWhiteSpace(fetchResult.Html))
-        {
-            return [];
-        }
-
-        var locations = new List<string>();
-        foreach (var line in fetchResult.Html.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (!line.StartsWith("Sitemap:", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var value = line[8..].Trim();
-            if (value.Length == 0 || !Uri.TryCreate(baseUri, value, out var sitemapUri))
-            {
-                continue;
-            }
-
-            locations.Add(sitemapUri.ToString());
-        }
-
-        return locations;
     }
 }

@@ -1,14 +1,15 @@
 using System.Collections.Concurrent;
 using System.Net;
+using ProductNormaliser.Application.Sources;
 using Microsoft.Extensions.Options;
 using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Infrastructure.Crawling;
 
-public sealed class HttpFetcher(HttpClient httpClient, IOptions<CrawlPipelineOptions> options) : IHttpFetcher
+public sealed class HttpFetcher(HttpClient httpClient, IOptions<CrawlPipelineOptions> options, ICrawlSourceStore crawlSourceStore) : IHttpFetcher
 {
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> HostLocks = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly ConcurrentDictionary<string, DateTimeOffset> LastRequestByHost = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, DateTimeOffset> LastRequestByThrottleKey = new(StringComparer.OrdinalIgnoreCase);
     private readonly CrawlPipelineOptions crawlOptions = options.Value;
 
     public async Task<FetchResult> FetchAsync(CrawlTarget target, CancellationToken cancellationToken)
@@ -16,13 +17,13 @@ public sealed class HttpFetcher(HttpClient httpClient, IOptions<CrawlPipelineOpt
         ArgumentNullException.ThrowIfNull(target);
 
         var uri = new Uri(target.Url, UriKind.Absolute);
-        var hostKey = uri.Host;
-        var hostLock = HostLocks.GetOrAdd(hostKey, _ => new SemaphoreSlim(1, 1));
+        var throttleProfile = await ResolveThrottleProfileAsync(target, uri, cancellationToken);
+        var hostLock = HostLocks.GetOrAdd(throttleProfile.ThrottleKey, _ => new SemaphoreSlim(throttleProfile.MaxConcurrentRequests, throttleProfile.MaxConcurrentRequests));
 
         await hostLock.WaitAsync(cancellationToken);
         try
         {
-            await RespectRateLimitAsync(hostKey, cancellationToken);
+            await RespectRateLimitAsync(throttleProfile, cancellationToken);
 
             for (var attempt = 0; attempt <= crawlOptions.TransientRetryCount; attempt++)
             {
@@ -42,7 +43,7 @@ public sealed class HttpFetcher(HttpClient httpClient, IOptions<CrawlPipelineOpt
                         continue;
                     }
 
-                    LastRequestByHost[hostKey] = DateTimeOffset.UtcNow;
+                    LastRequestByThrottleKey[throttleProfile.ThrottleKey] = DateTimeOffset.UtcNow;
                     return new FetchResult
                     {
                         Url = target.Url,
@@ -79,15 +80,15 @@ public sealed class HttpFetcher(HttpClient httpClient, IOptions<CrawlPipelineOpt
         }
     }
 
-    private async Task RespectRateLimitAsync(string hostKey, CancellationToken cancellationToken)
+    private async Task RespectRateLimitAsync(FetchThrottleProfile throttleProfile, CancellationToken cancellationToken)
     {
-        var delay = GetHostDelay(hostKey);
+        var delay = throttleProfile.Delay;
         if (delay <= TimeSpan.Zero)
         {
             return;
         }
 
-        if (LastRequestByHost.TryGetValue(hostKey, out var lastRequestUtc))
+        if (LastRequestByThrottleKey.TryGetValue(throttleProfile.ThrottleKey, out var lastRequestUtc))
         {
             var remainingDelay = delay - (DateTimeOffset.UtcNow - lastRequestUtc);
             if (remainingDelay > TimeSpan.Zero)
@@ -97,11 +98,46 @@ public sealed class HttpFetcher(HttpClient httpClient, IOptions<CrawlPipelineOpt
         }
     }
 
-    private TimeSpan GetHostDelay(string hostKey)
+    private async Task<FetchThrottleProfile> ResolveThrottleProfileAsync(CrawlTarget target, Uri uri, CancellationToken cancellationToken)
+    {
+        if (target.Metadata.TryGetValue("sourceName", out var sourceName)
+            && !string.IsNullOrWhiteSpace(sourceName))
+        {
+            var source = await crawlSourceStore.GetAsync(sourceName.Trim(), cancellationToken);
+            if (source is not null
+                && (string.Equals(source.Host, uri.Host, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(new Uri(source.BaseUrl, UriKind.Absolute).Host, uri.Host, StringComparison.OrdinalIgnoreCase)))
+            {
+                return new FetchThrottleProfile(
+                    ThrottleKey: $"source:{source.Id}",
+                    MaxConcurrentRequests: Math.Max(1, source.ThrottlingPolicy.MaxConcurrentRequests),
+                    Delay: GetSourceDelay(source.ThrottlingPolicy));
+            }
+        }
+
+        return new FetchThrottleProfile(
+            ThrottleKey: $"host:{uri.Host}",
+            MaxConcurrentRequests: 1,
+            Delay: GetDefaultHostDelay(uri.Host));
+    }
+
+    private TimeSpan GetDefaultHostDelay(string hostKey)
     {
         return crawlOptions.HostDelayMilliseconds.TryGetValue(hostKey, out var milliseconds)
             ? TimeSpan.FromMilliseconds(milliseconds)
             : TimeSpan.FromMilliseconds(crawlOptions.DefaultHostDelayMilliseconds);
+    }
+
+    private static TimeSpan GetSourceDelay(SourceThrottlingPolicy policy)
+    {
+        var minDelay = TimeSpan.FromMilliseconds(Math.Max(0, policy.MinDelayMs));
+        var maxDelay = TimeSpan.FromMilliseconds(Math.Max(policy.MinDelayMs, policy.MaxDelayMs));
+        var rpmDelay = policy.RequestsPerMinute <= 0
+            ? TimeSpan.Zero
+            : TimeSpan.FromMinutes(1d / policy.RequestsPerMinute);
+
+        var desiredDelay = minDelay > rpmDelay ? minDelay : rpmDelay;
+        return desiredDelay > maxDelay ? maxDelay : desiredDelay;
     }
 
     private static bool IsTransientStatusCode(HttpStatusCode statusCode)
@@ -126,4 +162,6 @@ public sealed class HttpFetcher(HttpClient httpClient, IOptions<CrawlPipelineOpt
             FetchedUtc = DateTime.UtcNow
         };
     }
+
+    private sealed record FetchThrottleProfile(string ThrottleKey, int MaxConcurrentRequests, TimeSpan Delay);
 }

@@ -1,5 +1,6 @@
 using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
+using ProductNormaliser.Application.Sources;
 using ProductNormaliser.Infrastructure.Crawling;
 using ProductNormaliser.Infrastructure.Discovery;
 using ProductNormaliser.Infrastructure.StructuredData;
@@ -23,7 +24,8 @@ public sealed class DiscoveryRuntimeTests
                 Html = "User-agent: *\nSitemap: https://alpha.example/robots-sitemap.xml\nSitemap: /nested-sitemap.xml"
             }
         });
-        var sut = new SitemapLocator(httpFetcher, new DiscoveryLinkPolicy());
+        var robotsTxtCache = new RobotsTxtCache(httpFetcher);
+        var sut = new SitemapLocator(robotsTxtCache, new DiscoveryLinkPolicy());
 
         var result = await sut.LocateAsync(source, CancellationToken.None);
 
@@ -35,6 +37,68 @@ public sealed class DiscoveryRuntimeTests
             "https://alpha.example/sitemap_index.xml",
             "https://alpha.example/catalog-sitemap.xml"
         }));
+    }
+
+    [Test]
+    public async Task RobotsTxtCache_IsReusedByPolicyChecksAndSitemapLookup()
+    {
+        var source = CreateSource();
+        var httpFetcher = new StubHttpFetcher(new Dictionary<string, FetchResult>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["https://alpha.example/robots.txt"] = new()
+            {
+                Url = "https://alpha.example/robots.txt",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "User-agent: *\nAllow: /\nDisallow: /support\nSitemap: https://alpha.example/robots-sitemap.xml"
+            }
+        });
+        var robotsTxtCache = new RobotsTxtCache(httpFetcher);
+        var robotsPolicyService = new RobotsPolicyService(robotsTxtCache, new FakeCrawlSourceStore(source));
+        var sitemapLocator = new SitemapLocator(robotsTxtCache, new DiscoveryLinkPolicy());
+
+        var decision = await robotsPolicyService.EvaluateAsync(new CrawlTarget
+        {
+            Url = "https://alpha.example/product/item-1",
+            CategoryKey = "tv",
+            Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["sourceName"] = source.Id
+            }
+        }, CancellationToken.None);
+        var sitemaps = await sitemapLocator.LocateAsync(source, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(decision.IsAllowed, Is.True);
+            Assert.That(sitemaps, Contains.Item("https://alpha.example/robots-sitemap.xml"));
+            Assert.That(httpFetcher.FetchCount, Is.EqualTo(1));
+        });
+    }
+
+    [Test]
+    public async Task RobotsPolicyService_AllowsWhenSourceDisablesRobotsRespect()
+    {
+        var source = CreateSource();
+        source.ThrottlingPolicy.RespectRobotsTxt = false;
+        var httpFetcher = new StubHttpFetcher(new Dictionary<string, FetchResult>(StringComparer.OrdinalIgnoreCase));
+        var robotsPolicyService = new RobotsPolicyService(new RobotsTxtCache(httpFetcher), new FakeCrawlSourceStore(source));
+
+        var decision = await robotsPolicyService.EvaluateAsync(new CrawlTarget
+        {
+            Url = "https://alpha.example/support/private",
+            CategoryKey = "tv",
+            Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["sourceName"] = source.Id
+            }
+        }, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(decision.IsAllowed, Is.True);
+            Assert.That(httpFetcher.FetchCount, Is.EqualTo(0));
+        });
     }
 
     [Test]
@@ -209,8 +273,11 @@ public sealed class DiscoveryRuntimeTests
 
     private sealed class StubHttpFetcher(IReadOnlyDictionary<string, FetchResult> responses) : IHttpFetcher
     {
+        public int FetchCount { get; private set; }
+
         public Task<FetchResult> FetchAsync(CrawlTarget target, CancellationToken cancellationToken)
         {
+            FetchCount += 1;
             return Task.FromResult(responses.TryGetValue(target.Url, out var response)
                 ? response
                 : new FetchResult
@@ -220,6 +287,26 @@ public sealed class DiscoveryRuntimeTests
                     StatusCode = 404,
                     FailureReason = "Not found"
                 });
+        }
+    }
+
+    private sealed class FakeCrawlSourceStore(params CrawlSource[] sources) : ICrawlSourceStore
+    {
+        private readonly List<CrawlSource> items = [.. sources];
+
+        public Task<IReadOnlyList<CrawlSource>> ListAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<CrawlSource>>(items);
+        }
+
+        public Task<CrawlSource?> GetAsync(string sourceId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(items.FirstOrDefault(item => string.Equals(item.Id, sourceId, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        public Task UpsertAsync(CrawlSource source, CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
         }
     }
 }
