@@ -1,4 +1,5 @@
 using ProductNormaliser.Application.Crawls;
+using ProductNormaliser.Application.Governance;
 using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Infrastructure.Crawling;
@@ -26,7 +27,7 @@ public sealed class CrawlQueueServiceJobTests
         var context = MongoIntegrationTestFixture.Context;
         var queueStore = new CrawlQueueRepository(context);
         var jobStore = new CrawlJobRepository(context);
-        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), queueStore);
+        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), queueStore, new PermissiveCrawlGovernanceService(), new NullManagementAuditService());
         await jobStore.UpsertAsync(CreateJob("job_1", totalTargets: 1));
         await queueStore.UpsertAsync(new CrawlQueueItem
         {
@@ -60,7 +61,7 @@ public sealed class CrawlQueueServiceJobTests
         var context = MongoIntegrationTestFixture.Context;
         var queueStore = new CrawlQueueRepository(context);
         var jobStore = new CrawlJobRepository(context);
-        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), queueStore);
+        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), queueStore, new PermissiveCrawlGovernanceService(), new NullManagementAuditService());
         await jobStore.UpsertAsync(CreateJob("job_1", totalTargets: 1));
         await queueStore.UpsertAsync(new CrawlQueueItem
         {
@@ -141,5 +142,25 @@ public sealed class CrawlQueueServiceJobTests
 
         public AdaptiveCrawlPolicy BuildPolicy(CrawlContext context, SourceQualitySnapshot? sourceHistory, PageVolatilityProfile volatility)
             => new();
+    }
+
+    private sealed class PermissiveCrawlGovernanceService : ICrawlGovernanceService
+    {
+        public void ValidateSourceBaseUrl(string baseUrl, string parameterName)
+        {
+        }
+
+        public void ValidateCrawlRequest(string requestType, IReadOnlyCollection<string> categories, IReadOnlyCollection<string> sources, IReadOnlyCollection<string> productIds, IReadOnlyCollection<CrawlJobTargetDescriptor> targets, string parameterName)
+        {
+        }
+    }
+
+    private sealed class NullManagementAuditService : IManagementAuditService
+    {
+        public Task RecordAsync(string action, string targetType, string targetId, IReadOnlyDictionary<string, string>? details = null, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task<IReadOnlyList<ManagementAuditEntry>> ListRecentAsync(int take = 100, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<ManagementAuditEntry>>([]);
     }
 }

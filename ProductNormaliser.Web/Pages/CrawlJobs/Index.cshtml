@@ -33,6 +33,7 @@
 
                 <div class="empty-panel">
                     <p class="empty-state">Launch a category-targeted crawl from the dashboard. Category selection is required, source filtering is optional, and the newly created job will open immediately after submission.</p>
+                    <p class="subtle-copy">Large category-wide launches are blocked by API safety checks until you narrow scope with explicit source selection, and oversized jobs are rejected outright.</p>
                 </div>
 
                 <div>
@@ -72,6 +73,7 @@
                                 <span>
                                     <strong>@source.DisplayName</strong>
                                     <span class="subtle-copy d-block">@((source.SupportedCategoryKeys.Count == 0 ? "No category metadata" : string.Join(", ", source.SupportedCategoryKeys)))</span>
+                                    <span class="subtle-copy d-block">@source.ThrottlingPolicy.RequestsPerMinute rpm, @source.ThrottlingPolicy.MaxConcurrentRequests concurrent, robots @(source.ThrottlingPolicy.RespectRobotsTxt ? "on" : "off")</span>
                                 </span>
                             </label>
                         }

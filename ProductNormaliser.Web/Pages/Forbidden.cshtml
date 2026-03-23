@@ -1,0 +1,20 @@
+@page
+@model ProductNormaliser.Web.Pages.ForbiddenModel
+@{
+    ViewData["Title"] = "Forbidden";
+}
+
+<section class="dashboard-shell auth-shell">
+    <section class="panel auth-panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Access Denied</p>
+                <h1>Your account cannot operate this surface</h1>
+            </div>
+        </div>
+        <p class="empty-state">This management action requires an operator role.</p>
+        <div class="actions-bar">
+            <a asp-page="/Login" class="btn btn-outline-dark">Sign in with a different account</a>
+        </div>
+    </section>
+</section>

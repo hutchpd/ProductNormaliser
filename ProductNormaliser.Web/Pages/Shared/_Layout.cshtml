@@ -45,6 +45,15 @@
                             <a class="nav-link" asp-area="" asp-page="/Privacy">Privacy</a>
                         </li>
                     </ul>
+                    @if (User.Identity?.IsAuthenticated == true)
+                    {
+                        <div class="d-flex align-items-center gap-3">
+                            <span class="subtle-copy">Signed in as @User.Identity.Name</span>
+                            <form method="post" asp-page="/Login" asp-page-handler="Logout" class="inline-form">
+                                <button type="submit" class="btn btn-outline-dark btn-sm">Sign out</button>
+                            </form>
+                        </div>
+                    }
                 </div>
             </div>
         </nav>

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using ProductNormaliser.Application.Categories;
 using ProductNormaliser.Application.Crawls;
+using ProductNormaliser.Application.Governance;
 using ProductNormaliser.Infrastructure.Crawling;
 using ProductNormaliser.Infrastructure.Intelligence;
 using ProductNormaliser.Infrastructure.Mongo.Repositories;
@@ -48,6 +49,7 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<ProductChangeEventRepository>();
         services.AddSingleton<AdaptiveCrawlPolicyRepository>();
         services.AddSingleton<SourceAttributeDisagreementRepository>();
+        services.AddSingleton<ManagementAuditRepository>();
         services.AddSingleton<CrawlJobRepository>();
         services.AddSingleton<CrawlSourceRepository>();
         services.AddSingleton<CategoryMetadataRepository>();
@@ -69,7 +71,11 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<IProductChangeEventStore>(serviceProvider => serviceProvider.GetRequiredService<ProductChangeEventRepository>());
         services.AddSingleton<IAdaptiveCrawlPolicyStore>(serviceProvider => serviceProvider.GetRequiredService<AdaptiveCrawlPolicyRepository>());
         services.AddSingleton<ISourceAttributeDisagreementStore>(serviceProvider => serviceProvider.GetRequiredService<SourceAttributeDisagreementRepository>());
+        services.AddSingleton<IManagementAuditStore>(serviceProvider => serviceProvider.GetRequiredService<ManagementAuditRepository>());
         services.AddSingleton<ProductNormaliser.Application.Sources.ICrawlSourceStore>(serviceProvider => serviceProvider.GetRequiredService<CrawlSourceRepository>());
+        services.AddSingleton<IManagementActorContext, SystemManagementActorContext>();
+        services.AddSingleton<IManagementAuditService, ManagementAuditService>();
+        services.AddSingleton<ICrawlGovernanceService, CrawlGovernanceService>();
         services.AddSingleton<ICrawlBackoffService, AdaptiveCrawlBackoffService>();
         services.AddSingleton<ISourceDisagreementService, SourceDisagreementService>();
         services.AddSingleton<ISourceTrustService, SourceTrustService>();
@@ -89,6 +95,9 @@ public static class MongoServiceCollectionExtensions
 
         services.AddOptions<CrawlPipelineOptions>()
             .Bind(configuration.GetSection(CrawlPipelineOptions.SectionName));
+
+        services.AddOptions<CrawlGovernanceOptions>()
+            .Bind(configuration.GetSection(CrawlGovernanceOptions.SectionName));
 
         services.AddSingleton<IDeltaProcessor, DeltaProcessor>();
         services.AddSingleton<ICrawlPriorityService, CrawlPriorityService>();

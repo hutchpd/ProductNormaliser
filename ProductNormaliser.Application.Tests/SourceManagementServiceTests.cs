@@ -1,4 +1,6 @@
 using ProductNormaliser.Application.Categories;
+using ProductNormaliser.Application.Crawls;
+using ProductNormaliser.Application.Governance;
 using ProductNormaliser.Application.Sources;
 using ProductNormaliser.Core.Models;
 
@@ -10,7 +12,7 @@ public sealed class SourceManagementServiceTests
     public async Task RegisterAsync_CreatesNormalisedSource()
     {
         var store = new FakeCrawlSourceStore();
-        var service = new SourceManagementService(store, new FakeCategoryMetadataService(CreateCategory("tv"), CreateCategory("refrigerator")));
+        var service = CreateService(store, new FakeCategoryMetadataService(CreateCategory("tv"), CreateCategory("refrigerator")));
 
         var result = await service.RegisterAsync(new CrawlSourceRegistration
         {
@@ -32,7 +34,7 @@ public sealed class SourceManagementServiceTests
     [Test]
     public void RegisterAsync_RejectsUnknownCategories()
     {
-        var service = new SourceManagementService(new FakeCrawlSourceStore(), new FakeCategoryMetadataService(CreateCategory("tv")));
+        var service = CreateService(new FakeCrawlSourceStore(), new FakeCategoryMetadataService(CreateCategory("tv")));
 
         var action = async () => await service.RegisterAsync(new CrawlSourceRegistration
         {
@@ -60,7 +62,7 @@ public sealed class SourceManagementServiceTests
             CreatedUtc = DateTime.UtcNow,
             UpdatedUtc = DateTime.UtcNow
         });
-        var service = new SourceManagementService(store, new FakeCategoryMetadataService(CreateCategory("tv"), CreateCategory("refrigerator")));
+        var service = CreateService(store, new FakeCategoryMetadataService(CreateCategory("tv"), CreateCategory("refrigerator")));
 
         var result = await service.AssignCategoriesAsync("alpha", ["refrigerator"]);
 
@@ -81,7 +83,7 @@ public sealed class SourceManagementServiceTests
             CreatedUtc = DateTime.UtcNow,
             UpdatedUtc = DateTime.UtcNow
         });
-        var service = new SourceManagementService(store, new FakeCategoryMetadataService(CreateCategory("tv")));
+        var service = CreateService(store, new FakeCategoryMetadataService(CreateCategory("tv")));
 
         var action = async () => await service.SetThrottlingAsync("alpha", new SourceThrottlingPolicy
         {
@@ -109,7 +111,8 @@ public sealed class SourceManagementServiceTests
             CreatedUtc = DateTime.UtcNow,
             UpdatedUtc = DateTime.UtcNow
         });
-        var service = new SourceManagementService(store, new FakeCategoryMetadataService(CreateCategory("tv")));
+        var audit = new RecordingAuditService();
+        var service = CreateService(store, new FakeCategoryMetadataService(CreateCategory("tv")), auditService: audit);
 
         var enabled = await service.EnableAsync("alpha");
         var enabledState = enabled.IsEnabled;
@@ -119,7 +122,96 @@ public sealed class SourceManagementServiceTests
         {
             Assert.That(enabledState, Is.True);
             Assert.That(disabled.IsEnabled, Is.False);
+            Assert.That(audit.Entries.Select(entry => entry.Action), Is.EqualTo(new[] { ManagementAuditActions.SourceEnabled, ManagementAuditActions.SourceDisabled }));
         });
+    }
+
+    [Test]
+    public async Task AssignCategoriesAsync_CreatesAuditEntry()
+    {
+        var store = new FakeCrawlSourceStore(new CrawlSource
+        {
+            Id = "alpha",
+            DisplayName = "Alpha",
+            BaseUrl = "https://alpha.example",
+            Host = "alpha.example",
+            IsEnabled = true,
+            SupportedCategoryKeys = ["tv"],
+            ThrottlingPolicy = new SourceThrottlingPolicy(),
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow
+        });
+        var audit = new RecordingAuditService();
+        var service = CreateService(store, new FakeCategoryMetadataService(CreateCategory("tv"), CreateCategory("monitor")), auditService: audit);
+
+        await service.AssignCategoriesAsync("alpha", ["monitor"]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(audit.Entries, Has.Count.EqualTo(1));
+            Assert.That(audit.Entries[0].Action, Is.EqualTo(ManagementAuditActions.SourceCategoriesChanged));
+            Assert.That(audit.Entries[0].Details["previousCategories"], Is.EqualTo("tv"));
+            Assert.That(audit.Entries[0].Details["updatedCategories"], Is.EqualTo("monitor"));
+        });
+    }
+
+    [Test]
+    public void RegisterAsync_RejectsBlockedDomains()
+    {
+        var service = new SourceManagementService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FixedCrawlGovernanceService(new CrawlGovernanceOptions
+            {
+                BlockedDomains = ["blocked.example"]
+            }),
+            new RecordingAuditService());
+
+        var action = async () => await service.RegisterAsync(new CrawlSourceRegistration
+        {
+            SourceId = "blocked",
+            DisplayName = "Blocked",
+            BaseUrl = "https://blocked.example",
+            SupportedCategoryKeys = ["tv"]
+        });
+
+        Assert.That(action, Throws.ArgumentException.With.Message.Contain("blocked by crawl governance rules"));
+    }
+
+    [Test]
+    public void RegisterAsync_RejectsPrivateNetworkTargets()
+    {
+        var service = new SourceManagementService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FixedCrawlGovernanceService(new CrawlGovernanceOptions
+            {
+                AllowPrivateNetworkTargets = false
+            }),
+            new RecordingAuditService());
+
+        var action = async () => await service.RegisterAsync(new CrawlSourceRegistration
+        {
+            SourceId = "private",
+            DisplayName = "Private",
+            BaseUrl = "https://localhost:8443",
+            SupportedCategoryKeys = ["tv"]
+        });
+
+        Assert.That(action, Throws.ArgumentException.With.Message.Contain("local or private-network target"));
+    }
+
+    private static SourceManagementService CreateService(
+        FakeCrawlSourceStore store,
+        FakeCategoryMetadataService categoryService,
+        ICrawlGovernanceService? governanceService = null,
+        IManagementAuditService? auditService = null)
+    {
+        return new SourceManagementService(
+            store,
+            categoryService,
+            governanceService ?? new PermissiveCrawlGovernanceService(),
+            auditService ?? new RecordingAuditService());
     }
 
     private static CategoryMetadata CreateCategory(string key)
@@ -185,5 +277,46 @@ public sealed class SourceManagementServiceTests
             items.Add(categoryMetadata);
             return Task.FromResult(categoryMetadata);
         }
+    }
+
+    private sealed class RecordingAuditService : IManagementAuditService
+    {
+        public List<ManagementAuditEntry> Entries { get; } = [];
+
+        public Task RecordAsync(string action, string targetType, string targetId, IReadOnlyDictionary<string, string>? details = null, CancellationToken cancellationToken = default)
+        {
+            Entries.Add(new ManagementAuditEntry
+            {
+                Action = action,
+                TargetType = targetType,
+                TargetId = targetId,
+                Details = details is null ? [] : new Dictionary<string, string>(details, StringComparer.OrdinalIgnoreCase)
+            });
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ManagementAuditEntry>> ListRecentAsync(int take = 100, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<ManagementAuditEntry>>(Entries.Take(take).ToArray());
+    }
+
+    private sealed class PermissiveCrawlGovernanceService : ICrawlGovernanceService
+    {
+        public void ValidateSourceBaseUrl(string baseUrl, string parameterName)
+        {
+        }
+
+        public void ValidateCrawlRequest(string requestType, IReadOnlyCollection<string> categories, IReadOnlyCollection<string> sources, IReadOnlyCollection<string> productIds, IReadOnlyCollection<CrawlJobTargetDescriptor> targets, string parameterName)
+        {
+        }
+    }
+
+    private sealed class FixedCrawlGovernanceService(CrawlGovernanceOptions options) : ICrawlGovernanceService
+    {
+        private readonly CrawlGovernanceService inner = new(Microsoft.Extensions.Options.Options.Create(options));
+
+        public void ValidateSourceBaseUrl(string baseUrl, string parameterName) => inner.ValidateSourceBaseUrl(baseUrl, parameterName);
+
+        public void ValidateCrawlRequest(string requestType, IReadOnlyCollection<string> categories, IReadOnlyCollection<string> sources, IReadOnlyCollection<string> productIds, IReadOnlyCollection<CrawlJobTargetDescriptor> targets, string parameterName)
+            => inner.ValidateCrawlRequest(requestType, categories, sources, productIds, targets, parameterName);
     }
 }

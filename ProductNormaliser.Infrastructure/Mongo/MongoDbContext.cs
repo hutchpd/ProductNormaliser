@@ -34,6 +34,7 @@ public sealed class MongoDbContext
         ProductChangeEvents = Database.GetCollection<ProductChangeEvent>(MongoCollectionNames.ProductChangeEvents);
         AdaptiveCrawlPolicies = Database.GetCollection<AdaptiveCrawlPolicy>(MongoCollectionNames.AdaptiveCrawlPolicies);
         SourceAttributeDisagreements = Database.GetCollection<SourceAttributeDisagreement>(MongoCollectionNames.SourceAttributeDisagreements);
+        ManagementAuditEntries = Database.GetCollection<ManagementAuditEntry>(MongoCollectionNames.ManagementAuditEntries);
     }
 
     public IMongoClient Client { get; }
@@ -69,6 +70,8 @@ public sealed class MongoDbContext
     public IMongoCollection<AdaptiveCrawlPolicy> AdaptiveCrawlPolicies { get; }
 
     public IMongoCollection<SourceAttributeDisagreement> SourceAttributeDisagreements { get; }
+
+    public IMongoCollection<ManagementAuditEntry> ManagementAuditEntries { get; }
 
     public async Task EnsureIndexesAsync(CancellationToken cancellationToken = default)
     {
@@ -150,6 +153,17 @@ public sealed class MongoDbContext
                 .Ascending(disagreement => disagreement.SourceName)
                 .Ascending(disagreement => disagreement.CategoryKey)
                 .Ascending(disagreement => disagreement.AttributeKey)),
+            cancellationToken: cancellationToken);
+
+        await ManagementAuditEntries.Indexes.CreateManyAsync(
+            [
+                new CreateIndexModel<ManagementAuditEntry>(Builders<ManagementAuditEntry>.IndexKeys
+                    .Descending(entry => entry.TimestampUtc)),
+                new CreateIndexModel<ManagementAuditEntry>(Builders<ManagementAuditEntry>.IndexKeys
+                    .Ascending(entry => entry.TargetType)
+                    .Ascending(entry => entry.TargetId)
+                    .Descending(entry => entry.TimestampUtc))
+            ],
             cancellationToken: cancellationToken);
     }
 }

@@ -1,0 +1,45 @@
+@page
+@model ProductNormaliser.Web.Pages.LoginModel
+@{
+    ViewData["Title"] = "Management Login";
+}
+
+<section class="dashboard-shell auth-shell">
+    <section class="panel auth-panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Management Access</p>
+                <h1>Sign in to operate the dashboard</h1>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+        {
+            <div class="notice error">@Model.ErrorMessage</div>
+        }
+
+        <form method="post" class="source-form">
+            <input asp-for="ReturnUrl" type="hidden" />
+            <div class="form-grid compact-grid">
+                <div>
+                    <label asp-for="Input.Username" class="form-label"></label>
+                    <input asp-for="Input.Username" class="form-control" autocomplete="username" />
+                    <span asp-validation-for="Input.Username" class="text-danger small"></span>
+                </div>
+                <div>
+                    <label asp-for="Input.Password" class="form-label"></label>
+                    <input asp-for="Input.Password" class="form-control" autocomplete="current-password" />
+                    <span asp-validation-for="Input.Password" class="text-danger small"></span>
+                </div>
+            </div>
+
+            <div class="actions-bar">
+                <button type="submit" class="btn btn-dark">Sign in</button>
+            </div>
+        </form>
+    </section>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

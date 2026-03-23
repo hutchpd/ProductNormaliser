@@ -1,11 +1,14 @@
 using ProductNormaliser.Application.Categories;
+using ProductNormaliser.Application.Governance;
 using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Application.Sources;
 
 public sealed class SourceManagementService(
     ICrawlSourceStore crawlSourceStore,
-    ICategoryMetadataService categoryMetadataService) : ISourceManagementService
+    ICategoryMetadataService categoryMetadataService,
+    ICrawlGovernanceService crawlGovernanceService,
+    IManagementAuditService managementAuditService) : ISourceManagementService
 {
     public async Task<IReadOnlyList<CrawlSource>> ListAsync(CancellationToken cancellationToken = default)
     {
@@ -35,7 +38,7 @@ public sealed class SourceManagementService(
         {
             Id = sourceId,
             DisplayName = ValidateDisplayName(registration.DisplayName),
-            BaseUrl = ValidateBaseUrl(registration.BaseUrl, out var host),
+            BaseUrl = ValidateBaseUrl(registration.BaseUrl, out var host, crawlGovernanceService),
             Host = host,
             Description = NormaliseOptionalText(registration.Description),
             IsEnabled = registration.IsEnabled,
@@ -55,7 +58,7 @@ public sealed class SourceManagementService(
 
         var existing = await RequireSourceAsync(sourceId, cancellationToken);
         existing.DisplayName = ValidateDisplayName(update.DisplayName);
-        existing.BaseUrl = ValidateBaseUrl(update.BaseUrl, out var host);
+        existing.BaseUrl = ValidateBaseUrl(update.BaseUrl, out var host, crawlGovernanceService);
         existing.Host = host;
         existing.Description = NormaliseOptionalText(update.Description);
         existing.UpdatedUtc = DateTime.UtcNow;
@@ -67,27 +70,78 @@ public sealed class SourceManagementService(
     public async Task<CrawlSource> EnableAsync(string sourceId, CancellationToken cancellationToken = default)
     {
         var existing = await RequireSourceAsync(sourceId, cancellationToken);
+        var wasEnabled = existing.IsEnabled;
         existing.IsEnabled = true;
         existing.UpdatedUtc = DateTime.UtcNow;
         await crawlSourceStore.UpsertAsync(existing, cancellationToken);
+
+        if (!wasEnabled)
+        {
+            await managementAuditService.RecordAsync(
+                ManagementAuditActions.SourceEnabled,
+                "source",
+                existing.Id,
+                new Dictionary<string, string>
+                {
+                    ["displayName"] = existing.DisplayName,
+                    ["host"] = existing.Host
+                },
+                cancellationToken);
+        }
+
         return existing;
     }
 
     public async Task<CrawlSource> DisableAsync(string sourceId, CancellationToken cancellationToken = default)
     {
         var existing = await RequireSourceAsync(sourceId, cancellationToken);
+        var wasEnabled = existing.IsEnabled;
         existing.IsEnabled = false;
         existing.UpdatedUtc = DateTime.UtcNow;
         await crawlSourceStore.UpsertAsync(existing, cancellationToken);
+
+        if (wasEnabled)
+        {
+            await managementAuditService.RecordAsync(
+                ManagementAuditActions.SourceDisabled,
+                "source",
+                existing.Id,
+                new Dictionary<string, string>
+                {
+                    ["displayName"] = existing.DisplayName,
+                    ["host"] = existing.Host
+                },
+                cancellationToken);
+        }
+
         return existing;
     }
 
     public async Task<CrawlSource> AssignCategoriesAsync(string sourceId, IReadOnlyCollection<string> categoryKeys, CancellationToken cancellationToken = default)
     {
         var existing = await RequireSourceAsync(sourceId, cancellationToken);
+        var previousCategories = existing.SupportedCategoryKeys
+            .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         existing.SupportedCategoryKeys = await ValidateCategoryKeysAsync(categoryKeys, cancellationToken);
         existing.UpdatedUtc = DateTime.UtcNow;
         await crawlSourceStore.UpsertAsync(existing, cancellationToken);
+
+        var updatedCategories = existing.SupportedCategoryKeys.ToArray();
+        if (!previousCategories.SequenceEqual(updatedCategories, StringComparer.OrdinalIgnoreCase))
+        {
+            await managementAuditService.RecordAsync(
+                ManagementAuditActions.SourceCategoriesChanged,
+                "source",
+                existing.Id,
+                new Dictionary<string, string>
+                {
+                    ["previousCategories"] = string.Join(",", previousCategories),
+                    ["updatedCategories"] = string.Join(",", updatedCategories)
+                },
+                cancellationToken);
+        }
+
         return existing;
     }
 
@@ -175,7 +229,7 @@ public sealed class SourceManagementService(
         return value.Trim();
     }
 
-    private static string ValidateBaseUrl(string value, out string host)
+    private static string ValidateBaseUrl(string value, out string host, ICrawlGovernanceService crawlGovernanceService)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
         if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)
@@ -183,6 +237,8 @@ public sealed class SourceManagementService(
         {
             throw new ArgumentException("Base URL must be an absolute HTTP or HTTPS URL.", nameof(value));
         }
+
+        crawlGovernanceService.ValidateSourceBaseUrl(value, nameof(value));
 
         host = uri.Host.ToLowerInvariant();
         return uri.ToString().TrimEnd('/');

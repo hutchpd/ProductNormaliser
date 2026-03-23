@@ -17,4 +17,5 @@ public static class MongoCollectionNames
     public const string ProductChangeEvents = "product_change_events";
     public const string AdaptiveCrawlPolicies = "adaptive_crawl_policies";
     public const string SourceAttributeDisagreements = "source_attribute_disagreements";
+    public const string ManagementAuditEntries = "management_audit_entries";
 }

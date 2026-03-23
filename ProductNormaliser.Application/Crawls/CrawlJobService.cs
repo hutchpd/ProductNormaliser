@@ -1,3 +1,4 @@
+using ProductNormaliser.Application.Governance;
 using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Application.Crawls;
@@ -5,7 +6,9 @@ namespace ProductNormaliser.Application.Crawls;
 public sealed class CrawlJobService(
     ICrawlJobStore crawlJobStore,
     IKnownCrawlTargetStore knownCrawlTargetStore,
-    ICrawlJobQueueWriter crawlJobQueueWriter) : ICrawlJobService
+    ICrawlJobQueueWriter crawlJobQueueWriter,
+    ICrawlGovernanceService crawlGovernanceService,
+    IManagementAuditService managementAuditService) : ICrawlJobService
 {
     public Task<CrawlJobPage> ListAsync(CrawlJobQuery? query = null, CancellationToken cancellationToken = default)
     {
@@ -33,6 +36,8 @@ public sealed class CrawlJobService(
         {
             throw new ArgumentException("No crawlable targets were found for the requested job.", nameof(request));
         }
+
+        crawlGovernanceService.ValidateCrawlRequest(requestType, categories, sources, productIds, targets, nameof(request));
 
         var now = DateTime.UtcNow;
         var jobId = $"job_{Guid.NewGuid():N}";
@@ -82,6 +87,20 @@ public sealed class CrawlJobService(
                 LastError = null
             }, cancellationToken);
         }
+
+        await managementAuditService.RecordAsync(
+            ManagementAuditActions.CrawlJobCreated,
+            "crawl_job",
+            job.JobId,
+            new Dictionary<string, string>
+            {
+                ["requestType"] = requestType,
+                ["targetCount"] = targets.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["requestedCategories"] = string.Join(",", categories),
+                ["requestedSources"] = string.Join(",", sources),
+                ["requestedProductIds"] = string.Join(",", productIds)
+            },
+            cancellationToken);
 
         return job;
     }

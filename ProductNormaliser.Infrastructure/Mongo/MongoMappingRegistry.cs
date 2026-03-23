@@ -31,6 +31,7 @@ public static class MongoMappingRegistry
         RegisterClassMap<ProductChangeEvent>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<AdaptiveCrawlPolicy>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<SourceAttributeDisagreement>(map => map.MapIdMember(model => model.Id));
+        RegisterClassMap<ManagementAuditEntry>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<CanonicalAttributeValue>();
         RegisterClassMap<AttributeEvidence>();
         RegisterClassMap<CrawlJobCategoryBreakdown>();
