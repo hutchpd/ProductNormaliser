@@ -1,4 +1,9 @@
+using System.Diagnostics;
+using System.Globalization;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using ProductNormaliser.Application.Governance;
+using ProductNormaliser.Application.Observability;
 using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Application.Crawls;
@@ -8,8 +13,11 @@ public sealed class CrawlJobService(
     IKnownCrawlTargetStore knownCrawlTargetStore,
     ICrawlJobQueueWriter crawlJobQueueWriter,
     ICrawlGovernanceService crawlGovernanceService,
-    IManagementAuditService managementAuditService) : ICrawlJobService
+    IManagementAuditService managementAuditService,
+    ILogger<CrawlJobService>? logger = null) : ICrawlJobService
 {
+    private readonly ILogger<CrawlJobService> logger = logger ?? NullLogger<CrawlJobService>.Instance;
+
     public Task<CrawlJobPage> ListAsync(CrawlJobQuery? query = null, CancellationToken cancellationToken = default)
     {
         return crawlJobStore.ListAsync(NormalizeQuery(query), cancellationToken);
@@ -23,6 +31,8 @@ public sealed class CrawlJobService(
     public async Task<CrawlJob> CreateAsync(CreateCrawlJobRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        using var activity = ProductNormaliserTelemetry.ActivitySource.StartActivity("crawl.job.create", ActivityKind.Internal);
 
         var requestType = NormalizeRequestType(request.RequestType);
         var categories = NormalizeValues(request.RequestedCategories);
@@ -65,6 +75,10 @@ public sealed class CrawlJobService(
             PerCategoryBreakdown = breakdown
         };
 
+        activity?.SetTag("crawl.job.id", job.JobId);
+        activity?.SetTag("crawl.job.request_type", requestType);
+        activity?.SetTag("crawl.job.target_count", targets.Count);
+
         await crawlJobStore.UpsertAsync(job, cancellationToken);
 
         for (var index = 0; index < targets.Count; index++)
@@ -101,6 +115,22 @@ public sealed class CrawlJobService(
                 ["requestedProductIds"] = string.Join(",", productIds)
             },
             cancellationToken);
+
+        logger.LogInformation(
+            "Created crawl job {JobId} with request type {RequestType}; targets={TargetCount}, categories={RequestedCategories}, sources={RequestedSources}, products={RequestedProductIds}",
+            job.JobId,
+            requestType,
+            targets.Count,
+            string.Join(',', categories),
+            string.Join(',', sources),
+            string.Join(',', productIds));
+
+        var createTags = new TagList
+        {
+            { "request.type", requestType }
+        };
+        ProductNormaliserTelemetry.CrawlJobsCreated.Add(1, createTags);
+        ProductNormaliserTelemetry.CrawlJobTargetCount.Record(targets.Count, createTags);
 
         return job;
     }
@@ -143,6 +173,23 @@ public sealed class CrawlJobService(
             : CrawlJobStatuses.CancelRequested;
 
         await crawlJobStore.UpsertAsync(job, cancellationToken);
+
+        logger.LogInformation(
+            "Cancellation requested for crawl job {JobId}; cancelledTargets={CancelledCount}, processedTargets={ProcessedTargets}, totalTargets={TotalTargets}, status={Status}",
+            job.JobId,
+            job.CancelledCount,
+            job.ProcessedTargets,
+            job.TotalTargets,
+            job.Status);
+
+        if (string.Equals(job.Status, CrawlJobStatuses.Cancelled, StringComparison.OrdinalIgnoreCase))
+        {
+            ProductNormaliserTelemetry.CrawlJobsCompleted.Add(1, new TagList
+            {
+                { "status", job.Status }
+            });
+        }
+
         return job;
     }
 
@@ -162,10 +209,23 @@ public sealed class CrawlJobService(
         job.Status = CrawlJobStatuses.Running;
         job.LastUpdatedAt = DateTime.UtcNow;
         await crawlJobStore.UpsertAsync(job, cancellationToken);
+
+        logger.LogInformation(
+            "Started crawl job {JobId}; requestType={RequestType}, processedTargets={ProcessedTargets}, totalTargets={TotalTargets}",
+            job.JobId,
+            job.RequestType,
+            job.ProcessedTargets,
+            job.TotalTargets);
+
+        ProductNormaliserTelemetry.CrawlJobsStarted.Add(1, new TagList
+        {
+            { "request.type", job.RequestType }
+        });
     }
 
     public async Task RecordTargetOutcomeAsync(string jobId, string categoryKey, string outcome, CancellationToken cancellationToken = default)
     {
+        using var activity = ProductNormaliserTelemetry.ActivitySource.StartActivity("crawl.job.record_outcome", ActivityKind.Internal);
         var job = await crawlJobStore.GetAsync(NormalizeRequiredValue(jobId, nameof(jobId)), cancellationToken);
         if (job is null)
         {
@@ -189,6 +249,10 @@ public sealed class CrawlJobService(
         var normalizedCategoryKey = NormalizeRequiredValue(categoryKey, nameof(categoryKey));
         var normalizedOutcome = NormalizeOutcome(outcome);
         var now = DateTime.UtcNow;
+
+        activity?.SetTag("crawl.job.id", job.JobId);
+        activity?.SetTag("crawl.job.category", normalizedCategoryKey);
+        activity?.SetTag("crawl.job.outcome", normalizedOutcome);
 
         var breakdown = job.PerCategoryBreakdown.FirstOrDefault(item => string.Equals(item.CategoryKey, normalizedCategoryKey, StringComparison.OrdinalIgnoreCase));
         if (breakdown is null)
@@ -243,6 +307,44 @@ public sealed class CrawlJobService(
         }
 
         await crawlJobStore.UpsertAsync(job, cancellationToken);
+
+        logger.LogInformation(
+            "Recorded crawl job outcome {Outcome} for job {JobId} in category {CategoryKey}; processedTargets={ProcessedTargets}/{TotalTargets}, status={Status}, success={SuccessCount}, skipped={SkippedCount}, failed={FailedCount}, cancelled={CancelledCount}",
+            normalizedOutcome,
+            job.JobId,
+            normalizedCategoryKey,
+            job.ProcessedTargets,
+            job.TotalTargets,
+            job.Status,
+            job.SuccessCount,
+            job.SkippedCount,
+            job.FailedCount,
+            job.CancelledCount);
+
+        ProductNormaliserTelemetry.CrawlJobTargetsRecorded.Add(1, new TagList
+        {
+            { "category", normalizedCategoryKey },
+            { "status", normalizedOutcome }
+        });
+
+        if (IsTerminalStatus(job.Status) && job.ProcessedTargets >= job.TotalTargets)
+        {
+            ProductNormaliserTelemetry.CrawlJobsCompleted.Add(1, new TagList
+            {
+                { "status", job.Status }
+            });
+
+            logger.LogInformation(
+                "Crawl job {JobId} reached terminal status {Status}; totalTargets={TotalTargets}, success={SuccessCount}, skipped={SkippedCount}, failed={FailedCount}, cancelled={CancelledCount}, completionUtc={CompletionUtc}",
+                job.JobId,
+                job.Status,
+                job.TotalTargets,
+                job.SuccessCount,
+                job.SkippedCount,
+                job.FailedCount,
+                job.CancelledCount,
+                job.EstimatedCompletion?.ToString("u", CultureInfo.InvariantCulture));
+        }
     }
 
     private async Task<IReadOnlyList<CrawlJobTargetDescriptor>> ResolveTargetsAsync(

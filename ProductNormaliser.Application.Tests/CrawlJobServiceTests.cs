@@ -137,6 +137,34 @@ public sealed class CrawlJobServiceTests
     }
 
     [Test]
+    public async Task CrawlJobLifecycle_EmitsStructuredLogs()
+    {
+        var jobStore = new FakeCrawlJobStore();
+        var queueWriter = new FakeCrawlJobQueueWriter();
+        var targetStore = new FakeKnownCrawlTargetStore(
+            categoryTargets:
+            [
+                new CrawlJobTargetDescriptor { SourceName = "currys", SourceUrl = "https://currys.example/tv-1", CategoryKey = "tv" }
+            ]);
+        var logger = new TestLogger<CrawlJobService>();
+        var service = new CrawlJobService(jobStore, targetStore, queueWriter, new PermissiveCrawlGovernanceService(), new RecordingAuditService(), logger);
+
+        var job = await service.CreateAsync(new CreateCrawlJobRequest
+        {
+            RequestType = CrawlJobRequestTypes.Category,
+            RequestedCategories = ["tv"]
+        });
+
+        await service.MarkStartedAsync(job.JobId);
+        await service.RecordTargetOutcomeAsync(job.JobId, "tv", "completed");
+
+        Assert.That(logger.Entries.Select(entry => entry.Message), Has.Some.Contains("Created crawl job"));
+        Assert.That(logger.Entries.Select(entry => entry.Message), Has.Some.Contains("Started crawl job"));
+        Assert.That(logger.Entries.Select(entry => entry.Message), Has.Some.Contains("Recorded crawl job outcome completed"));
+        Assert.That(logger.Entries.Select(entry => entry.Message), Has.Some.Contains("reached terminal status completed"));
+    }
+
+    [Test]
     public async Task RecordTargetOutcomeAsync_IgnoresDuplicateOutcomeOnceJobIsComplete()
     {
         var job = CreateJob(totalTargets: 1, categoryKey: "tv");

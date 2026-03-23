@@ -1072,6 +1072,7 @@
       },
       "ProductNormaliser.Application/1.0.0": {
         "dependencies": {
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.0",
           "Microsoft.Extensions.Options": "10.0.0",
           "ProductNormaliser.Domain": "1.0.0"
         },

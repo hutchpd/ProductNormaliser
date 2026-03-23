@@ -166,6 +166,44 @@ The worker:
 - records crawl logs, conflicts, trust signals, change events, and disagreement data
 - reschedules future attempts using adaptive backoff rules
 
+## Observability
+
+The platform now exposes observability at two layers:
+
+- structured lifecycle logs for crawl job creation, start, cancellation, per-target outcome recording, and terminal completion
+- runtime telemetry via the `ProductNormaliser.Operations` `ActivitySource` and `Meter`
+- persisted operational summary data via `GET /api/stats`
+- operator-facing health panels on the web landing page for queue pressure, retry backlog, failure volume, at-risk sources, and category hotspots
+
+The `Meter` emits counters and histograms for:
+
+- crawl jobs created, started, and completed
+- crawl job target outcomes by category and status
+- queue dequeues, retries, and terminal outcomes
+- processed crawl targets and extracted product counts
+- crawl target duration and job target counts
+
+The Admin API stats payload now includes:
+
+- queue depth, retry depth, failed-queue depth, and active job count
+- throughput and failure counts for the trailing 24 hours
+- source-level health metrics derived from quality snapshots, queue state, and recent crawl logs
+- category-level crawl pressure metrics derived from jobs, queue state, and recent crawl logs
+
+### Verification status
+
+Verified by automated tests:
+
+- crawl job lifecycle logging is emitted during create, start, and completion flows
+- stats aggregation includes the new operational summary from persisted jobs, queue items, crawl logs, sources, and quality snapshots
+- the operator landing page renders the operational health panel and updated contract shape
+
+Observed operationally rather than end-to-end tested:
+
+- `ActivitySource` traces from the worker and crawl services
+- `Meter` counters and histograms emitted at runtime for external collection
+- the usefulness of the dashboard health summary under real crawl load patterns
+
 ## Running the admin API
 
 The admin API is a read-side service over the same MongoDB database.

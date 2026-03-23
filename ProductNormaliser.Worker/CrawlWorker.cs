@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Options;
+using ProductNormaliser.Application.Observability;
 using ProductNormaliser.Infrastructure.Crawling;
+using System.Diagnostics;
 
 namespace ProductNormaliser.Worker;
 
@@ -24,6 +26,11 @@ public sealed class CrawlWorker(
 
             try
             {
+                using var activity = ProductNormaliserTelemetry.ActivitySource.StartActivity("crawl.worker.handle_lease", ActivityKind.Internal);
+                activity?.SetTag("crawl.queue_item_id", lease.QueueItemId);
+                activity?.SetTag("crawl.source", lease.Target.Metadata.TryGetValue("sourceName", out var sourceName) ? sourceName : string.Empty);
+                activity?.SetTag("crawl.category", lease.Target.CategoryKey);
+
                 var result = await crawlOrchestrator.ProcessAsync(lease.Target, stoppingToken);
 
                 switch (result.Status)

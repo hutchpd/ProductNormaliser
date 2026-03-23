@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using MongoDB.Driver;
 using Microsoft.Extensions.Options;
 using ProductNormaliser.Application.Crawls;
+using ProductNormaliser.Application.Observability;
 using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Infrastructure.Mongo;
@@ -36,6 +38,12 @@ public sealed class CrawlQueueService(
         {
             return null;
         }
+
+        ProductNormaliserTelemetry.CrawlQueueDequeued.Add(1, new TagList
+        {
+            { "source", queueItem.SourceName },
+            { "category", queueItem.CategoryKey }
+        });
 
         if (!string.IsNullOrWhiteSpace(queueItem.JobId))
         {
@@ -74,6 +82,12 @@ public sealed class CrawlQueueService(
             queueItem.NextAttemptUtc = null;
             await crawlQueueStore.UpsertAsync(queueItem, cancellationToken);
             await crawlJobService.RecordTargetOutcomeAsync(queueItem.JobId, queueItem.CategoryKey, "completed", cancellationToken);
+            ProductNormaliserTelemetry.CrawlQueueTerminalOutcomes.Add(1, new TagList
+            {
+                { "status", "completed" },
+                { "source", queueItem.SourceName },
+                { "category", queueItem.CategoryKey }
+            });
             return;
         }
 
@@ -100,6 +114,12 @@ public sealed class CrawlQueueService(
             queueItem.NextAttemptUtc = null;
             await crawlQueueStore.UpsertAsync(queueItem, cancellationToken);
             await crawlJobService.RecordTargetOutcomeAsync(queueItem.JobId, queueItem.CategoryKey, "skipped", cancellationToken);
+            ProductNormaliserTelemetry.CrawlQueueTerminalOutcomes.Add(1, new TagList
+            {
+                { "status", "skipped" },
+                { "source", queueItem.SourceName },
+                { "category", queueItem.CategoryKey }
+            });
             return;
         }
 
@@ -128,6 +148,11 @@ public sealed class CrawlQueueService(
                 queueItem.LastError = reason;
                 queueItem.NextAttemptUtc = await ComputeNextAttemptAsync(queueItem, cancellationToken);
                 await crawlQueueStore.UpsertAsync(queueItem, cancellationToken);
+                ProductNormaliserTelemetry.CrawlQueueRetried.Add(1, new TagList
+                {
+                    { "source", queueItem.SourceName },
+                    { "category", queueItem.CategoryKey }
+                });
                 return;
             }
 
@@ -136,6 +161,12 @@ public sealed class CrawlQueueService(
             queueItem.NextAttemptUtc = null;
             await crawlQueueStore.UpsertAsync(queueItem, cancellationToken);
             await crawlJobService.RecordTargetOutcomeAsync(queueItem.JobId, queueItem.CategoryKey, "failed", cancellationToken);
+            ProductNormaliserTelemetry.CrawlQueueTerminalOutcomes.Add(1, new TagList
+            {
+                { "status", "failed" },
+                { "source", queueItem.SourceName },
+                { "category", queueItem.CategoryKey }
+            });
             return;
         }
 

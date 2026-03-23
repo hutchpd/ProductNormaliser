@@ -34,6 +34,14 @@ At startup the API registers:
 
 Returns a high-level operational summary.
 
+The stats payload now includes both catalogue counts and an operational snapshot covering:
+
+- active crawl jobs
+- queue depth, retry backlog, and failed queue items
+- throughput and failures over the trailing 24 hours
+- per-source operational health metrics
+- per-category crawl pressure metrics
+
 ### Queue
 
 - `GET /api/queue`
@@ -118,6 +126,29 @@ The two main read-model services are:
 - `IDataIntelligenceService`: coverage, unmapped attributes, source quality, merge insights, source history, attribute stability, and disagreement analytics
 
 These services isolate controller logic from the shape of the underlying persisted model.
+
+## Observability model
+
+The API now sits on top of a stronger observability model for crawl operations:
+
+- crawl job lifecycle events are logged as structured entries in the application layer
+- worker and queue services emit `ProductNormaliser.Operations` metrics and traces
+- `IAdminQueryService.GetStatsAsync` aggregates persisted queue state, jobs, crawl logs, crawl sources, and source-quality snapshots into one dashboard-friendly operational summary
+
+This means the API can answer both business-health and runtime-health questions without asking the web layer to stitch several endpoints together.
+
+## Verification boundaries
+
+Verified in tests:
+
+- operational summary aggregation from persisted state
+- contract parity for the extended stats payload
+
+Observed operationally:
+
+- the actual metric stream from the `Meter`
+- the trace stream from the `ActivitySource`
+- live log collection and search in your hosting environment
 
 ## Configuration
 

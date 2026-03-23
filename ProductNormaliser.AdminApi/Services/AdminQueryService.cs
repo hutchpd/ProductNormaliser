@@ -255,11 +255,22 @@ public sealed class AdminQueryService(
 
     public async Task<StatsResponse> GetStatsAsync(CancellationToken cancellationToken)
     {
+        var throughputWindowStartUtc = DateTime.UtcNow.AddHours(-24);
         var canonicalCursor = await mongoDbContext.CanonicalProducts.FindAsync(Builders<CanonicalProduct>.Filter.Empty, cancellationToken: cancellationToken);
         var canonicalProducts = await canonicalCursor.ToListAsync(cancellationToken);
 
         var sourceCursor = await mongoDbContext.SourceProducts.FindAsync(Builders<SourceProduct>.Filter.Empty, cancellationToken: cancellationToken);
         var sourceProducts = await sourceCursor.ToListAsync(cancellationToken);
+
+        var crawlQueueItemsTask = mongoDbContext.CrawlQueueItems.Find(Builders<CrawlQueueItem>.Filter.Empty).ToListAsync(cancellationToken);
+        var crawlJobsTask = mongoDbContext.CrawlJobs.Find(Builders<CrawlJob>.Filter.Empty).ToListAsync(cancellationToken);
+        var recentLogsTask = mongoDbContext.CrawlLogs
+            .Find(log => log.TimestampUtc >= throughputWindowStartUtc)
+            .ToListAsync(cancellationToken);
+        var sourceSnapshotsTask = mongoDbContext.SourceQualitySnapshots.Find(Builders<SourceQualitySnapshot>.Filter.Empty).ToListAsync(cancellationToken);
+        var crawlSourcesTask = mongoDbContext.CrawlSources.Find(Builders<CrawlSource>.Filter.Empty).ToListAsync(cancellationToken);
+
+        await Task.WhenAll(crawlQueueItemsTask, crawlJobsTask, recentLogsTask, sourceSnapshotsTask, crawlSourcesTask);
 
         var totalCanonicalProducts = canonicalProducts.Count;
         var totalSourceProducts = sourceProducts.Count;
@@ -275,8 +286,159 @@ public sealed class AdminQueryService(
             TotalSourceProducts = totalSourceProducts,
             AverageAttributesPerProduct = averageAttributesPerProduct,
             PercentProductsWithConflicts = ToPercent(productsWithConflicts, totalCanonicalProducts),
-            PercentProductsMissingKeyAttributes = ToPercent(productsMissingKeyAttributes, totalCanonicalProducts)
+            PercentProductsMissingKeyAttributes = ToPercent(productsMissingKeyAttributes, totalCanonicalProducts),
+            Operational = BuildOperationalSummary(
+                crawlQueueItemsTask.Result,
+                crawlJobsTask.Result,
+                recentLogsTask.Result,
+                sourceSnapshotsTask.Result,
+                crawlSourcesTask.Result)
         };
+    }
+
+    private static OperationalSummaryDto BuildOperationalSummary(
+        IReadOnlyList<CrawlQueueItem> queueItems,
+        IReadOnlyList<CrawlJob> crawlJobs,
+        IReadOnlyList<CrawlLog> recentLogs,
+        IReadOnlyList<SourceQualitySnapshot> sourceSnapshots,
+        IReadOnlyList<CrawlSource> crawlSources)
+    {
+        var latestSnapshotsBySourceCategory = sourceSnapshots
+            .GroupBy(snapshot => $"{snapshot.SourceName}|{snapshot.CategoryKey}", StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(snapshot => snapshot.TimestampUtc).First())
+            .ToArray();
+
+        var sourceMetrics = crawlSources.Select(source => source.DisplayName)
+            .Concat(queueItems.Select(item => item.SourceName))
+            .Concat(recentLogs.Select(log => log.SourceName))
+            .Concat(latestSnapshotsBySourceCategory.Select(snapshot => snapshot.SourceName))
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(sourceName => BuildSourceOperationalMetric(sourceName, queueItems, recentLogs, latestSnapshotsBySourceCategory))
+            .OrderByDescending(metric => metric.FailureRateLast24Hours)
+            .ThenByDescending(metric => metric.RetryQueueDepth)
+            .ThenByDescending(metric => metric.QueueDepth)
+            .ThenBy(metric => metric.SourceName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var categoryMetrics = crawlJobs.SelectMany(job => job.PerCategoryBreakdown.Select(item => item.CategoryKey))
+            .Concat(queueItems.Select(item => item.CategoryKey))
+            .Concat(latestSnapshotsBySourceCategory.Select(snapshot => snapshot.CategoryKey))
+            .Where(categoryKey => !string.IsNullOrWhiteSpace(categoryKey))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(categoryKey => BuildCategoryOperationalMetric(categoryKey, queueItems, crawlJobs, recentLogs, latestSnapshotsBySourceCategory))
+            .OrderByDescending(metric => metric.QueueDepth)
+            .ThenByDescending(metric => metric.FailedCrawlsLast24Hours)
+            .ThenBy(metric => metric.CategoryKey, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return new OperationalSummaryDto
+        {
+            ActiveJobCount = crawlJobs.Count(job => IsActiveJobStatus(job.Status)),
+            QueueDepth = queueItems.Count(IsQueuedOrProcessing),
+            RetryQueueDepth = queueItems.Count(item => IsQueuedOrProcessing(item) && item.AttemptCount > 0),
+            FailedQueueDepth = queueItems.Count(item => string.Equals(item.Status, "failed", StringComparison.OrdinalIgnoreCase)),
+            ThroughputLast24Hours = recentLogs.Count,
+            FailureCountLast24Hours = recentLogs.Count(log => string.Equals(log.Status, "failed", StringComparison.OrdinalIgnoreCase)),
+            HealthySourceCount = sourceMetrics.Count(metric => string.Equals(metric.HealthStatus, "Healthy", StringComparison.OrdinalIgnoreCase)),
+            AttentionSourceCount = sourceMetrics.Count(metric => string.Equals(metric.HealthStatus, "Attention", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(metric.HealthStatus, "Watch", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(metric.HealthStatus, "Degraded", StringComparison.OrdinalIgnoreCase)),
+            Sources = sourceMetrics,
+            Categories = categoryMetrics
+        };
+    }
+
+    private static SourceOperationalMetricDto BuildSourceOperationalMetric(
+        string sourceName,
+        IReadOnlyList<CrawlQueueItem> queueItems,
+        IReadOnlyList<CrawlLog> recentLogs,
+        IReadOnlyList<SourceQualitySnapshot> latestSnapshotsBySourceCategory)
+    {
+        var sourceQueueItems = queueItems.Where(item => string.Equals(item.SourceName, sourceName, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var sourceLogs = recentLogs.Where(log => string.Equals(log.SourceName, sourceName, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var sourceSnapshots = latestSnapshotsBySourceCategory.Where(snapshot => string.Equals(snapshot.SourceName, sourceName, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var failedCrawls = sourceLogs.Count(log => string.Equals(log.Status, "failed", StringComparison.OrdinalIgnoreCase));
+        var trustScore = sourceSnapshots.Length == 0 ? 0m : decimal.Round(sourceSnapshots.Average(snapshot => snapshot.HistoricalTrustScore), 2, MidpointRounding.AwayFromZero);
+        var coveragePercent = sourceSnapshots.Length == 0 ? 0m : decimal.Round(sourceSnapshots.Average(snapshot => snapshot.AttributeCoverage), 2, MidpointRounding.AwayFromZero);
+        var successfulCrawlRate = sourceSnapshots.Length == 0 ? 0m : decimal.Round(sourceSnapshots.Average(snapshot => snapshot.SuccessfulCrawlRate), 2, MidpointRounding.AwayFromZero);
+
+        return new SourceOperationalMetricDto
+        {
+            SourceName = sourceName,
+            HealthStatus = sourceSnapshots.Length == 0 ? "Unknown" : DetermineHealthStatus(trustScore, successfulCrawlRate),
+            QueueDepth = sourceQueueItems.Count(IsQueuedOrProcessing),
+            RetryQueueDepth = sourceQueueItems.Count(item => IsQueuedOrProcessing(item) && item.AttemptCount > 0),
+            FailedQueueDepth = sourceQueueItems.Count(item => string.Equals(item.Status, "failed", StringComparison.OrdinalIgnoreCase)),
+            TotalCrawlsLast24Hours = sourceLogs.Length,
+            FailedCrawlsLast24Hours = failedCrawls,
+            FailureRateLast24Hours = ToPercent(failedCrawls, sourceLogs.Length),
+            TrustScore = trustScore,
+            CoveragePercent = coveragePercent,
+            SuccessfulCrawlRate = successfulCrawlRate,
+            SnapshotUtc = sourceSnapshots.OrderByDescending(snapshot => snapshot.TimestampUtc).FirstOrDefault()?.TimestampUtc,
+            LastCrawlUtc = sourceLogs.OrderByDescending(log => log.TimestampUtc).FirstOrDefault()?.TimestampUtc
+        };
+    }
+
+    private static CategoryOperationalMetricDto BuildCategoryOperationalMetric(
+        string categoryKey,
+        IReadOnlyList<CrawlQueueItem> queueItems,
+        IReadOnlyList<CrawlJob> crawlJobs,
+        IReadOnlyList<CrawlLog> recentLogs,
+        IReadOnlyList<SourceQualitySnapshot> latestSnapshotsBySourceCategory)
+    {
+        var categoryQueueItems = queueItems.Where(item => string.Equals(item.CategoryKey, categoryKey, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var categoryLogs = recentLogs.Where(log => categoryQueueItems.Any(item => string.Equals(item.SourceName, log.SourceName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(item.SourceUrl, log.Url, StringComparison.OrdinalIgnoreCase))).ToArray();
+        var failedCrawls = categoryLogs.Count(log => string.Equals(log.Status, "failed", StringComparison.OrdinalIgnoreCase));
+
+        return new CategoryOperationalMetricDto
+        {
+            CategoryKey = categoryKey,
+            ActiveJobCount = crawlJobs.Count(job => IsActiveJobStatus(job.Status)
+                && job.PerCategoryBreakdown.Any(item => string.Equals(item.CategoryKey, categoryKey, StringComparison.OrdinalIgnoreCase))),
+            QueueDepth = categoryQueueItems.Count(IsQueuedOrProcessing),
+            RetryQueueDepth = categoryQueueItems.Count(item => IsQueuedOrProcessing(item) && item.AttemptCount > 0),
+            ThroughputLast24Hours = categoryLogs.Length,
+            FailedCrawlsLast24Hours = failedCrawls,
+            FailureRateLast24Hours = ToPercent(failedCrawls, categoryLogs.Length),
+            DistinctSourceCount = latestSnapshotsBySourceCategory
+                .Where(snapshot => string.Equals(snapshot.CategoryKey, categoryKey, StringComparison.OrdinalIgnoreCase))
+                .Select(snapshot => snapshot.SourceName)
+                .Concat(categoryQueueItems.Select(item => item.SourceName))
+                .Concat(categoryLogs.Select(log => log.SourceName))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count()
+        };
+    }
+
+    private static bool IsQueuedOrProcessing(CrawlQueueItem queueItem)
+    {
+        return string.Equals(queueItem.Status, "queued", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(queueItem.Status, "processing", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsActiveJobStatus(string status)
+    {
+        return string.Equals(status, CrawlJobStatuses.Pending, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, CrawlJobStatuses.Running, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, CrawlJobStatuses.CancelRequested, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string DetermineHealthStatus(decimal trustScore, decimal successfulCrawlRate)
+    {
+        if (trustScore >= 80m && successfulCrawlRate >= 90m)
+        {
+            return "Healthy";
+        }
+
+        if (trustScore >= 60m && successfulCrawlRate >= 75m)
+        {
+            return "Watch";
+        }
+
+        return "Attention";
     }
 
     private static CrawlLogDto Map(CrawlLog log)

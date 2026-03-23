@@ -29,17 +29,26 @@ public sealed class OperatorLandingPageTests
         Assert.Multiple(() =>
         {
             Assert.That(html, Does.Contain("Current Category Context"));
+            Assert.That(html, Does.Contain("Operational Health"));
+            Assert.That(html, Does.Contain("Runtime queue and failure posture"));
             Assert.That(html, Does.Contain("Monitors &#x2B;1 more"));
             Assert.That(html, Does.Contain("Quick Crawl Launch"));
             Assert.That(html, Does.Contain("Active Crawl Jobs"));
             Assert.That(html, Does.Contain("Product Counts"));
             Assert.That(html, Does.Contain("Quality Summary"));
             Assert.That(html, Does.Contain("Source Health Summary"));
+            Assert.That(html, Does.Contain("Queue depth"));
+            Assert.That(html, Does.Contain("Retry backlog"));
+            Assert.That(html, Does.Contain("At-Risk Sources"));
+            Assert.That(html, Does.Contain("Category Pressure"));
+            Assert.That(html, Does.Contain("Northwind"));
+            Assert.That(html, Does.Contain("monitor"));
             Assert.That(html, Does.Contain("Start Crawl"));
             Assert.That(html, Does.Contain("View Jobs"));
             Assert.That(html, Does.Contain("Explore Products"));
             Assert.That(html, Does.Contain("Review Quality"));
             Assert.That(html, Does.Contain("Manage Sources"));
+            Assert.That(html, Does.Contain("Investigate retries and failures"));
             Assert.That(html, Does.Contain("Launch current category crawl"));
             Assert.That(html, Does.Contain("job_active_1"));
             Assert.That(html, Does.Contain("Canonical products"));
@@ -226,7 +235,78 @@ public sealed class OperatorLandingPageTests
                 TotalSourceProducts = 344,
                 AverageAttributesPerProduct = 8.7m,
                 PercentProductsWithConflicts = 18.5m,
-                PercentProductsMissingKeyAttributes = 9.4m
+                PercentProductsMissingKeyAttributes = 9.4m,
+                Operational = new OperationalSummaryDto
+                {
+                    ActiveJobCount = 1,
+                    QueueDepth = 6,
+                    RetryQueueDepth = 2,
+                    FailedQueueDepth = 1,
+                    ThroughputLast24Hours = 31,
+                    FailureCountLast24Hours = 4,
+                    HealthySourceCount = 1,
+                    AttentionSourceCount = 1,
+                    Sources =
+                    [
+                        new SourceOperationalMetricDto
+                        {
+                            SourceName = "AO UK",
+                            HealthStatus = "Healthy",
+                            QueueDepth = 1,
+                            RetryQueueDepth = 0,
+                            FailedQueueDepth = 0,
+                            TotalCrawlsLast24Hours = 18,
+                            FailedCrawlsLast24Hours = 0,
+                            FailureRateLast24Hours = 0m,
+                            TrustScore = 91m,
+                            CoveragePercent = 86m,
+                            SuccessfulCrawlRate = 97m,
+                            SnapshotUtc = new DateTime(2026, 3, 23, 8, 0, 0, DateTimeKind.Utc),
+                            LastCrawlUtc = new DateTime(2026, 3, 23, 9, 0, 0, DateTimeKind.Utc)
+                        },
+                        new SourceOperationalMetricDto
+                        {
+                            SourceName = "Northwind",
+                            HealthStatus = "Attention",
+                            QueueDepth = 3,
+                            RetryQueueDepth = 2,
+                            FailedQueueDepth = 1,
+                            TotalCrawlsLast24Hours = 13,
+                            FailedCrawlsLast24Hours = 4,
+                            FailureRateLast24Hours = 30.8m,
+                            TrustScore = 63m,
+                            CoveragePercent = 58m,
+                            SuccessfulCrawlRate = 71m,
+                            SnapshotUtc = new DateTime(2026, 3, 23, 8, 30, 0, DateTimeKind.Utc),
+                            LastCrawlUtc = new DateTime(2026, 3, 23, 9, 15, 0, DateTimeKind.Utc)
+                        }
+                    ],
+                    Categories =
+                    [
+                        new CategoryOperationalMetricDto
+                        {
+                            CategoryKey = "monitor",
+                            ActiveJobCount = 1,
+                            QueueDepth = 4,
+                            RetryQueueDepth = 2,
+                            ThroughputLast24Hours = 18,
+                            FailedCrawlsLast24Hours = 3,
+                            FailureRateLast24Hours = 16.7m,
+                            DistinctSourceCount = 2
+                        },
+                        new CategoryOperationalMetricDto
+                        {
+                            CategoryKey = "tv",
+                            ActiveJobCount = 0,
+                            QueueDepth = 2,
+                            RetryQueueDepth = 0,
+                            ThroughputLast24Hours = 13,
+                            FailedCrawlsLast24Hours = 1,
+                            FailureRateLast24Hours = 7.7m,
+                            DistinctSourceCount = 1
+                        }
+                    ]
+                }
             },
             CrawlJobsPage = new CrawlJobListResponseDto
             {

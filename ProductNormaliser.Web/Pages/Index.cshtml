@@ -96,6 +96,121 @@
         </section>
 
         <div class="operator-landing-grid">
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Operational Health</p>
+                        <h2>Runtime queue and failure posture</h2>
+                    </div>
+                    <a href="@Model.CrawlJobsUrl" class="btn btn-outline-dark btn-sm">Inspect jobs</a>
+                </div>
+
+                <div class="operator-summary-grid compact">
+                    @foreach (var summaryCard in Model.OperationalHealthCards)
+                    {
+                        <partial name="_OperatorSummaryCard" model="summaryCard" />
+                    }
+                </div>
+
+                <div class="operator-landing-grid mt-3">
+                    <section class="panel panel-muted">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">At-Risk Sources</p>
+                                <h2>Source failure and retry hotspots</h2>
+                            </div>
+                            <a href="@Model.SourceIntelligenceUrl" class="btn btn-outline-dark btn-sm">Open source intelligence</a>
+                        </div>
+
+                        @if (Model.AtRiskOperationalSources.Count == 0)
+                        {
+                            <div class="empty-panel">
+                                <p class="empty-state">No sources are currently showing retry backlog or elevated failure posture.</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="table-wrap">
+                                <table class="table dashboard-table align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Source</th>
+                                            <th>Health</th>
+                                            <th>Queue</th>
+                                            <th>Retries</th>
+                                            <th>Failures 24h</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                    @foreach (var source in Model.AtRiskOperationalSources)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <strong>@source.SourceName</strong>
+                                                <div class="subtle-copy">Trust @source.TrustScore.ToString("0.#")%, success @source.SuccessfulCrawlRate.ToString("0.#")%</div>
+                                            </td>
+                                            <td>@source.HealthStatus</td>
+                                            <td>@source.QueueDepth</td>
+                                            <td>@source.RetryQueueDepth</td>
+                                            <td>@source.FailedCrawlsLast24Hours (@source.FailureRateLast24Hours.ToString("0.#")%)</td>
+                                        </tr>
+                                    }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </section>
+
+                    <section class="panel panel-muted">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Category Pressure</p>
+                                <h2>Where crawl load is concentrating</h2>
+                            </div>
+                            <a href="@Model.QualityUrl" class="btn btn-outline-dark btn-sm">Open quality lens</a>
+                        </div>
+
+                        @if (Model.BusyOperationalCategories.Count == 0)
+                        {
+                            <div class="empty-panel">
+                                <p class="empty-state">No category-level queue pressure or recent failures are currently reported.</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="table-wrap">
+                                <table class="table dashboard-table align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Category</th>
+                                            <th>Active jobs</th>
+                                            <th>Queue</th>
+                                            <th>Retries</th>
+                                            <th>Failures 24h</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                    @foreach (var category in Model.BusyOperationalCategories)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <strong class="mono">@category.CategoryKey</strong>
+                                                <div class="subtle-copy">@category.DistinctSourceCount distinct sources, @category.ThroughputLast24Hours crawls in 24h</div>
+                                            </td>
+                                            <td>@category.ActiveJobCount</td>
+                                            <td>@category.QueueDepth</td>
+                                            <td>@category.RetryQueueDepth</td>
+                                            <td>@category.FailedCrawlsLast24Hours (@category.FailureRateLast24Hours.ToString("0.#")%)</td>
+                                        </tr>
+                                    }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </section>
+                </div>
+            </section>
+
             <section class="panel panel-muted">
                 <div class="panel-heading">
                     <div>

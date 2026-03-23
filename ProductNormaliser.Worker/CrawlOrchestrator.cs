@@ -1,5 +1,6 @@
 using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
+using ProductNormaliser.Application.Observability;
 using ProductNormaliser.Infrastructure.Crawling;
 using ProductNormaliser.Infrastructure.Mongo.Repositories;
 using ProductNormaliser.Infrastructure.StructuredData;
@@ -32,13 +33,25 @@ public sealed class CrawlOrchestrator(
     {
         ArgumentNullException.ThrowIfNull(target);
         var stopwatch = Stopwatch.StartNew();
+        using var activity = ProductNormaliserTelemetry.ActivitySource.StartActivity("crawl.target.process", ActivityKind.Internal);
 
         var sourceName = GetSourceName(target);
         string? contentHash = null;
         var extractedProductCount = 0;
         SemanticDeltaResult? semanticDelta = null;
+        var queueItemId = target.Metadata.TryGetValue("queueItemId", out var resolvedQueueItemId) ? resolvedQueueItemId : null;
 
-        logger.LogInformation("Processing crawl target {SourceName} {Url}", sourceName, target.Url);
+        activity?.SetTag("crawl.source", sourceName);
+        activity?.SetTag("crawl.category", target.CategoryKey);
+        activity?.SetTag("crawl.url", target.Url);
+        activity?.SetTag("crawl.queue_item_id", queueItemId);
+
+        logger.LogInformation(
+            "Processing crawl target {SourceName} {CategoryKey} {Url} from queue item {QueueItemId}",
+            sourceName,
+            target.CategoryKey,
+            target.Url,
+            queueItemId ?? "n/a");
 
         try
         {
@@ -48,6 +61,7 @@ public sealed class CrawlOrchestrator(
                 logger.LogInformation("Skipping {Url}: {Reason}", target.Url, robotsDecision.Reason);
                 var result = CrawlProcessResult.Skipped(robotsDecision.Reason);
                 await WriteCrawlLogAsync(sourceName, target.Url, result, stopwatch.ElapsedMilliseconds, cancellationToken);
+                RecordTelemetry(result, sourceName, target.CategoryKey, stopwatch.ElapsedMilliseconds);
                 return result;
             }
 
@@ -57,6 +71,7 @@ public sealed class CrawlOrchestrator(
                 logger.LogWarning("Fetch failed for {Url}: {Reason}", target.Url, fetchResult.FailureReason ?? "Unknown fetch failure.");
                 var result = CrawlProcessResult.Failed(fetchResult.FailureReason ?? "Fetch failed.");
                 await WriteCrawlLogAsync(sourceName, target.Url, result, stopwatch.ElapsedMilliseconds, cancellationToken);
+                RecordTelemetry(result, sourceName, target.CategoryKey, stopwatch.ElapsedMilliseconds);
                 return result;
             }
 
@@ -69,6 +84,7 @@ public sealed class CrawlOrchestrator(
                 logger.LogInformation("Skipping {Url}: unchanged page content detected", target.Url);
                 var result = CrawlProcessResult.Skipped("Unchanged page content.", contentHash);
                 await WriteCrawlLogAsync(sourceName, target.Url, result, stopwatch.ElapsedMilliseconds, cancellationToken);
+                RecordTelemetry(result, sourceName, target.CategoryKey, stopwatch.ElapsedMilliseconds);
                 return result;
             }
 
@@ -79,6 +95,7 @@ public sealed class CrawlOrchestrator(
                 logger.LogInformation("No structured products found for {Url}", target.Url);
                 var result = CrawlProcessResult.Completed("No structured products found.", contentHash);
                 await WriteCrawlLogAsync(sourceName, target.Url, result, stopwatch.ElapsedMilliseconds, cancellationToken);
+                RecordTelemetry(result, sourceName, target.CategoryKey, stopwatch.ElapsedMilliseconds);
                 return result;
             }
 
@@ -126,9 +143,17 @@ public sealed class CrawlOrchestrator(
                 sourceTrustService.CaptureSnapshot(sourceName, target.CategoryKey);
             }
 
-            logger.LogInformation("Completed crawl for {Url}; processed {ProductCount} product(s)", target.Url, processedProductCount);
+            logger.LogInformation(
+                "Completed crawl for source {SourceName} category {CategoryKey} url {Url}; processed={ProcessedProductCount}, extracted={ExtractedProductCount}, hadMeaningfulChange={HadMeaningfulChange}",
+                sourceName,
+                target.CategoryKey,
+                target.Url,
+                processedProductCount,
+                extractedProductCount,
+                semanticDelta?.HasMeaningfulChanges ?? false);
             var completedResult = CrawlProcessResult.Completed($"Processed {processedProductCount} product(s).", contentHash, extractedProductCount);
             await WriteCrawlLogAsync(sourceName, target.Url, completedResult, stopwatch.ElapsedMilliseconds, semanticDelta, cancellationToken);
+            RecordTelemetry(completedResult, sourceName, target.CategoryKey, stopwatch.ElapsedMilliseconds);
             return completedResult;
         }
         catch (OperationCanceledException)
@@ -140,8 +165,23 @@ public sealed class CrawlOrchestrator(
             logger.LogError(exception, "Unhandled crawl orchestration failure for {Url}", target.Url);
             var result = CrawlProcessResult.Failed(exception.Message, contentHash, extractedProductCount);
             await WriteCrawlLogAsync(sourceName, target.Url, result, stopwatch.ElapsedMilliseconds, semanticDelta, cancellationToken);
+            RecordTelemetry(result, sourceName, target.CategoryKey, stopwatch.ElapsedMilliseconds);
             return result;
         }
+    }
+
+    private static void RecordTelemetry(CrawlProcessResult result, string sourceName, string categoryKey, long durationMs)
+    {
+        var tags = new TagList
+        {
+            { "source", sourceName },
+            { "category", categoryKey },
+            { "status", result.Status }
+        };
+
+        ProductNormaliserTelemetry.CrawlTargetsProcessed.Add(1, tags);
+        ProductNormaliserTelemetry.CrawlProductsExtracted.Add(result.ExtractedProductCount, tags);
+        ProductNormaliserTelemetry.CrawlTargetDurationMs.Record(durationMs, tags);
     }
 
     private async Task<ProductIdentityMatchResult> ResolveIdentityAsync(SourceProduct sourceProduct, CancellationToken cancellationToken)

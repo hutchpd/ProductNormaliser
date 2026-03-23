@@ -7,6 +7,7 @@ ProductNormaliser.Web is the operator-facing Razor Pages host for Milestone 1. I
 The web host currently delivers:
 
 - an operator landing page that keeps the active category context visible
+- an operator landing page operational health panel for queue depth, retry backlog, recent failures, at-risk sources, and category pressure
 - category selection for the rollout set: TVs, Monitors, and Laptops
 - quick crawl launch and crawl-job monitoring
 - canonical product exploration with quality-aware filters and paging
@@ -27,7 +28,17 @@ The web host calls the Admin API for:
 - product list, product detail, and product history
 - quality dashboards and analytics
 - source registry, source detail, and source management actions
-- high-level stats used by the operator landing page
+- high-level stats and operational summary used by the operator landing page
+
+## Observability surface
+
+The landing page now exposes a lightweight operator-facing health summary built from the Admin API stats payload. It is intended to answer three immediate questions without leaving the console:
+
+- is queue pressure building up?
+- are retries and failures concentrated in specific sources?
+- is one category absorbing disproportionate crawl load?
+
+This UI does not replace external telemetry collection. It gives operators a fast internal view over the same persisted runtime data that backs the rest of the admin surface.
 
 ## Configuration
 

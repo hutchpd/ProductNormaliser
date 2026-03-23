@@ -112,6 +112,108 @@ public sealed class AdminObservabilityTests
             new SourceProduct { Id = "source-3", SourceName = "c", SourceUrl = "https://c/1", CategoryKey = "tv", RawSchemaJson = "{}", FetchedUtc = DateTime.UtcNow }
         ]);
 
+        await context.CrawlSources.InsertManyAsync(
+        [
+            new CrawlSource { Id = "ao", DisplayName = "AO UK", BaseUrl = "https://ao.example", Host = "ao.example", IsEnabled = true, SupportedCategoryKeys = ["tv"], CreatedUtc = DateTime.UtcNow, UpdatedUtc = DateTime.UtcNow },
+            new CrawlSource { Id = "northwind", DisplayName = "Northwind", BaseUrl = "https://northwind.example", Host = "northwind.example", IsEnabled = true, SupportedCategoryKeys = ["monitor"], CreatedUtc = DateTime.UtcNow, UpdatedUtc = DateTime.UtcNow }
+        ]);
+
+        await context.CrawlJobs.InsertManyAsync(
+        [
+            new CrawlJob
+            {
+                JobId = "job_active",
+                RequestType = CrawlJobRequestTypes.Category,
+                RequestedCategories = ["tv"],
+                TotalTargets = 2,
+                ProcessedTargets = 1,
+                SuccessCount = 1,
+                Status = CrawlJobStatuses.Running,
+                StartedAt = DateTime.UtcNow.AddMinutes(-30),
+                LastUpdatedAt = DateTime.UtcNow.AddMinutes(-5),
+                PerCategoryBreakdown = [new CrawlJobCategoryBreakdown { CategoryKey = "tv", TotalTargets = 2, ProcessedTargets = 1, SuccessCount = 1 }]
+            }
+        ]);
+
+        await context.CrawlQueueItems.InsertManyAsync(
+        [
+            new CrawlQueueItem
+            {
+                Id = "queue_tv_retry",
+                JobId = "job_active",
+                SourceName = "AO UK",
+                SourceUrl = "https://ao.example/tv-1",
+                CategoryKey = "tv",
+                Status = "queued",
+                AttemptCount = 2,
+                ConsecutiveFailureCount = 2,
+                EnqueuedUtc = DateTime.UtcNow.AddMinutes(-25),
+                NextAttemptUtc = DateTime.UtcNow.AddMinutes(-1),
+                LastError = "timeout"
+            },
+            new CrawlQueueItem
+            {
+                Id = "queue_monitor_failed",
+                SourceName = "Northwind",
+                SourceUrl = "https://northwind.example/monitor-1",
+                CategoryKey = "monitor",
+                Status = "failed",
+                AttemptCount = 3,
+                ConsecutiveFailureCount = 3,
+                EnqueuedUtc = DateTime.UtcNow.AddMinutes(-20),
+                LastAttemptUtc = DateTime.UtcNow.AddMinutes(-10),
+                LastError = "blocked"
+            }
+        ]);
+
+        await context.CrawlLogs.InsertManyAsync(
+        [
+            new CrawlLog
+            {
+                Id = "log_1",
+                SourceName = "AO UK",
+                Url = "https://ao.example/tv-1",
+                Status = "completed",
+                DurationMs = 850,
+                ExtractedProductCount = 4,
+                TimestampUtc = DateTime.UtcNow.AddHours(-2)
+            },
+            new CrawlLog
+            {
+                Id = "log_2",
+                SourceName = "Northwind",
+                Url = "https://northwind.example/monitor-1",
+                Status = "failed",
+                DurationMs = 1200,
+                ErrorMessage = "timeout",
+                TimestampUtc = DateTime.UtcNow.AddHours(-1)
+            }
+        ]);
+
+        await context.SourceQualitySnapshots.InsertManyAsync(
+        [
+            new SourceQualitySnapshot
+            {
+                Id = "snapshot_1",
+                SourceName = "AO UK",
+                CategoryKey = "tv",
+                TimestampUtc = DateTime.UtcNow.AddMinutes(-40),
+                AttributeCoverage = 84m,
+                SuccessfulCrawlRate = 95m,
+                HistoricalTrustScore = 90m
+            },
+            new SourceQualitySnapshot
+            {
+                Id = "snapshot_2",
+                SourceName = "Northwind",
+                CategoryKey = "monitor",
+                TimestampUtc = DateTime.UtcNow.AddMinutes(-40),
+                AttributeCoverage = 61m,
+                SuccessfulCrawlRate = 68m,
+                HistoricalTrustScore = 59m
+            }
+        ]);
+
         var service = new AdminQueryService(
             new CrawlLogRepository(context),
             new CanonicalProductRepository(context),
@@ -128,6 +230,18 @@ public sealed class AdminObservabilityTests
             Assert.That(stats.AverageAttributesPerProduct, Is.EqualTo(2.00m));
             Assert.That(stats.PercentProductsWithConflicts, Is.EqualTo(50.00m));
             Assert.That(stats.PercentProductsMissingKeyAttributes, Is.EqualTo(50.00m));
+            Assert.That(stats.Operational.ActiveJobCount, Is.EqualTo(1));
+            Assert.That(stats.Operational.QueueDepth, Is.EqualTo(1));
+            Assert.That(stats.Operational.RetryQueueDepth, Is.EqualTo(1));
+            Assert.That(stats.Operational.FailedQueueDepth, Is.EqualTo(1));
+            Assert.That(stats.Operational.ThroughputLast24Hours, Is.EqualTo(2));
+            Assert.That(stats.Operational.FailureCountLast24Hours, Is.EqualTo(1));
+            Assert.That(stats.Operational.HealthySourceCount, Is.EqualTo(1));
+            Assert.That(stats.Operational.AttentionSourceCount, Is.EqualTo(1));
+            Assert.That(stats.Operational.Sources.Single(metric => metric.SourceName == "AO UK").RetryQueueDepth, Is.EqualTo(1));
+            Assert.That(stats.Operational.Sources.Single(metric => metric.SourceName == "Northwind").HealthStatus, Is.EqualTo("Attention"));
+            Assert.That(stats.Operational.Categories.Single(metric => metric.CategoryKey == "tv").QueueDepth, Is.EqualTo(1));
+            Assert.That(stats.Operational.Categories.Single(metric => metric.CategoryKey == "monitor").FailedCrawlsLast24Hours, Is.EqualTo(1));
         });
     }
 

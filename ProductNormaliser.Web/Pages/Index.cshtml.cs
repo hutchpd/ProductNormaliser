@@ -168,6 +168,57 @@ public sealed class IndexModel(
         }
     ];
 
+    public IReadOnlyList<OperatorSummaryCardModel> OperationalHealthCards =>
+    [
+        new OperatorSummaryCardModel
+        {
+            Title = "Queue depth",
+            Value = Stats.Operational.QueueDepth.ToString(),
+            Description = "Queued or processing crawl targets waiting on worker capacity.",
+            Tone = Stats.Operational.QueueDepth >= 25 ? "warning" : "neutral"
+        },
+        new OperatorSummaryCardModel
+        {
+            Title = "Retry backlog",
+            Value = Stats.Operational.RetryQueueDepth.ToString(),
+            Description = "Targets already retried and still waiting for another attempt.",
+            Tone = Stats.Operational.RetryQueueDepth == 0 ? "completed" : "warning"
+        },
+        new OperatorSummaryCardModel
+        {
+            Title = "Failures 24h",
+            Value = Stats.Operational.FailureCountLast24Hours.ToString(),
+            Description = "Failed crawl attempts recorded in the trailing 24 hours.",
+            Tone = Stats.Operational.FailureCountLast24Hours == 0 ? "completed" : "warning"
+        },
+        new OperatorSummaryCardModel
+        {
+            Title = "Throughput 24h",
+            Value = Stats.Operational.ThroughputLast24Hours.ToString(),
+            Description = "Total crawl attempts observed in the trailing 24 hours.",
+            Tone = Stats.Operational.ThroughputLast24Hours == 0 ? "warning" : "completed"
+        }
+    ];
+
+    public IReadOnlyList<SourceOperationalMetricDto> AtRiskOperationalSources => Stats.Operational.Sources
+        .Where(metric => !string.Equals(metric.HealthStatus, "Healthy", StringComparison.OrdinalIgnoreCase)
+            || metric.RetryQueueDepth > 0
+            || metric.FailedQueueDepth > 0
+            || metric.FailedCrawlsLast24Hours > 0)
+        .OrderByDescending(metric => metric.FailureRateLast24Hours)
+        .ThenByDescending(metric => metric.RetryQueueDepth)
+        .ThenBy(metric => metric.SourceName, StringComparer.OrdinalIgnoreCase)
+        .Take(5)
+        .ToArray();
+
+    public IReadOnlyList<CategoryOperationalMetricDto> BusyOperationalCategories => Stats.Operational.Categories
+        .Where(metric => metric.QueueDepth > 0 || metric.FailedCrawlsLast24Hours > 0 || metric.ActiveJobCount > 0)
+        .OrderByDescending(metric => metric.QueueDepth)
+        .ThenByDescending(metric => metric.FailedCrawlsLast24Hours)
+        .ThenBy(metric => metric.CategoryKey, StringComparer.OrdinalIgnoreCase)
+        .Take(5)
+        .ToArray();
+
     public IReadOnlyList<OperatorActionCardModel> ActionCards =>
     [
         new OperatorActionCardModel
@@ -214,6 +265,15 @@ public sealed class IndexModel(
             Href = SourcesUrl,
             AccentValue = EnabledCategorySourceCount.ToString(),
             AccentLabel = "Enabled in scope"
+        },
+        new OperatorActionCardModel
+        {
+            Eyebrow = "Operational Health",
+            Title = "Investigate retries and failures",
+            Description = "Use source intelligence and crawl jobs together when retry backlog, queue pressure, or category failures start climbing.",
+            Href = SourceIntelligenceUrl,
+            AccentValue = Stats.Operational.RetryQueueDepth.ToString(),
+            AccentLabel = "Retry backlog"
         }
     ];
 
@@ -242,7 +302,7 @@ public sealed class IndexModel(
         [
             new HeroMetricModel { Label = "Context", Value = HasCategoryContext ? CurrentCategoryContext!.SelectionSummary : "No category" },
             new HeroMetricModel { Label = "Active jobs", Value = ActiveJobs.Count.ToString() },
-            new HeroMetricModel { Label = "Canonical products", Value = Stats.TotalCanonicalProducts.ToString() },
+            new HeroMetricModel { Label = "Queue depth", Value = Stats.Operational.QueueDepth.ToString() },
             new HeroMetricModel { Label = "Sources in scope", Value = CategorySources.Count.ToString() }
         ]
     };
