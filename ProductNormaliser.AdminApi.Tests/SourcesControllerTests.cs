@@ -24,6 +24,7 @@ public sealed class SourcesControllerTests
         {
             Assert.That(payload!, Has.Length.EqualTo(1));
             Assert.That(payload[0].SourceId, Is.EqualTo("alpha"));
+            Assert.That(payload[0].DiscoveryProfile.CategoryEntryPages["tv"], Is.EqualTo(new[] { "https://alpha.example/tv" }));
             Assert.That(payload[0].ThrottlingPolicy.MaxConcurrentRequests, Is.EqualTo(1));
             Assert.That(payload[0].Readiness.Status, Is.EqualTo("Ready"));
             Assert.That(payload[0].Health.Status, Is.EqualTo("Healthy"));
@@ -51,14 +52,31 @@ public sealed class SourcesControllerTests
             SourceId = "alpha",
             DisplayName = "Alpha",
             BaseUrl = "https://alpha.example",
-            SupportedCategoryKeys = ["tv"]
+            SupportedCategoryKeys = ["tv"],
+            DiscoveryProfile = new SourceDiscoveryProfileDto
+            {
+                CategoryEntryPages = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["tv"] = ["/tv"]
+                },
+                SitemapHints = ["/sitemap-products.xml"],
+                ProductUrlPatterns = ["/product/"],
+                ListingUrlPatterns = ["/category/"],
+                MaxDiscoveryDepth = 2,
+                MaxUrlsPerRun = 250
+            }
         });
 
         var created = result as CreatedAtActionResult;
         Assert.That(created, Is.Not.Null);
         var payload = created!.Value as SourceDto;
         Assert.That(payload, Is.Not.Null);
-        Assert.That(payload!.SourceId, Is.EqualTo("alpha"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(payload!.SourceId, Is.EqualTo("alpha"));
+            Assert.That(payload.DiscoveryProfile.SitemapHints, Is.EqualTo(new[] { "/sitemap-products.xml" }));
+            Assert.That(payload.DiscoveryProfile.MaxUrlsPerRun, Is.EqualTo(250));
+        });
     }
 
     [Test]
@@ -118,6 +136,20 @@ public sealed class SourcesControllerTests
             Host = $"{id}.example",
             IsEnabled = isEnabled,
             SupportedCategoryKeys = ["tv"],
+            DiscoveryProfile = new SourceDiscoveryProfile
+            {
+                CategoryEntryPages = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["tv"] = [ $"https://{id}.example/tv" ]
+                },
+                SitemapHints = [ $"https://{id}.example/sitemap.xml" ],
+                AllowedPathPrefixes = [ "/tv", "/product" ],
+                ExcludedPathPrefixes = [ "/support" ],
+                ProductUrlPatterns = [ "/product/" ],
+                ListingUrlPatterns = [ "/category/" ],
+                MaxDiscoveryDepth = 3,
+                MaxUrlsPerRun = 500
+            },
             ThrottlingPolicy = new SourceThrottlingPolicy
             {
                 MinDelayMs = 1000,
@@ -154,6 +186,10 @@ public sealed class SourcesControllerTests
             created.Host = new Uri(registration.BaseUrl).Host;
             created.Description = registration.Description;
             created.SupportedCategoryKeys = registration.SupportedCategoryKeys.OrderBy(key => key).ToList();
+            if (registration.DiscoveryProfile is not null)
+            {
+                created.DiscoveryProfile = registration.DiscoveryProfile;
+            }
             if (registration.ThrottlingPolicy is not null)
             {
                 created.ThrottlingPolicy = registration.ThrottlingPolicy;
@@ -172,6 +208,10 @@ public sealed class SourcesControllerTests
             existing.BaseUrl = update.BaseUrl;
             existing.Description = update.Description;
             existing.Host = new Uri(update.BaseUrl).Host;
+            if (update.DiscoveryProfile is not null)
+            {
+                existing.DiscoveryProfile = update.DiscoveryProfile;
+            }
             return Task.FromResult(existing);
         }
 

@@ -19,7 +19,22 @@ public sealed class SourceManagementServiceTests
             SourceId = "Retailer One",
             DisplayName = "Retailer One",
             BaseUrl = "https://www.retailer-one.example/",
-            SupportedCategoryKeys = ["tv", "refrigerator"]
+            SupportedCategoryKeys = ["tv", "refrigerator"],
+            DiscoveryProfile = new SourceDiscoveryProfile
+            {
+                CategoryEntryPages = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["tv"] = ["/televisions", "https://www.retailer-one.example/televisions/"],
+                    ["refrigerator"] = ["/cooling"]
+                },
+                SitemapHints = ["/sitemap.xml", "https://www.retailer-one.example/sitemap.xml"],
+                AllowedPathPrefixes = ["tv", "/tv", "https://www.retailer-one.example/product"],
+                ExcludedPathPrefixes = ["/support/", "/support"],
+                ProductUrlPatterns = ["/product/", " /p/ "],
+                ListingUrlPatterns = ["/category/", " /department/ "],
+                MaxDiscoveryDepth = 4,
+                MaxUrlsPerRun = 750
+            }
         });
 
         Assert.Multiple(() =>
@@ -27,8 +42,40 @@ public sealed class SourceManagementServiceTests
             Assert.That(result.Id, Is.EqualTo("retailer_one"));
             Assert.That(result.Host, Is.EqualTo("www.retailer-one.example"));
             Assert.That(result.SupportedCategoryKeys, Is.EqualTo(new[] { "refrigerator", "tv" }));
+            Assert.That(result.DiscoveryProfile.CategoryEntryPages["tv"], Is.EqualTo(new[] { "https://www.retailer-one.example/televisions" }));
+            Assert.That(result.DiscoveryProfile.CategoryEntryPages["refrigerator"], Is.EqualTo(new[] { "https://www.retailer-one.example/cooling" }));
+            Assert.That(result.DiscoveryProfile.SitemapHints, Is.EqualTo(new[] { "https://www.retailer-one.example/sitemap.xml" }));
+            Assert.That(result.DiscoveryProfile.AllowedPathPrefixes, Is.EqualTo(new[] { "/tv", "/product" }));
+            Assert.That(result.DiscoveryProfile.ExcludedPathPrefixes, Is.EqualTo(new[] { "/support" }));
+            Assert.That(result.DiscoveryProfile.ProductUrlPatterns, Is.EqualTo(new[] { "/product/", "/p/" }));
+            Assert.That(result.DiscoveryProfile.ListingUrlPatterns, Is.EqualTo(new[] { "/category/", "/department/" }));
+            Assert.That(result.DiscoveryProfile.MaxDiscoveryDepth, Is.EqualTo(4));
+            Assert.That(result.DiscoveryProfile.MaxUrlsPerRun, Is.EqualTo(750));
             Assert.That(store.Items, Has.Count.EqualTo(1));
         });
+    }
+
+    [Test]
+    public void RegisterAsync_RejectsDiscoveryProfilesForUnsupportedCategories()
+    {
+        var service = CreateService(new FakeCrawlSourceStore(), new FakeCategoryMetadataService(CreateCategory("tv"), CreateCategory("monitor")));
+
+        var action = async () => await service.RegisterAsync(new CrawlSourceRegistration
+        {
+            SourceId = "alpha",
+            DisplayName = "Alpha",
+            BaseUrl = "https://alpha.example",
+            SupportedCategoryKeys = ["tv"],
+            DiscoveryProfile = new SourceDiscoveryProfile
+            {
+                CategoryEntryPages = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["monitor"] = ["/monitors"]
+                }
+            }
+        });
+
+        Assert.That(action, Throws.ArgumentException.With.Message.Contain("supported categories"));
     }
 
     [Test]

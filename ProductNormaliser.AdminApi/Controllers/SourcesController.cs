@@ -53,6 +53,7 @@ public sealed class SourcesController(
                 Description = request.Description,
                 IsEnabled = request.IsEnabled,
                 SupportedCategoryKeys = request.SupportedCategoryKeys,
+                DiscoveryProfile = request.DiscoveryProfile is null ? null : Map(request.DiscoveryProfile),
                 ThrottlingPolicy = request.ThrottlingPolicy is null ? null : Map(request.ThrottlingPolicy)
             }, cancellationToken);
 
@@ -78,7 +79,8 @@ public sealed class SourcesController(
             {
                 DisplayName = request.DisplayName,
                 BaseUrl = request.BaseUrl,
-                Description = request.Description
+                Description = request.Description,
+                DiscoveryProfile = request.DiscoveryProfile is null ? null : Map(request.DiscoveryProfile)
             }, cancellationToken);
 
             var insights = await sourceOperationalInsightsProvider.BuildAsync([source], cancellationToken);
@@ -195,6 +197,20 @@ public sealed class SourcesController(
             Description = source.Description,
             IsEnabled = source.IsEnabled,
             SupportedCategoryKeys = source.SupportedCategoryKeys.ToArray(),
+            DiscoveryProfile = new SourceDiscoveryProfileDto
+            {
+                CategoryEntryPages = source.DiscoveryProfile.CategoryEntryPages.ToDictionary(
+                    entry => entry.Key,
+                    entry => (IReadOnlyList<string>)entry.Value.ToArray(),
+                    StringComparer.OrdinalIgnoreCase),
+                SitemapHints = source.DiscoveryProfile.SitemapHints.ToArray(),
+                AllowedPathPrefixes = source.DiscoveryProfile.AllowedPathPrefixes.ToArray(),
+                ExcludedPathPrefixes = source.DiscoveryProfile.ExcludedPathPrefixes.ToArray(),
+                ProductUrlPatterns = source.DiscoveryProfile.ProductUrlPatterns.ToArray(),
+                ListingUrlPatterns = source.DiscoveryProfile.ListingUrlPatterns.ToArray(),
+                MaxDiscoveryDepth = source.DiscoveryProfile.MaxDiscoveryDepth,
+                MaxUrlsPerRun = source.DiscoveryProfile.MaxUrlsPerRun
+            },
             ThrottlingPolicy = new SourceThrottlingPolicyDto
             {
                 MinDelayMs = source.ThrottlingPolicy.MinDelayMs,
@@ -220,6 +236,24 @@ public sealed class SourcesController(
             MaxConcurrentRequests = throttlingPolicy.MaxConcurrentRequests,
             RequestsPerMinute = throttlingPolicy.RequestsPerMinute,
             RespectRobotsTxt = throttlingPolicy.RespectRobotsTxt
+        };
+    }
+
+    private static SourceDiscoveryProfile Map(SourceDiscoveryProfileDto discoveryProfile)
+    {
+        return new SourceDiscoveryProfile
+        {
+            CategoryEntryPages = discoveryProfile.CategoryEntryPages.ToDictionary(
+                entry => entry.Key,
+                entry => entry.Value.Where(value => !string.IsNullOrWhiteSpace(value)).ToList(),
+                StringComparer.OrdinalIgnoreCase),
+            SitemapHints = discoveryProfile.SitemapHints.Where(value => !string.IsNullOrWhiteSpace(value)).ToList(),
+            AllowedPathPrefixes = discoveryProfile.AllowedPathPrefixes.Where(value => !string.IsNullOrWhiteSpace(value)).ToList(),
+            ExcludedPathPrefixes = discoveryProfile.ExcludedPathPrefixes.Where(value => !string.IsNullOrWhiteSpace(value)).ToList(),
+            ProductUrlPatterns = discoveryProfile.ProductUrlPatterns.Where(value => !string.IsNullOrWhiteSpace(value)).ToList(),
+            ListingUrlPatterns = discoveryProfile.ListingUrlPatterns.Where(value => !string.IsNullOrWhiteSpace(value)).ToList(),
+            MaxDiscoveryDepth = discoveryProfile.MaxDiscoveryDepth,
+            MaxUrlsPerRun = discoveryProfile.MaxUrlsPerRun
         };
     }
 

@@ -6,7 +6,9 @@ using ProductNormaliser.Application.Analyst;
 using ProductNormaliser.Application.Categories;
 using ProductNormaliser.Application.Crawls;
 using ProductNormaliser.Application.Governance;
+using ProductNormaliser.Application.Sources;
 using ProductNormaliser.Infrastructure.Crawling;
+using ProductNormaliser.Infrastructure.Discovery;
 using ProductNormaliser.Infrastructure.Intelligence;
 using ProductNormaliser.Infrastructure.Mongo.Repositories;
 using ProductNormaliser.Infrastructure.StructuredData;
@@ -55,6 +57,8 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<ManagementAuditRepository>();
         services.AddSingleton<CrawlJobRepository>();
         services.AddSingleton<CrawlSourceRepository>();
+        services.AddSingleton<DiscoveryQueueRepository>();
+        services.AddSingleton<DiscoveredUrlRepository>();
         services.AddSingleton<CategoryMetadataRepository>();
         services.AddSingleton<KnownCrawlTargetRepository>();
         services.AddSingleton<IRawPageStore>(serviceProvider => serviceProvider.GetRequiredService<RawPageRepository>());
@@ -63,6 +67,8 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<ICategoryMetadataStore>(serviceProvider => serviceProvider.GetRequiredService<CategoryMetadataRepository>());
         services.AddSingleton<ICrawlJobStore>(serviceProvider => serviceProvider.GetRequiredService<CrawlJobRepository>());
         services.AddSingleton<IKnownCrawlTargetStore>(serviceProvider => serviceProvider.GetRequiredService<KnownCrawlTargetRepository>());
+        services.AddSingleton<IDiscoveryQueueStore>(serviceProvider => serviceProvider.GetRequiredService<DiscoveryQueueRepository>());
+        services.AddSingleton<IDiscoveredUrlStore>(serviceProvider => serviceProvider.GetRequiredService<DiscoveredUrlRepository>());
         services.AddSingleton<ISourceProductStore>(serviceProvider => serviceProvider.GetRequiredService<SourceProductRepository>());
         services.AddSingleton<ICanonicalProductStore>(serviceProvider => serviceProvider.GetRequiredService<CanonicalProductRepository>());
         services.AddSingleton<IProductOfferStore>(serviceProvider => serviceProvider.GetRequiredService<ProductOfferRepository>());
@@ -108,6 +114,14 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<ICrawlPriorityService, CrawlPriorityService>();
         services.AddSingleton<ICrawlQueueService, CrawlQueueService>();
         services.AddSingleton<ISourceProductBuilder, SourceProductBuilder>();
+        services.AddSingleton<DiscoveryLinkPolicy>();
+        services.AddSingleton<SitemapLocator>();
+        services.AddSingleton<SitemapParser>();
+        services.AddSingleton<ProductLinkExtractor>();
+        services.AddSingleton<ProductPageClassifier>();
+        services.AddSingleton<ListingPageClassifier>();
+        services.AddSingleton<IDiscoveryQueueService, DiscoveryQueueService>();
+        services.AddSingleton<DiscoverySeedService>();
 
         return services;
     }

@@ -17,6 +17,7 @@ public sealed class AdminApiContractParityTests
         (typeof(AdminContracts.CategorySchemaDto), typeof(WebContracts.CategorySchemaDto)),
         (typeof(AdminContracts.CategorySchemaAttributeDto), typeof(WebContracts.CategorySchemaAttributeDto)),
         (typeof(AdminContracts.SourceDto), typeof(WebContracts.SourceDto)),
+        (typeof(AdminContracts.SourceDiscoveryProfileDto), typeof(WebContracts.SourceDiscoveryProfileDto)),
         (typeof(AdminContracts.SourceReadinessDto), typeof(WebContracts.SourceReadinessDto)),
         (typeof(AdminContracts.SourceHealthSummaryDto), typeof(WebContracts.SourceHealthSummaryDto)),
         (typeof(AdminContracts.SourceLastActivityDto), typeof(WebContracts.SourceLastActivityDto)),

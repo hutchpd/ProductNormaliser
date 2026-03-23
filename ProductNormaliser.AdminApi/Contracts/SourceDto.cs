@@ -9,6 +9,7 @@ public sealed class SourceDto
     public string? Description { get; init; }
     public bool IsEnabled { get; init; }
     public IReadOnlyList<string> SupportedCategoryKeys { get; init; } = [];
+    public SourceDiscoveryProfileDto DiscoveryProfile { get; init; } = new();
     public SourceThrottlingPolicyDto ThrottlingPolicy { get; init; } = default!;
     public SourceReadinessDto Readiness { get; init; } = default!;
     public SourceHealthSummaryDto Health { get; init; } = default!;

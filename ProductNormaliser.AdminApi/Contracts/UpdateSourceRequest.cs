@@ -11,4 +11,6 @@ public sealed class UpdateSourceRequest
     public string BaseUrl { get; init; } = default!;
 
     public string? Description { get; init; }
+
+    public SourceDiscoveryProfileDto? DiscoveryProfile { get; init; }
 }

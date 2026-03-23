@@ -251,6 +251,67 @@
             <section class="panel">
                 <div class="panel-heading">
                     <div>
+                        <p class="eyebrow">Discovery Profile</p>
+                        <h2>Configure sitemap and listing discovery</h2>
+                        <p class="subtle-copy">Define where deterministic discovery should begin for each category and what URL shapes should be traversed or promoted into the product crawl queue.</p>
+                    </div>
+                </div>
+
+                <form method="post" asp-page-handler="Discovery" class="source-form">
+                    <div class="form-grid">
+                        <div class="wide">
+                            <label asp-for="Discovery.CategoryEntryPages" class="form-label"></label>
+                            <textarea asp-for="Discovery.CategoryEntryPages" rows="5" class="form-control" placeholder="tv=/televisions, /oled&#10;monitor=/monitors"></textarea>
+                            <div class="subtle-copy">One line per category in <code>category=url1, url2</code> format.</div>
+                            <span asp-validation-for="Discovery.CategoryEntryPages" class="text-danger small"></span>
+                        </div>
+                        <div>
+                            <label asp-for="Discovery.SitemapHints" class="form-label"></label>
+                            <textarea asp-for="Discovery.SitemapHints" rows="4" class="form-control" placeholder="/sitemap.xml&#10;/sitemap-products.xml"></textarea>
+                            <span asp-validation-for="Discovery.SitemapHints" class="text-danger small"></span>
+                        </div>
+                        <div>
+                            <label asp-for="Discovery.AllowedPathPrefixes" class="form-label"></label>
+                            <textarea asp-for="Discovery.AllowedPathPrefixes" rows="4" class="form-control" placeholder="/tv&#10;/product"></textarea>
+                            <span asp-validation-for="Discovery.AllowedPathPrefixes" class="text-danger small"></span>
+                        </div>
+                        <div>
+                            <label asp-for="Discovery.ExcludedPathPrefixes" class="form-label"></label>
+                            <textarea asp-for="Discovery.ExcludedPathPrefixes" rows="4" class="form-control" placeholder="/support&#10;/help"></textarea>
+                            <span asp-validation-for="Discovery.ExcludedPathPrefixes" class="text-danger small"></span>
+                        </div>
+                        <div>
+                            <label asp-for="Discovery.ProductUrlPatterns" class="form-label"></label>
+                            <textarea asp-for="Discovery.ProductUrlPatterns" rows="4" class="form-control" placeholder="/product/&#10;/p/"></textarea>
+                            <span asp-validation-for="Discovery.ProductUrlPatterns" class="text-danger small"></span>
+                        </div>
+                        <div>
+                            <label asp-for="Discovery.ListingUrlPatterns" class="form-label"></label>
+                            <textarea asp-for="Discovery.ListingUrlPatterns" rows="4" class="form-control" placeholder="/category/&#10;/department/"></textarea>
+                            <span asp-validation-for="Discovery.ListingUrlPatterns" class="text-danger small"></span>
+                        </div>
+                    </div>
+                    <div class="form-grid compact-grid">
+                        <div>
+                            <label asp-for="Discovery.MaxDiscoveryDepth" class="form-label"></label>
+                            <input asp-for="Discovery.MaxDiscoveryDepth" class="form-control" />
+                            <span asp-validation-for="Discovery.MaxDiscoveryDepth" class="text-danger small"></span>
+                        </div>
+                        <div>
+                            <label asp-for="Discovery.MaxUrlsPerRun" class="form-label"></label>
+                            <input asp-for="Discovery.MaxUrlsPerRun" class="form-control" />
+                            <span asp-validation-for="Discovery.MaxUrlsPerRun" class="text-danger small"></span>
+                        </div>
+                    </div>
+                    <div class="actions-bar">
+                        <button type="submit" class="btn btn-dark">Save Discovery Profile</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
                         <p class="eyebrow">Audit</p>
                         <h2>Current source snapshot</h2>
                     </div>

@@ -24,6 +24,8 @@ public sealed class MongoDbContext
         Categories = Database.GetCollection<CategoryMetadata>(MongoCollectionNames.Categories);
         CrawlJobs = Database.GetCollection<CrawlJob>(MongoCollectionNames.CrawlJobs);
         CrawlSources = Database.GetCollection<CrawlSource>(MongoCollectionNames.CrawlSources);
+        DiscoveryQueueItems = Database.GetCollection<DiscoveryQueueItem>(MongoCollectionNames.DiscoveryQueue);
+        DiscoveredUrls = Database.GetCollection<DiscoveredUrl>(MongoCollectionNames.DiscoveredUrls);
         RawPages = Database.GetCollection<RawPage>(MongoCollectionNames.RawPages);
         SourceProducts = Database.GetCollection<SourceProduct>(MongoCollectionNames.SourceProducts);
         CanonicalProducts = Database.GetCollection<CanonicalProduct>(MongoCollectionNames.CanonicalProducts);
@@ -52,6 +54,10 @@ public sealed class MongoDbContext
     public IMongoCollection<CrawlJob> CrawlJobs { get; }
 
     public IMongoCollection<CrawlSource> CrawlSources { get; }
+
+    public IMongoCollection<DiscoveryQueueItem> DiscoveryQueueItems { get; }
+
+    public IMongoCollection<DiscoveredUrl> DiscoveredUrls { get; }
 
     public IMongoCollection<RawPage> RawPages { get; }
 
@@ -120,6 +126,37 @@ public sealed class MongoDbContext
             new CreateIndexModel<CrawlSource>(Builders<CrawlSource>.IndexKeys
                 .Ascending(source => source.Host)
                 .Ascending(source => source.IsEnabled)),
+            cancellationToken: cancellationToken);
+
+        await DiscoveryQueueItems.Indexes.CreateManyAsync(
+            [
+                new CreateIndexModel<DiscoveryQueueItem>(Builders<DiscoveryQueueItem>.IndexKeys
+                    .Ascending(item => item.JobId)
+                    .Ascending(item => item.State)),
+                new CreateIndexModel<DiscoveryQueueItem>(Builders<DiscoveryQueueItem>.IndexKeys
+                    .Ascending(item => item.State)
+                    .Ascending(item => item.NextAttemptUtc)),
+                new CreateIndexModel<DiscoveryQueueItem>(Builders<DiscoveryQueueItem>.IndexKeys
+                    .Ascending(item => item.SourceId)
+                    .Ascending(item => item.CategoryKey))
+            ],
+            cancellationToken: cancellationToken);
+
+        await DiscoveredUrls.Indexes.CreateManyAsync(
+            [
+                new CreateIndexModel<DiscoveredUrl>(Builders<DiscoveredUrl>.IndexKeys
+                    .Ascending(item => item.SourceId)
+                    .Ascending(item => item.CategoryKey)
+                    .Ascending(item => item.NormalizedUrl),
+                    new CreateIndexOptions { Unique = true }),
+                new CreateIndexModel<DiscoveredUrl>(Builders<DiscoveredUrl>.IndexKeys
+                    .Ascending(item => item.JobId)
+                    .Ascending(item => item.State)),
+                new CreateIndexModel<DiscoveredUrl>(Builders<DiscoveredUrl>.IndexKeys
+                    .Ascending(item => item.State)
+                    .Ascending(item => item.LastProcessedUtc)
+                    .Ascending(item => item.NextAttemptUtc))
+            ],
             cancellationToken: cancellationToken);
 
         await CanonicalProducts.Indexes.CreateManyAsync(

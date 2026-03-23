@@ -216,8 +216,25 @@ internal static class AdminApiContractValidator
         ValidateRequiredString(payload.DisplayName, $"{path}.displayName");
         ValidateRequiredString(payload.BaseUrl, $"{path}.baseUrl");
         ValidateRequiredString(payload.Host, $"{path}.host");
+        ValidateSourceDiscoveryProfile(payload.DiscoveryProfile, $"{path}.discoveryProfile");
         ValidateSourceThrottlingPolicy(payload.ThrottlingPolicy, $"{path}.throttlingPolicy");
         ValidateStringItems(payload.SupportedCategoryKeys, $"{path}.supportedCategoryKeys");
+    }
+
+    private static void ValidateSourceDiscoveryProfile(SourceDiscoveryProfileDto payload, string path)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        foreach (var entry in payload.CategoryEntryPages)
+        {
+            ValidateRequiredString(entry.Key, $"{path}.categoryEntryPages.key");
+            ValidateStringItems(entry.Value, $"{path}.categoryEntryPages[{entry.Key}]");
+        }
+
+        ValidateStringItems(payload.SitemapHints, $"{path}.sitemapHints");
+        ValidateStringItems(payload.AllowedPathPrefixes, $"{path}.allowedPathPrefixes");
+        ValidateStringItems(payload.ExcludedPathPrefixes, $"{path}.excludedPathPrefixes");
+        ValidateStringItems(payload.ProductUrlPatterns, $"{path}.productUrlPatterns");
+        ValidateStringItems(payload.ListingUrlPatterns, $"{path}.listingUrlPatterns");
     }
 
     private static void ValidateSourceThrottlingPolicy(SourceThrottlingPolicyDto payload, string path)

@@ -21,6 +21,9 @@ public sealed class DetailsModel(
     public ThrottlingInput Throttling { get; set; } = new();
 
     [BindProperty]
+    public DiscoveryProfileInput Discovery { get; set; } = new();
+
+    [BindProperty]
     public AnalystNoteInput NoteInput { get; set; } = new();
 
     [TempData]
@@ -179,6 +182,57 @@ public sealed class DetailsModel(
         return await LoadAsync(sourceId, cancellationToken) ? Page() : NotFound();
     }
 
+    public async Task<IActionResult> OnPostDiscoveryAsync(string sourceId, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid && !await LoadAsync(sourceId, cancellationToken))
+        {
+            return NotFound();
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return Page();
+        }
+
+        CurrentSource = await adminApiClient.GetSourceAsync(sourceId, cancellationToken);
+        if (CurrentSource is null)
+        {
+            return NotFound();
+        }
+
+        if (!TryBuildDiscoveryProfile(out var discoveryProfile))
+        {
+            await LoadAsync(sourceId, cancellationToken);
+            return Page();
+        }
+
+        try
+        {
+            await adminApiClient.UpdateSourceAsync(sourceId, new UpdateSourceRequest
+            {
+                DisplayName = CurrentSource.DisplayName,
+                BaseUrl = CurrentSource.BaseUrl,
+                Description = CurrentSource.Description,
+                DiscoveryProfile = discoveryProfile
+            }, cancellationToken);
+
+            StatusMessage = $"Updated discovery profile for '{sourceId}'.";
+            return RedirectToPage(new { sourceId });
+        }
+        catch (AdminApiValidationException exception)
+        {
+            AddErrors(exception);
+        }
+        catch (AdminApiException exception)
+        {
+            logger.LogWarning(exception, "Failed to update discovery profile for source {SourceId}.", sourceId);
+            ErrorMessage = exception.Message;
+        }
+
+        await LoadAsync(sourceId, cancellationToken);
+        return Page();
+    }
+
     public async Task<IActionResult> OnPostSaveNoteAsync(string sourceId, CancellationToken cancellationToken)
     {
         try
@@ -275,6 +329,26 @@ public sealed class DetailsModel(
                 };
             }
 
+            if (string.IsNullOrWhiteSpace(Discovery.CategoryEntryPages)
+                && string.IsNullOrWhiteSpace(Discovery.SitemapHints)
+                && string.IsNullOrWhiteSpace(Discovery.AllowedPathPrefixes)
+                && string.IsNullOrWhiteSpace(Discovery.ExcludedPathPrefixes)
+                && string.IsNullOrWhiteSpace(Discovery.ProductUrlPatterns)
+                && string.IsNullOrWhiteSpace(Discovery.ListingUrlPatterns))
+            {
+                Discovery = new DiscoveryProfileInput
+                {
+                    CategoryEntryPages = FormatCategoryEntryPages(CurrentSource.DiscoveryProfile.CategoryEntryPages),
+                    SitemapHints = FormatLineList(CurrentSource.DiscoveryProfile.SitemapHints),
+                    AllowedPathPrefixes = FormatLineList(CurrentSource.DiscoveryProfile.AllowedPathPrefixes),
+                    ExcludedPathPrefixes = FormatLineList(CurrentSource.DiscoveryProfile.ExcludedPathPrefixes),
+                    ProductUrlPatterns = FormatLineList(CurrentSource.DiscoveryProfile.ProductUrlPatterns),
+                    ListingUrlPatterns = FormatLineList(CurrentSource.DiscoveryProfile.ListingUrlPatterns),
+                    MaxDiscoveryDepth = CurrentSource.DiscoveryProfile.MaxDiscoveryDepth,
+                    MaxUrlsPerRun = CurrentSource.DiscoveryProfile.MaxUrlsPerRun
+                };
+            }
+
             return true;
         }
         catch (AdminApiException exception)
@@ -294,6 +368,96 @@ public sealed class DetailsModel(
                 ModelState.AddModelError(string.Empty, message);
             }
         }
+    }
+
+    private bool TryBuildDiscoveryProfile(out SourceDiscoveryProfileDto discoveryProfile)
+    {
+        discoveryProfile = new SourceDiscoveryProfileDto();
+        if (!TryParseCategoryEntryPages(out var categoryEntryPages))
+        {
+            return false;
+        }
+
+        discoveryProfile = new SourceDiscoveryProfileDto
+        {
+            CategoryEntryPages = categoryEntryPages,
+            SitemapHints = ParseLineList(Discovery.SitemapHints),
+            AllowedPathPrefixes = ParseLineList(Discovery.AllowedPathPrefixes),
+            ExcludedPathPrefixes = ParseLineList(Discovery.ExcludedPathPrefixes),
+            ProductUrlPatterns = ParseLineList(Discovery.ProductUrlPatterns),
+            ListingUrlPatterns = ParseLineList(Discovery.ListingUrlPatterns),
+            MaxDiscoveryDepth = Discovery.MaxDiscoveryDepth,
+            MaxUrlsPerRun = Discovery.MaxUrlsPerRun
+        };
+
+        return true;
+    }
+
+    private bool TryParseCategoryEntryPages(out IReadOnlyDictionary<string, IReadOnlyList<string>> categoryEntryPages)
+    {
+        var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in SplitLines(Discovery.CategoryEntryPages))
+        {
+            var separatorIndex = line.IndexOf('=');
+            if (separatorIndex <= 0 || separatorIndex == line.Length - 1)
+            {
+                ModelState.AddModelError($"{nameof(Discovery)}.{nameof(Discovery.CategoryEntryPages)}", $"Each category entry line must use 'category=url1,url2' format. Invalid value: '{line}'.");
+                categoryEntryPages = result;
+                return false;
+            }
+
+            var categoryKey = line[..separatorIndex].Trim();
+            var urls = line[(separatorIndex + 1)..]
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (urls.Length == 0)
+            {
+                ModelState.AddModelError($"{nameof(Discovery)}.{nameof(Discovery.CategoryEntryPages)}", $"Category '{categoryKey}' must include at least one URL.");
+                categoryEntryPages = result;
+                return false;
+            }
+
+            result[categoryKey] = urls;
+        }
+
+        categoryEntryPages = result;
+        return true;
+    }
+
+    private static IReadOnlyList<string> ParseLineList(string value)
+    {
+        return SplitLines(value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IEnumerable<string> SplitLines(string? value)
+    {
+        return (value ?? string.Empty)
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => !string.IsNullOrWhiteSpace(line));
+    }
+
+    private static string FormatLineList(IReadOnlyCollection<string> values)
+    {
+        return values.Count == 0 ? string.Empty : string.Join(Environment.NewLine, values);
+    }
+
+    private static string FormatCategoryEntryPages(IReadOnlyDictionary<string, IReadOnlyList<string>> categoryEntryPages)
+    {
+        if (categoryEntryPages.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        return string.Join(
+            Environment.NewLine,
+            categoryEntryPages
+                .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(entry => $"{entry.Key}={string.Join(", ", entry.Value)}"));
     }
 
     public sealed class EditSourceInput
@@ -328,6 +492,35 @@ public sealed class DetailsModel(
         public int RequestsPerMinute { get; set; } = 30;
 
         public bool RespectRobotsTxt { get; set; } = true;
+    }
+
+    public sealed class DiscoveryProfileInput
+    {
+        [Display(Name = "Category entry pages")]
+        public string CategoryEntryPages { get; set; } = string.Empty;
+
+        [Display(Name = "Sitemap hints")]
+        public string SitemapHints { get; set; } = string.Empty;
+
+        [Display(Name = "Allowed path prefixes")]
+        public string AllowedPathPrefixes { get; set; } = string.Empty;
+
+        [Display(Name = "Excluded path prefixes")]
+        public string ExcludedPathPrefixes { get; set; } = string.Empty;
+
+        [Display(Name = "Product URL patterns")]
+        public string ProductUrlPatterns { get; set; } = string.Empty;
+
+        [Display(Name = "Listing URL patterns")]
+        public string ListingUrlPatterns { get; set; } = string.Empty;
+
+        [Range(0, int.MaxValue)]
+        [Display(Name = "Maximum discovery depth")]
+        public int MaxDiscoveryDepth { get; set; } = 3;
+
+        [Range(1, int.MaxValue)]
+        [Display(Name = "Maximum URLs per run")]
+        public int MaxUrlsPerRun { get; set; } = 500;
     }
 
     public sealed class AnalystNoteInput

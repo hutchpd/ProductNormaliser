@@ -129,6 +129,43 @@ public sealed class SourceManagementPageTests
     }
 
     [Test]
+    public async Task SourceDetails_OnPostDiscoveryAsync_SubmitsDiscoveryProfileAndRedirects()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            Sources = [CreateSource("ao_uk", "AO UK", isEnabled: true, categoryKeys: ["tv"], readinessStatus: "Ready", healthStatus: "Healthy")]
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.DetailsModel>.Instance)
+        {
+            Discovery = new ProductNormaliser.Web.Pages.Sources.DetailsModel.DiscoveryProfileInput
+            {
+                CategoryEntryPages = "tv=/tv, /oled",
+                SitemapHints = "/sitemap.xml\n/sitemap-products.xml",
+                AllowedPathPrefixes = "/tv\n/product",
+                ExcludedPathPrefixes = "/support",
+                ProductUrlPatterns = "/product/\n/p/",
+                ListingUrlPatterns = "/category/\n/department/",
+                MaxDiscoveryDepth = 4,
+                MaxUrlsPerRun = 800
+            }
+        };
+
+        var result = await model.OnPostDiscoveryAsync("ao_uk", CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(client.LastUpdatedSourceId, Is.EqualTo("ao_uk"));
+            Assert.That(client.LastUpdatedSourceRequest, Is.Not.Null);
+            Assert.That(client.LastUpdatedSourceRequest!.DiscoveryProfile, Is.Not.Null);
+            Assert.That(client.LastUpdatedSourceRequest.DiscoveryProfile!.CategoryEntryPages["tv"], Is.EqualTo(new[] { "/tv", "/oled" }));
+            Assert.That(client.LastUpdatedSourceRequest.DiscoveryProfile.MaxUrlsPerRun, Is.EqualTo(800));
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
+        });
+    }
+
+    [Test]
     public async Task SourceDetails_OnPostSaveNoteAsync_SavesSourceNote()
     {
         var client = new FakeAdminApiClient
@@ -215,6 +252,20 @@ public sealed class SourceManagementPageTests
             Description = $"{displayName} source",
             IsEnabled = isEnabled,
             SupportedCategoryKeys = categoryKeys,
+            DiscoveryProfile = new SourceDiscoveryProfileDto
+            {
+                CategoryEntryPages = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [categoryKeys[0]] = [ $"https://{sourceId}.example/{categoryKeys[0]}" ]
+                },
+                SitemapHints = [ $"https://{sourceId}.example/sitemap.xml" ],
+                AllowedPathPrefixes = [ $"/{categoryKeys[0]}", "/product" ],
+                ExcludedPathPrefixes = [ "/support" ],
+                ProductUrlPatterns = [ "/product/" ],
+                ListingUrlPatterns = [ "/category/" ],
+                MaxDiscoveryDepth = 3,
+                MaxUrlsPerRun = 500
+            },
             ThrottlingPolicy = new SourceThrottlingPolicyDto
             {
                 MinDelayMs = 1000,

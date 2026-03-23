@@ -19,5 +19,7 @@ public sealed class RegisterSourceRequest
 
     public IReadOnlyList<string> SupportedCategoryKeys { get; init; } = [];
 
+    public SourceDiscoveryProfileDto? DiscoveryProfile { get; init; }
+
     public SourceThrottlingPolicyDto? ThrottlingPolicy { get; init; }
 }

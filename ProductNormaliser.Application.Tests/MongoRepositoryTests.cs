@@ -3,6 +3,7 @@ using ProductNormaliser.Application.Crawls;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Infrastructure.Mongo;
 using ProductNormaliser.Infrastructure.Mongo.Repositories;
+using MongoDB.Bson;
 
 namespace ProductNormaliser.Tests;
 
@@ -16,6 +17,8 @@ public sealed class MongoRepositoryTests
     private ProductOfferRepository productOfferRepository = default!;
     private MergeConflictRepository mergeConflictRepository = default!;
     private CrawlQueueRepository crawlQueueRepository = default!;
+    private DiscoveryQueueRepository discoveryQueueRepository = default!;
+    private DiscoveredUrlRepository discoveredUrlRepository = default!;
 
     [SetUp]
     public async Task SetUpAsync()
@@ -29,6 +32,8 @@ public sealed class MongoRepositoryTests
         await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.ProductOffers);
         await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.MergeConflicts);
         await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.CrawlQueue);
+        await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.DiscoveryQueue);
+        await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.DiscoveredUrls);
         await context.EnsureIndexesAsync();
 
         crawlJobRepository = new CrawlJobRepository(context);
@@ -39,6 +44,8 @@ public sealed class MongoRepositoryTests
         productOfferRepository = new ProductOfferRepository(context);
         mergeConflictRepository = new MergeConflictRepository(context);
         crawlQueueRepository = new CrawlQueueRepository(context);
+        discoveryQueueRepository = new DiscoveryQueueRepository(context);
+        discoveredUrlRepository = new DiscoveredUrlRepository(context);
     }
 
     [Test]
@@ -327,12 +334,109 @@ public sealed class MongoRepositoryTests
     }
 
     [Test]
+    public async Task DiscoveredUrlRepository_UpsertsAndFindsByNormalizedUrl()
+    {
+        var discovered = new DiscoveredUrl
+        {
+            Id = "discovered-1",
+            JobId = "job-1",
+            SourceId = "ao_uk",
+            CategoryKey = "tv",
+            Url = "https://ao.com/tvs/oled/samsung-qe55s90d?ref=nav",
+            NormalizedUrl = "https://ao.com/tvs/oled/samsung-qe55s90d",
+            Classification = "product",
+            State = "processed",
+            ParentUrl = "https://ao.com/tvs/oled",
+            Depth = 2,
+            AttemptCount = 1,
+            FirstSeenUtc = new DateTime(2026, 03, 20, 10, 00, 00, DateTimeKind.Utc),
+            LastSeenUtc = new DateTime(2026, 03, 20, 10, 05, 00, DateTimeKind.Utc),
+            LastProcessedUtc = new DateTime(2026, 03, 20, 10, 06, 00, DateTimeKind.Utc),
+            PromotedToCrawlUtc = new DateTime(2026, 03, 20, 10, 06, 30, DateTimeKind.Utc)
+        };
+
+        await discoveredUrlRepository.UpsertAsync(discovered);
+
+        var stored = await discoveredUrlRepository.GetByIdAsync(discovered.Id);
+        var byNormalizedUrl = await discoveredUrlRepository.GetByNormalizedUrlAsync("ao_uk", "tv", "https://ao.com/tvs/oled/samsung-qe55s90d");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(stored, Is.Not.Null);
+            Assert.That(stored!.State, Is.EqualTo("processed"));
+            Assert.That(stored.NormalizedUrl, Is.EqualTo("https://ao.com/tvs/oled/samsung-qe55s90d"));
+            Assert.That(byNormalizedUrl, Is.Not.Null);
+            Assert.That(byNormalizedUrl!.Id, Is.EqualTo("discovered-1"));
+            Assert.That(byNormalizedUrl.Classification, Is.EqualTo("product"));
+        });
+    }
+
+    [Test]
+    public async Task DiscoveryQueueRepository_AcquiresOnlyDueQueuedItems()
+    {
+        var queuedItem = new DiscoveryQueueItem
+        {
+            Id = "discovery-1",
+            JobId = "job-1",
+            SourceId = "ao_uk",
+            CategoryKey = "tv",
+            Url = "https://ao.com/tvs/oled?page=2",
+            NormalizedUrl = "https://ao.com/tvs/oled?page=2",
+            Classification = "listing",
+            State = "queued",
+            Depth = 1,
+            ParentUrl = "https://ao.com/tvs",
+            AttemptCount = 0,
+            EnqueuedUtc = new DateTime(2026, 03, 20, 10, 00, 00, DateTimeKind.Utc),
+            NextAttemptUtc = new DateTime(2026, 03, 20, 10, 02, 00, DateTimeKind.Utc)
+        };
+
+        var futureItem = new DiscoveryQueueItem
+        {
+            Id = "discovery-2",
+            JobId = "job-1",
+            SourceId = "ao_uk",
+            CategoryKey = "tv",
+            Url = "https://ao.com/tvs/oled?page=3",
+            NormalizedUrl = "https://ao.com/tvs/oled?page=3",
+            Classification = "listing",
+            State = "queued",
+            Depth = 1,
+            AttemptCount = 0,
+            EnqueuedUtc = new DateTime(2026, 03, 20, 10, 01, 00, DateTimeKind.Utc),
+            NextAttemptUtc = new DateTime(2026, 03, 20, 10, 30, 00, DateTimeKind.Utc)
+        };
+
+        await discoveryQueueRepository.UpsertAsync(queuedItem);
+        await discoveryQueueRepository.UpsertAsync(futureItem);
+
+        var dueItems = await discoveryQueueRepository.ListQueuedAsync(new DateTime(2026, 03, 20, 10, 05, 00, DateTimeKind.Utc));
+        var acquired = await discoveryQueueRepository.TryAcquireAsync("discovery-1", new DateTime(2026, 03, 20, 10, 05, 00, DateTimeKind.Utc));
+        var reacquired = await discoveryQueueRepository.TryAcquireAsync("discovery-1", new DateTime(2026, 03, 20, 10, 06, 00, DateTimeKind.Utc));
+        var notDue = await discoveryQueueRepository.TryAcquireAsync("discovery-2", new DateTime(2026, 03, 20, 10, 05, 00, DateTimeKind.Utc));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(dueItems.Select(item => item.Id), Is.EqualTo(new[] { "discovery-1" }));
+            Assert.That(acquired, Is.Not.Null);
+            Assert.That(acquired!.State, Is.EqualTo("processing"));
+            Assert.That(acquired.AttemptCount, Is.EqualTo(1));
+            Assert.That(acquired.LastAttemptUtc, Is.EqualTo(new DateTime(2026, 03, 20, 10, 05, 00, DateTimeKind.Utc)));
+            Assert.That(acquired.NextAttemptUtc, Is.Null);
+            Assert.That(reacquired, Is.Null);
+            Assert.That(notDue, Is.Null);
+        });
+    }
+
+    [Test]
     public async Task MongoDbContext_CreatesRequiredIndexes()
     {
         var context = MongoIntegrationTestFixture.Context;
 
         var crawlJobIndexes = await context.CrawlJobs.Indexes.ListAsync();
         var crawlSourceIndexes = await context.CrawlSources.Indexes.ListAsync();
+        var discoveryQueueIndexes = await context.DiscoveryQueueItems.Indexes.ListAsync();
+        var discoveredUrlIndexes = await context.DiscoveredUrls.Indexes.ListAsync();
         var canonicalIndexes = await context.CanonicalProducts.Indexes.ListAsync();
         var sourceIndexes = await context.SourceProducts.Indexes.ListAsync();
         var offerIndexes = await context.ProductOffers.Indexes.ListAsync();
@@ -340,15 +444,27 @@ public sealed class MongoRepositoryTests
 
         var crawlJobIndexDefinitions = await crawlJobIndexes.ToListAsync();
         var crawlSourceIndexDefinitions = await crawlSourceIndexes.ToListAsync();
+        var discoveryQueueIndexDefinitions = await discoveryQueueIndexes.ToListAsync();
+        var discoveredUrlIndexDefinitions = await discoveredUrlIndexes.ToListAsync();
         var canonicalIndexDefinitions = await canonicalIndexes.ToListAsync();
         var sourceIndexDefinitions = await sourceIndexes.ToListAsync();
         var offerIndexDefinitions = await offerIndexes.ToListAsync();
         var conflictIndexDefinitions = await conflictIndexes.ToListAsync();
 
+        var discoveredUrlUniqueIndex = discoveredUrlIndexDefinitions.FirstOrDefault(definition =>
+        {
+            var name = definition["name"].AsString;
+            return !string.Equals(name, "_id_", StringComparison.Ordinal);
+        });
+
         Assert.Multiple(() =>
         {
             Assert.That(crawlJobIndexDefinitions.Count, Is.GreaterThanOrEqualTo(3));
             Assert.That(crawlSourceIndexDefinitions.Count, Is.GreaterThanOrEqualTo(2));
+            Assert.That(discoveryQueueIndexDefinitions.Count, Is.GreaterThanOrEqualTo(4));
+            Assert.That(discoveredUrlIndexDefinitions.Count, Is.GreaterThanOrEqualTo(4));
+            Assert.That(discoveredUrlUniqueIndex, Is.Not.Null);
+            Assert.That(discoveredUrlUniqueIndex!["unique"].AsBoolean, Is.True);
             Assert.That(canonicalIndexDefinitions.Count, Is.GreaterThanOrEqualTo(3));
             Assert.That(sourceIndexDefinitions.Count, Is.GreaterThanOrEqualTo(2));
             Assert.That(offerIndexDefinitions.Count, Is.GreaterThanOrEqualTo(2));

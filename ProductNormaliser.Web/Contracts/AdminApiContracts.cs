@@ -149,6 +149,7 @@ public sealed class SourceDto
     public string? Description { get; init; }
     public bool IsEnabled { get; init; }
     public IReadOnlyList<string> SupportedCategoryKeys { get; init; } = [];
+    public SourceDiscoveryProfileDto DiscoveryProfile { get; init; } = new();
     public SourceThrottlingPolicyDto ThrottlingPolicy { get; init; } = new();
     public SourceReadinessDto Readiness { get; init; } = new();
     public SourceHealthSummaryDto Health { get; init; } = new();
@@ -194,6 +195,18 @@ public sealed class SourceThrottlingPolicyDto
     public bool RespectRobotsTxt { get; init; }
 }
 
+public sealed class SourceDiscoveryProfileDto
+{
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> CategoryEntryPages { get; init; } = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+    public IReadOnlyList<string> SitemapHints { get; init; } = [];
+    public IReadOnlyList<string> AllowedPathPrefixes { get; init; } = [];
+    public IReadOnlyList<string> ExcludedPathPrefixes { get; init; } = [];
+    public IReadOnlyList<string> ProductUrlPatterns { get; init; } = [];
+    public IReadOnlyList<string> ListingUrlPatterns { get; init; } = [];
+    public int MaxDiscoveryDepth { get; init; }
+    public int MaxUrlsPerRun { get; init; }
+}
+
 public sealed class RegisterSourceRequest
 {
     public string SourceId { get; init; } = string.Empty;
@@ -202,6 +215,7 @@ public sealed class RegisterSourceRequest
     public string? Description { get; init; }
     public bool IsEnabled { get; init; } = true;
     public IReadOnlyList<string> SupportedCategoryKeys { get; init; } = [];
+    public SourceDiscoveryProfileDto? DiscoveryProfile { get; init; }
     public SourceThrottlingPolicyDto? ThrottlingPolicy { get; init; }
 }
 
@@ -210,6 +224,7 @@ public sealed class UpdateSourceRequest
     public string DisplayName { get; init; } = string.Empty;
     public string BaseUrl { get; init; } = string.Empty;
     public string? Description { get; init; }
+    public SourceDiscoveryProfileDto? DiscoveryProfile { get; init; }
 }
 
 public sealed class AssignSourceCategoriesRequest
