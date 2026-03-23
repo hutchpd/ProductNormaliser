@@ -172,6 +172,20 @@ public sealed class CrawlJobService(
             return;
         }
 
+        if (job.ProcessedTargets >= job.TotalTargets)
+        {
+            if (!IsTerminalStatus(job.Status))
+            {
+                var completedAt = DateTime.UtcNow;
+                job.LastUpdatedAt = completedAt;
+                job.EstimatedCompletion = completedAt;
+                job.Status = DetermineCompletedStatus(job);
+                await crawlJobStore.UpsertAsync(job, cancellationToken);
+            }
+
+            return;
+        }
+
         var normalizedCategoryKey = NormalizeRequiredValue(categoryKey, nameof(categoryKey));
         var normalizedOutcome = NormalizeOutcome(outcome);
         var now = DateTime.UtcNow;

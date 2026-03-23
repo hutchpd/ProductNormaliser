@@ -5,6 +5,11 @@ namespace ProductNormaliser.Web.Tests;
 
 internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
 {
+    public Exception? StatsException { get; set; }
+    public Exception? CategoriesException { get; set; }
+    public Exception? CategoryDetailException { get; set; }
+    public Exception? SourcesException { get; set; }
+    public Exception? CrawlJobsException { get; set; }
     public StatsDto Stats { get; set; } = new();
     public IReadOnlyList<CategoryMetadataDto> Categories { get; set; } = [];
     public IReadOnlyList<CategoryFamilyDto> CategoryFamilies { get; set; } = [];
@@ -41,12 +46,18 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public string? LastSourceDisagreementsCategoryKey { get; private set; }
     public string? LastSourceDisagreementsSourceName { get; private set; }
 
-    public Task<StatsDto> GetStatsAsync(CancellationToken cancellationToken = default) => Task.FromResult(Stats);
-    public Task<IReadOnlyList<CategoryMetadataDto>> GetCategoriesAsync(CancellationToken cancellationToken = default) => Task.FromResult(Categories);
+    public Task<StatsDto> GetStatsAsync(CancellationToken cancellationToken = default)
+        => StatsException is null ? Task.FromResult(Stats) : Task.FromException<StatsDto>(StatsException);
+
+    public Task<IReadOnlyList<CategoryMetadataDto>> GetCategoriesAsync(CancellationToken cancellationToken = default)
+        => CategoriesException is null ? Task.FromResult(Categories) : Task.FromException<IReadOnlyList<CategoryMetadataDto>>(CategoriesException);
     public Task<IReadOnlyList<CategoryFamilyDto>> GetCategoryFamiliesAsync(CancellationToken cancellationToken = default) => Task.FromResult(CategoryFamilies);
     public Task<IReadOnlyList<CategoryMetadataDto>> GetEnabledCategoriesAsync(CancellationToken cancellationToken = default) => Task.FromResult(EnabledCategories);
-    public Task<CategoryDetailDto?> GetCategoryDetailAsync(string categoryKey, CancellationToken cancellationToken = default) => Task.FromResult(CategoryDetail);
-    public Task<IReadOnlyList<SourceDto>> GetSourcesAsync(CancellationToken cancellationToken = default) => Task.FromResult(Sources);
+    public Task<CategoryDetailDto?> GetCategoryDetailAsync(string categoryKey, CancellationToken cancellationToken = default)
+        => CategoryDetailException is null ? Task.FromResult(CategoryDetail) : Task.FromException<CategoryDetailDto?>(CategoryDetailException);
+
+    public Task<IReadOnlyList<SourceDto>> GetSourcesAsync(CancellationToken cancellationToken = default)
+        => SourcesException is null ? Task.FromResult(Sources) : Task.FromException<IReadOnlyList<SourceDto>>(SourcesException);
     public Task<SourceDto?> GetSourceAsync(string sourceId, CancellationToken cancellationToken = default) => Task.FromResult(Source);
     public Task<SourceDto> RegisterSourceAsync(RegisterSourceRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
     public Task<SourceDto> UpdateSourceAsync(string sourceId, UpdateSourceRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
@@ -54,7 +65,8 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public Task<SourceDto> DisableSourceAsync(string sourceId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
     public Task<SourceDto> AssignCategoriesAsync(string sourceId, AssignSourceCategoriesRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
     public Task<SourceDto> UpdateThrottlingAsync(string sourceId, UpdateSourceThrottlingRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-    public Task<CrawlJobListResponseDto> GetCrawlJobsAsync(CrawlJobQueryDto? query = null, CancellationToken cancellationToken = default) => Task.FromResult(CrawlJobsPage);
+    public Task<CrawlJobListResponseDto> GetCrawlJobsAsync(CrawlJobQueryDto? query = null, CancellationToken cancellationToken = default)
+        => CrawlJobsException is null ? Task.FromResult(CrawlJobsPage) : Task.FromException<CrawlJobListResponseDto>(CrawlJobsException);
     public Task<CrawlJobDto?> GetCrawlJobAsync(string jobId, CancellationToken cancellationToken = default) => Task.FromResult(CrawlJob);
     public Task<CrawlJobDto> CreateCrawlJobAsync(CreateCrawlJobRequest request, CancellationToken cancellationToken = default)
     {

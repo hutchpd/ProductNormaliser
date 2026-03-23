@@ -1,4 +1,5 @@
 using MongoDB.Driver;
+using Microsoft.Extensions.Options;
 using ProductNormaliser.Application.Crawls;
 using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
@@ -12,24 +13,29 @@ public sealed class CrawlQueueService(
     ICrawlPriorityService crawlPriorityService,
     ICrawlBackoffService crawlBackoffService,
     ICrawlJobService crawlJobService,
-    MongoDbContext mongoDbContext) : ICrawlQueueService
+    MongoDbContext mongoDbContext,
+    IOptions<CrawlPipelineOptions> options) : ICrawlQueueService
 {
+    private readonly CrawlPipelineOptions crawlOptions = options.Value;
+
     public async Task<CrawlQueueLease?> DequeueAsync(CancellationToken cancellationToken)
     {
-        var queueItem = (await crawlPriorityService.GetPrioritiesAsync(DateTime.UtcNow, cancellationToken))
-            .Select(assessment => assessment.QueueItem)
-            .FirstOrDefault();
+        var utcNow = DateTime.UtcNow;
+        CrawlQueueItem? queueItem = null;
+
+        foreach (var assessment in await crawlPriorityService.GetPrioritiesAsync(utcNow, cancellationToken))
+        {
+            queueItem = await crawlQueueStore.TryAcquireAsync(assessment.QueueItem.Id, utcNow, cancellationToken);
+            if (queueItem is not null)
+            {
+                break;
+            }
+        }
+
         if (queueItem is null)
         {
             return null;
         }
-
-        queueItem.Status = "processing";
-        queueItem.AttemptCount += 1;
-        queueItem.LastAttemptUtc = DateTime.UtcNow;
-        queueItem.NextAttemptUtc = null;
-        queueItem.LastError = null;
-        await crawlQueueStore.UpsertAsync(queueItem, cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(queueItem.JobId))
         {
@@ -55,7 +61,7 @@ public sealed class CrawlQueueService(
     public async Task MarkCompletedAsync(string queueItemId, CancellationToken cancellationToken)
     {
         var queueItem = await crawlQueueStore.GetByIdAsync(queueItemId, cancellationToken);
-        if (queueItem is null)
+        if (queueItem is null || !string.Equals(queueItem.Status, "processing", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -63,6 +69,7 @@ public sealed class CrawlQueueService(
         if (!string.IsNullOrWhiteSpace(queueItem.JobId))
         {
             queueItem.Status = "completed";
+            queueItem.ConsecutiveFailureCount = 0;
             queueItem.LastError = null;
             queueItem.NextAttemptUtc = null;
             await crawlQueueStore.UpsertAsync(queueItem, cancellationToken);
@@ -80,7 +87,7 @@ public sealed class CrawlQueueService(
     public async Task MarkSkippedAsync(string queueItemId, string reason, CancellationToken cancellationToken)
     {
         var queueItem = await crawlQueueStore.GetByIdAsync(queueItemId, cancellationToken);
-        if (queueItem is null)
+        if (queueItem is null || !string.Equals(queueItem.Status, "processing", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -88,6 +95,7 @@ public sealed class CrawlQueueService(
         if (!string.IsNullOrWhiteSpace(queueItem.JobId))
         {
             queueItem.Status = "skipped";
+            queueItem.ConsecutiveFailureCount = 0;
             queueItem.LastError = reason;
             queueItem.NextAttemptUtc = null;
             await crawlQueueStore.UpsertAsync(queueItem, cancellationToken);
@@ -105,13 +113,24 @@ public sealed class CrawlQueueService(
     public async Task MarkFailedAsync(string queueItemId, string reason, CancellationToken cancellationToken)
     {
         var queueItem = await crawlQueueStore.GetByIdAsync(queueItemId, cancellationToken);
-        if (queueItem is null)
+        if (queueItem is null || !string.Equals(queueItem.Status, "processing", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
         if (!string.IsNullOrWhiteSpace(queueItem.JobId))
         {
+            queueItem.ConsecutiveFailureCount += 1;
+
+            if (await ShouldRetryJobItemAsync(queueItem, cancellationToken))
+            {
+                queueItem.Status = "queued";
+                queueItem.LastError = reason;
+                queueItem.NextAttemptUtc = await ComputeNextAttemptAsync(queueItem, cancellationToken);
+                await crawlQueueStore.UpsertAsync(queueItem, cancellationToken);
+                return;
+            }
+
             queueItem.Status = "failed";
             queueItem.LastError = reason;
             queueItem.NextAttemptUtc = null;
@@ -125,6 +144,27 @@ public sealed class CrawlQueueService(
         queueItem.LastError = reason;
         queueItem.NextAttemptUtc = await ComputeNextAttemptAsync(queueItem, cancellationToken);
         await crawlQueueStore.UpsertAsync(queueItem, cancellationToken);
+    }
+
+    private async Task<bool> ShouldRetryJobItemAsync(CrawlQueueItem queueItem, CancellationToken cancellationToken)
+    {
+        if (queueItem.AttemptCount > Math.Max(0, crawlOptions.TransientRetryCount))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(queueItem.JobId))
+        {
+            return false;
+        }
+
+        var job = await crawlJobService.GetAsync(queueItem.JobId, cancellationToken);
+        return job is not null
+            && !string.Equals(job.Status, CrawlJobStatuses.CancelRequested, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(job.Status, CrawlJobStatuses.Cancelled, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(job.Status, CrawlJobStatuses.Completed, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(job.Status, CrawlJobStatuses.CompletedWithFailures, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(job.Status, CrawlJobStatuses.Failed, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<DateTime> ComputeNextAttemptAsync(CrawlQueueItem queueItem, CancellationToken cancellationToken)

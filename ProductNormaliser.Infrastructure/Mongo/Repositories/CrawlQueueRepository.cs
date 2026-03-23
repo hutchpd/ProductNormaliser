@@ -20,6 +20,29 @@ public sealed class CrawlQueueRepository(MongoDbContext context) : MongoReposito
             cancellationToken);
     }
 
+    public async Task<CrawlQueueItem?> TryAcquireAsync(string id, DateTime utcNow, CancellationToken cancellationToken = default)
+    {
+        var filter = Builders<CrawlQueueItem>.Filter.Where(item =>
+            item.Id == id
+            && item.Status == "queued"
+            && (item.NextAttemptUtc == null || item.NextAttemptUtc <= utcNow));
+        var update = Builders<CrawlQueueItem>.Update
+            .Set(item => item.Status, "processing")
+            .Inc(item => item.AttemptCount, 1)
+            .Set(item => item.LastAttemptUtc, utcNow)
+            .Set(item => item.NextAttemptUtc, (DateTime?)null)
+            .Set(item => item.LastError, null);
+
+        return await Collection.FindOneAndUpdateAsync(
+            filter,
+            update,
+            new FindOneAndUpdateOptions<CrawlQueueItem>
+            {
+                ReturnDocument = ReturnDocument.After
+            },
+            cancellationToken);
+    }
+
     public async Task<IReadOnlyList<CrawlQueueItem>> CancelQueuedItemsAsync(string jobId, string reason, CancellationToken cancellationToken = default)
     {
         var queuedItems = await Collection.Find(item => item.JobId == jobId && item.Status == "queued")

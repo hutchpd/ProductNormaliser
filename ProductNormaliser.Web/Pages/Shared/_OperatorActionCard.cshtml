@@ -1,0 +1,11 @@
+@model ProductNormaliser.Web.Models.OperatorActionCardModel
+
+<a href="@Model.Href" class="operator-action-card">
+    <span class="eyebrow">@Model.Eyebrow</span>
+    <strong>@Model.Title</strong>
+    <p class="subtle-copy">@Model.Description</p>
+    <div class="operator-action-footer">
+        <span>@Model.AccentValue</span>
+        <span class="subtle-copy">@Model.AccentLabel</span>
+    </div>
+</a>

@@ -1,10 +1,10 @@
-﻿@page
+@page
 @model IndexModel
 @{
-    ViewData["Title"] = "Dashboard";
+    ViewData["Title"] = "Operator Console";
 }
 
-<section class="dashboard-shell">
+<section class="dashboard-shell operator-console-shell">
     <partial name="_PageHero" model="Model.Hero" />
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
@@ -19,194 +19,241 @@
 
     <div asp-validation-summary="ModelOnly" class="notice error" role="alert"></div>
 
-    <section class="panel">
-        <div class="panel-heading">
-            <div>
-                <p class="eyebrow">Quick Navigation</p>
-                <h2>Jump into the dashboard areas</h2>
+    @if (Model.LandingState == IndexModel.OperatorLandingState.Loading)
+    {
+        <section class="panel panel-muted">
+            <div class="empty-panel">
+                <p class="empty-state">Loading operator console...</p>
             </div>
-        </div>
-        <div class="quick-links">
-            <a class="card-link" asp-page="/Categories/Index">
-                <strong>Categories</strong>
-                <span class="subtle-copy">Review enabled families and schemas.</span>
-            </a>
-            <a class="card-link" asp-page="/CrawlJobs/Index">
-                <strong>Crawl Jobs</strong>
-                <span class="subtle-copy">Launch and monitor job batches.</span>
-            </a>
-            <a class="card-link" asp-page="/Products/Index">
-                <strong>Products</strong>
-                <span class="subtle-copy">Inspect canonical product merges.</span>
-            </a>
-            <a class="card-link" asp-page="/Quality/Index">
-                <strong>Quality</strong>
-                <span class="subtle-copy">Inspect category-aware coverage and disagreement.</span>
-            </a>
-            <a class="card-link" asp-page="/Sources/Index">
-                <strong>Sources</strong>
-                <span class="subtle-copy">Check registry coverage and health.</span>
-            </a>
-            <a class="card-link" asp-page="/Sources/Intelligence">
-                <strong>Source Intelligence</strong>
-                <span class="subtle-copy">Track trust, hotspots, and change activity over time.</span>
-            </a>
-        </div>
-    </section>
-
-    <div class="overview-grid">
-        <section class="panel">
+        </section>
+    }
+    else
+    {
+        <section class="panel operator-context-panel">
             <div class="panel-heading">
                 <div>
-                    <p class="eyebrow">Selected Category</p>
-                    <h2>Schema detail and launch controls</h2>
+                    <p class="eyebrow">Current Category Context</p>
+                    <h2>Operate from one deliberate landing surface</h2>
+                    <p class="subtle-copy">The landing page keeps crawl launch, job monitoring, product review, quality signals, and source posture aligned to the current category context.</p>
                 </div>
-                <form method="get" class="category-picker">
-                    <label asp-for="SelectedCategoryKey" class="form-label">Category</label>
-                    <select asp-for="SelectedCategoryKey" class="form-select" onchange="this.form.submit()">
-                        @foreach (var category in Model.Categories)
-                        {
-                            <option value="@category.CategoryKey">@category.DisplayName</option>
-                        }
-                    </select>
-                </form>
+                <a href="@Model.CategorySelectionUrl" class="btn btn-outline-dark btn-sm">Refine category set</a>
             </div>
 
-            @if (Model.SelectedCategory is null)
+            @if (!Model.HasCategoryContext)
             {
                 <div class="empty-panel">
-                    <p class="empty-state">No category detail is currently available from the Admin API.</p>
+                    <p class="empty-state">No category context is selected yet. Start with category selection to stage crawl, product, quality, and source workflows.</p>
                 </div>
             }
             else
             {
-                <div class="chip-row">
-                    <span class="chip">@Model.SelectedCategory.Metadata.FamilyDisplayName</span>
-                    <span class="chip">Support: @Model.SelectedCategory.Metadata.CrawlSupportStatus</span>
-                    <span class="chip">Completeness: @Model.SelectedCategory.Metadata.SchemaCompletenessScore</span>
-                </div>
+                <div class="operator-context-grid">
+                    <article class="operator-context-card">
+                        <span class="eyebrow">Selected categories</span>
+                        <strong>@Model.CurrentCategoryContext!.SelectionSummary</strong>
+                        <p class="subtle-copy">Primary category: @Model.SelectedCategory?.Metadata.DisplayName</p>
+                        <div class="chip-row">
+                            @foreach (var category in Model.CurrentCategoryContext.SelectedCategories)
+                            {
+                                <span class="chip">@category.DisplayName</span>
+                            }
+                        </div>
+                    </article>
 
-                <dl class="detail-grid">
-                    <div>
-                        <dt>Category key</dt>
-                        <dd>@Model.SelectedCategory.Metadata.CategoryKey</dd>
-                    </div>
-                    <div>
-                        <dt>Attributes</dt>
-                        <dd>@Model.SelectedCategory.Schema.Attributes.Count</dd>
-                    </div>
-                    <div>
-                        <dt>Enabled</dt>
-                        <dd>@(Model.SelectedCategory.Metadata.IsEnabled ? "Yes" : "No")</dd>
-                    </div>
-                    <div>
-                        <dt>Icon key</dt>
-                        <dd>@Model.SelectedCategory.Metadata.IconKey</dd>
-                    </div>
-                </dl>
+                    <article class="operator-context-card">
+                        <span class="eyebrow">Quick Crawl Launch</span>
+                        <strong>Start a category crawl immediately</strong>
+                        <p class="subtle-copy">This launches the current primary category and keeps the rest of the selected set available in the crawl console.</p>
+                        <form method="post" asp-page-handler="LaunchCategoryCrawl" class="operator-inline-form">
+                            <input asp-for="QuickCrawl.CategoryKey" type="hidden" value="@Model.SelectedCategoryKey" />
+                            <button type="submit" class="btn btn-dark">Launch current category crawl</button>
+                        </form>
+                    </article>
 
-                <form method="post" asp-page-handler="LaunchCategoryCrawl" class="source-form">
-                    <input asp-for="QuickCrawl.CategoryKey" type="hidden" value="@Model.SelectedCategory.Metadata.CategoryKey" />
-                    <div class="actions-bar">
-                        <button type="submit" class="btn btn-dark">Launch Category Crawl</button>
-                    </div>
-                    <span asp-validation-for="QuickCrawl.CategoryKey" class="text-danger small"></span>
-                </form>
-
-                <div class="table-wrap mt-3">
-                    <table class="table dashboard-table align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th>Attribute</th>
-                                <th>Type</th>
-                                <th>Unit</th>
-                                <th>Required</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        @foreach (var schemaField in Model.SelectedCategory.Schema.Attributes.Take(8))
-                        {
-                            <tr>
-                                <td>
-                                    <strong>@schemaField.DisplayName</strong>
-                                    <div class="text-muted small">@schemaField.Key</div>
-                                </td>
-                                <td>@schemaField.ValueType</td>
-                                <td>@(schemaField.Unit ?? "-")</td>
-                                <td>@(schemaField.IsRequired ? "Required" : "Optional")</td>
-                            </tr>
-                        }
-                        </tbody>
-                    </table>
+                    <article class="operator-context-card">
+                        <span class="eyebrow">Source Coverage</span>
+                        <strong>@Model.CategorySources.Count sources in scope</strong>
+                        <p class="subtle-copy">@Model.EnabledCategorySourceCount enabled, @Model.RobotsProtectedSourceCount respecting robots.txt.</p>
+                    </article>
                 </div>
             }
         </section>
 
-        <div class="stacked-panels">
+        <section class="panel">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Primary Actions</p>
+                    <h2>Main operator paths</h2>
+                </div>
+            </div>
+
+            <div class="operator-action-grid">
+                @foreach (var actionCard in Model.ActionCards)
+                {
+                    <partial name="_OperatorActionCard" model="actionCard" />
+                }
+            </div>
+        </section>
+
+        <div class="operator-landing-grid">
             <section class="panel panel-muted">
                 <div class="panel-heading">
                     <div>
-                        <p class="eyebrow">Catalogue Health</p>
-                        <h2>Current product metrics</h2>
+                        <p class="eyebrow">Product Counts</p>
+                        <h2>Catalogue operating signals</h2>
                     </div>
+                    <a href="@Model.ProductsUrl" class="btn btn-outline-dark btn-sm">Explore products</a>
                 </div>
-                <div class="metric-strip">
-                    <article>
-                        <span>Source products</span>
-                        <strong>@Model.Stats.TotalSourceProducts</strong>
-                    </article>
-                    <article>
-                        <span>Avg attributes</span>
-                        <strong>@Model.Stats.AverageAttributesPerProduct</strong>
-                    </article>
-                    <article>
-                        <span>Conflict rate</span>
-                        <strong>@Model.Stats.PercentProductsWithConflicts%</strong>
-                    </article>
-                    <article>
-                        <span>Missing key fields</span>
-                        <strong>@Model.Stats.PercentProductsMissingKeyAttributes%</strong>
-                    </article>
+
+                <div class="operator-summary-grid">
+                    @foreach (var summaryCard in Model.ProductSummaryCards)
+                    {
+                        <partial name="_OperatorSummaryCard" model="summaryCard" />
+                    }
                 </div>
             </section>
 
             <section class="panel">
                 <div class="panel-heading">
                     <div>
-                        <p class="eyebrow">Recent Crawl Jobs</p>
-                        <h2>Latest activity</h2>
+                        <p class="eyebrow">Active Crawl Jobs</p>
+                        <h2>Work in flight</h2>
                     </div>
-                    <a class="btn btn-outline-dark btn-sm" asp-page="/CrawlJobs/Index">Open job history</a>
+                    <a href="@Model.CrawlJobsUrl" class="btn btn-outline-dark btn-sm">View jobs</a>
                 </div>
 
-                @if (Model.RecentJobs.Count == 0)
+                @if (Model.ActiveJobs.Count == 0)
                 {
                     <div class="empty-panel">
-                        <p class="empty-state">No crawl jobs have been created yet.</p>
+                        <p class="empty-state">No active crawl jobs are running right now.</p>
                     </div>
                 }
                 else
                 {
-                    <div class="table-wrap">
+                    <div class="job-card-grid">
+                        @foreach (var job in Model.ActiveJobs)
+                        {
+                            <article class="job-card">
+                                <div class="job-card-header">
+                                    <div>
+                                        <strong class="mono">@job.JobId</strong>
+                                        <div class="subtle-copy">@ProductNormaliser.Web.Models.CrawlJobPresentation.GetRequestedCategoriesSummary(job)</div>
+                                    </div>
+                                    <partial name="_StatusBadge" model="ProductNormaliser.Web.Models.CrawlJobPresentation.GetStatusBadge(job.Status)" />
+                                </div>
+
+                                <div class="progress-shell">
+                                    <div class="progress-bar-shell">
+                                        <div class="progress-bar-fill" style="width: @ProductNormaliser.Web.Models.CrawlJobPresentation.GetProgressPercent(job)%"></div>
+                                    </div>
+                                    <div class="subtle-copy">@job.ProcessedTargets of @job.TotalTargets targets processed</div>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                }
+            </section>
+        </div>
+
+        <div class="operator-landing-grid">
+            <section class="panel panel-muted">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Quality Summary</p>
+                        <h2>Current quality lens</h2>
+                    </div>
+                    <a href="@Model.QualityUrl" class="btn btn-outline-dark btn-sm">Review quality</a>
+                </div>
+
+                <div class="operator-summary-grid compact">
+                    @foreach (var summaryCard in Model.QualitySummaryCards)
+                    {
+                        <partial name="_OperatorSummaryCard" model="summaryCard" />
+                    }
+                </div>
+
+                @if (Model.SelectedCategory is null)
+                {
+                    <div class="empty-panel mt-3">
+                        <p class="empty-state">No primary category detail is available yet.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-wrap mt-3">
                         <table class="table dashboard-table align-middle mb-0">
                             <thead>
                                 <tr>
-                                    <th>Job</th>
-                                    <th>Scope</th>
-                                    <th>Status</th>
-                                    <th>Progress</th>
+                                    <th>Attribute</th>
+                                    <th>Type</th>
+                                    <th>Unit</th>
+                                    <th>Required</th>
                                 </tr>
                             </thead>
                             <tbody>
-                            @foreach (var job in Model.RecentJobs)
+                            @foreach (var schemaField in Model.SelectedCategory.Schema.Attributes.Take(6))
                             {
                                 <tr>
                                     <td>
-                                        <a class="mono" asp-page="/CrawlJobs/Index" asp-route-jobId="@job.JobId">@job.JobId</a>
+                                        <strong>@schemaField.DisplayName</strong>
+                                        <div class="subtle-copy mono">@schemaField.Key</div>
                                     </td>
-                                    <td>@job.RequestType</td>
-                                    <td>@job.Status</td>
-                                    <td>@job.ProcessedTargets / @job.TotalTargets</td>
+                                    <td>@schemaField.ValueType</td>
+                                    <td>@(schemaField.Unit ?? "-")</td>
+                                    <td>@(schemaField.IsRequired ? "Required" : "Optional")</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+
+            <section class="panel panel-muted">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Source Health Summary</p>
+                        <h2>Registry posture for the current scope</h2>
+                    </div>
+                    <a href="@Model.SourcesUrl" class="btn btn-outline-dark btn-sm">Manage sources</a>
+                </div>
+
+                <div class="operator-summary-grid compact">
+                    @foreach (var summaryCard in Model.SourceHealthCards)
+                    {
+                        <partial name="_OperatorSummaryCard" model="summaryCard" />
+                    }
+                </div>
+
+                @if (Model.CategorySources.Count == 0)
+                {
+                    <div class="empty-panel mt-3">
+                        <p class="empty-state">No managed sources currently match the active category context.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-wrap mt-3">
+                        <table class="table dashboard-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Source</th>
+                                    <th>Status</th>
+                                    <th>Requests/min</th>
+                                    <th>Robots</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            @foreach (var source in Model.CategorySources.Take(6))
+                            {
+                                <tr>
+                                    <td>
+                                        <strong>@source.DisplayName</strong>
+                                        <div class="subtle-copy mono">@source.SourceId</div>
+                                    </td>
+                                    <td>@(source.IsEnabled ? "Enabled" : "Disabled")</td>
+                                    <td>@source.ThrottlingPolicy.RequestsPerMinute</td>
+                                    <td>@(source.ThrottlingPolicy.RespectRobotsTxt ? "Respect" : "Ignore")</td>
                                 </tr>
                             }
                             </tbody>
@@ -215,91 +262,7 @@
                 }
             </section>
         </div>
-    </div>
-
-    <section class="panel panel-register">
-        <div class="panel-heading">
-            <div>
-                <p class="eyebrow">Register Source</p>
-                <h2>Seed a managed crawl source</h2>
-            </div>
-            <a class="btn btn-outline-dark btn-sm" asp-page="/Sources/Index">View all sources</a>
-        </div>
-
-        <form method="post" asp-page-handler="RegisterSource" class="source-form">
-            <div class="form-grid">
-                <div>
-                    <label asp-for="RegisterSource.SourceId" class="form-label"></label>
-                    <input asp-for="RegisterSource.SourceId" class="form-control" placeholder="ao_uk" />
-                    <span asp-validation-for="RegisterSource.SourceId" class="text-danger small"></span>
-                </div>
-                <div>
-                    <label asp-for="RegisterSource.DisplayName" class="form-label"></label>
-                    <input asp-for="RegisterSource.DisplayName" class="form-control" placeholder="AO UK" />
-                    <span asp-validation-for="RegisterSource.DisplayName" class="text-danger small"></span>
-                </div>
-                <div class="wide">
-                    <label asp-for="RegisterSource.BaseUrl" class="form-label"></label>
-                    <input asp-for="RegisterSource.BaseUrl" class="form-control" placeholder="https://ao.com/" />
-                    <span asp-validation-for="RegisterSource.BaseUrl" class="text-danger small"></span>
-                </div>
-                <div class="wide">
-                    <label asp-for="RegisterSource.Description" class="form-label"></label>
-                    <textarea asp-for="RegisterSource.Description" class="form-control" rows="2" placeholder="Optional operational notes"></textarea>
-                </div>
-            </div>
-
-            <div class="section-divider"></div>
-
-            <div class="form-grid compact-grid">
-                <div>
-                    <label asp-for="RegisterSource.MinDelayMs" class="form-label"></label>
-                    <input asp-for="RegisterSource.MinDelayMs" class="form-control" />
-                </div>
-                <div>
-                    <label asp-for="RegisterSource.MaxDelayMs" class="form-label"></label>
-                    <input asp-for="RegisterSource.MaxDelayMs" class="form-control" />
-                </div>
-                <div>
-                    <label asp-for="RegisterSource.MaxConcurrentRequests" class="form-label"></label>
-                    <input asp-for="RegisterSource.MaxConcurrentRequests" class="form-control" />
-                </div>
-                <div>
-                    <label asp-for="RegisterSource.RequestsPerMinute" class="form-label"></label>
-                    <input asp-for="RegisterSource.RequestsPerMinute" class="form-control" />
-                </div>
-            </div>
-
-            <div class="toggle-row">
-                <label class="form-check">
-                    <input asp-for="RegisterSource.IsEnabled" class="form-check-input" />
-                    <span class="form-check-label">Enable immediately</span>
-                </label>
-                <label class="form-check">
-                    <input asp-for="RegisterSource.RespectRobotsTxt" class="form-check-input" />
-                    <span class="form-check-label">Respect robots.txt</span>
-                </label>
-            </div>
-
-            <div>
-                <p class="form-label mb-2">Supported categories</p>
-                <div class="check-grid">
-                @foreach (var category in Model.Categories.Where(category => category.IsEnabled))
-                {
-                    <label class="check-card">
-                        <input type="checkbox" name="RegisterSource.SelectedCategoryKeys" value="@category.CategoryKey" checked="@Model.RegisterSource.SelectedCategoryKeys.Contains(category.CategoryKey)" />
-                        <span>@category.DisplayName</span>
-                    </label>
-                }
-                </div>
-                <span asp-validation-for="RegisterSource.SelectedCategoryKeys" class="text-danger small"></span>
-            </div>
-
-            <div class="actions-bar">
-                <button type="submit" class="btn btn-dark">Register Source</button>
-            </div>
-        </form>
-    </section>
+    }
 </section>
 
 @section Scripts {

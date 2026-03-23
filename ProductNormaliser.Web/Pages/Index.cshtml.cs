@@ -11,11 +11,16 @@ public sealed class IndexModel(
     IProductNormaliserAdminApiClient adminApiClient,
     ILogger<IndexModel> logger) : PageModel
 {
+    public enum OperatorLandingState
+    {
+        Loading,
+        Ready,
+        Empty,
+        Error
+    }
+
     [BindProperty(SupportsGet = true, Name = "category")]
     public string? SelectedCategoryKey { get; set; }
-
-    [BindProperty]
-    public RegisterSourceInput RegisterSource { get; set; } = new();
 
     [BindProperty]
     public QuickCrawlInput QuickCrawl { get; set; } = new();
@@ -29,23 +34,211 @@ public sealed class IndexModel(
 
     public IReadOnlyList<CategoryMetadataDto> Categories { get; private set; } = [];
 
+    public CategoryContextState? CurrentCategoryContext { get; private set; }
+
     public CategoryDetailDto? SelectedCategory { get; private set; }
 
     public IReadOnlyList<SourceDto> Sources { get; private set; } = [];
 
     public IReadOnlyList<CrawlJobDto> RecentJobs { get; private set; } = [];
 
+    public OperatorLandingState LandingState { get; private set; } = OperatorLandingState.Loading;
+
+    public bool HasCategoryContext => CurrentCategoryContext?.HasSelection == true;
+
+    public IReadOnlyList<CrawlJobDto> ActiveJobs => RecentJobs
+        .Where(job => CrawlJobPresentation.IsActiveStatus(job.Status))
+        .OrderByDescending(job => job.LastUpdatedAt)
+        .ToArray();
+
+    public IReadOnlyList<SourceDto> CategorySources => Sources
+        .Where(source => CurrentCategoryContext?.SelectedCategoryKeys.Count > 0
+            && source.SupportedCategoryKeys.Any(categoryKey => CurrentCategoryContext.SelectedCategoryKeys.Contains(categoryKey, StringComparer.OrdinalIgnoreCase)))
+        .OrderByDescending(source => source.IsEnabled)
+        .ThenByDescending(source => source.ThrottlingPolicy.RequestsPerMinute)
+        .ThenBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    public int EnabledCategorySourceCount => CategorySources.Count(source => source.IsEnabled);
+
+    public int RobotsProtectedSourceCount => CategorySources.Count(source => source.ThrottlingPolicy.RespectRobotsTxt);
+
+    public decimal AverageRequestsPerMinute => CategorySources.Count == 0
+        ? 0m
+        : decimal.Round(CategorySources.Average(source => (decimal)source.ThrottlingPolicy.RequestsPerMinute), 0, MidpointRounding.AwayFromZero);
+
+    public decimal SchemaCompletenessPercent => SelectedCategory?.Metadata.SchemaCompletenessScore is decimal score
+        ? decimal.Round(score * 100m, 0, MidpointRounding.AwayFromZero)
+        : 0m;
+
+    public string ConflictRateSummary => $"{Stats.PercentProductsWithConflicts:0.#}%";
+
+    public string MissingKeySummary => $"{Stats.PercentProductsMissingKeyAttributes:0.#}%";
+
+    public IReadOnlyList<OperatorSummaryCardModel> ProductSummaryCards =>
+    [
+        new OperatorSummaryCardModel
+        {
+            Title = "Canonical products",
+            Value = Stats.TotalCanonicalProducts.ToString(),
+            Description = HasCategoryContext
+                ? $"Current context: {CurrentCategoryContext!.SelectionSummary}."
+                : "No category context is active yet.",
+            Tone = "completed"
+        },
+        new OperatorSummaryCardModel
+        {
+            Title = "Source products",
+            Value = Stats.TotalSourceProducts.ToString(),
+            Description = "Total scraped products feeding canonicalization.",
+            Tone = "neutral"
+        },
+        new OperatorSummaryCardModel
+        {
+            Title = "Conflict rate",
+            Value = ConflictRateSummary,
+            Description = "Products currently carrying cross-source disagreement.",
+            Tone = Stats.PercentProductsWithConflicts >= 25m ? "warning" : "completed"
+        },
+        new OperatorSummaryCardModel
+        {
+            Title = "Missing key fields",
+            Value = MissingKeySummary,
+            Description = "Products missing category-defining key attributes.",
+            Tone = Stats.PercentProductsMissingKeyAttributes >= 20m ? "warning" : "neutral"
+        }
+    ];
+
+    public IReadOnlyList<OperatorSummaryCardModel> QualitySummaryCards =>
+    [
+        new OperatorSummaryCardModel
+        {
+            Title = "Schema readiness",
+            Value = HasCategoryContext ? $"{SchemaCompletenessPercent:0}%" : "No category",
+            Description = HasCategoryContext
+                ? $"{SelectedCategory?.Schema.Attributes.Count ?? 0} tracked attributes in the active primary category."
+                : "Select a rollout category to inspect schema readiness.",
+            Tone = SchemaCompletenessPercent >= 85m ? "completed" : "warning"
+        },
+        new OperatorSummaryCardModel
+        {
+            Title = "Avg attributes",
+            Value = Stats.AverageAttributesPerProduct.ToString("0.0"),
+            Description = "Average normalized attributes per canonical product.",
+            Tone = "neutral"
+        }
+    ];
+
+    public IReadOnlyList<OperatorSummaryCardModel> SourceHealthCards =>
+    [
+        new OperatorSummaryCardModel
+        {
+            Title = "Sources in context",
+            Value = CategorySources.Count.ToString(),
+            Description = HasCategoryContext
+                ? "Sources matching the selected category set."
+                : "Choose categories to scope source operations.",
+            Tone = "neutral"
+        },
+        new OperatorSummaryCardModel
+        {
+            Title = "Enabled",
+            Value = EnabledCategorySourceCount.ToString(),
+            Description = "Sources currently available for crawl launch.",
+            Tone = EnabledCategorySourceCount == 0 ? "warning" : "completed"
+        },
+        new OperatorSummaryCardModel
+        {
+            Title = "Robots protected",
+            Value = RobotsProtectedSourceCount.ToString(),
+            Description = "Sources configured to respect robots.txt.",
+            Tone = RobotsProtectedSourceCount < CategorySources.Count ? "warning" : "completed"
+        },
+        new OperatorSummaryCardModel
+        {
+            Title = "Avg requests/min",
+            Value = AverageRequestsPerMinute.ToString("0"),
+            Description = "Average configured throughput across sources in scope.",
+            Tone = "neutral"
+        }
+    ];
+
+    public IReadOnlyList<OperatorActionCardModel> ActionCards =>
+    [
+        new OperatorActionCardModel
+        {
+            Eyebrow = "Start Crawl",
+            Title = "Launch targeted crawl work",
+            Description = "Jump straight into category-scoped crawl orchestration with the current context already staged.",
+            Href = CrawlJobsUrl,
+            AccentValue = HasCategoryContext ? CurrentCategoryContext!.SelectionSummary : "No category context",
+            AccentLabel = "Current crawl scope"
+        },
+        new OperatorActionCardModel
+        {
+            Eyebrow = "View Jobs",
+            Title = "Monitor live and historical jobs",
+            Description = "Open the job console to watch queue progress, failures, and completed work by category.",
+            Href = CrawlJobsUrl,
+            AccentValue = ActiveJobs.Count.ToString(),
+            AccentLabel = "Active jobs"
+        },
+        new OperatorActionCardModel
+        {
+            Eyebrow = "Explore Products",
+            Title = "Inspect canonical product output",
+            Description = "Move into the product explorer with the current primary category already selected.",
+            Href = ProductsUrl,
+            AccentValue = Stats.TotalCanonicalProducts.ToString(),
+            AccentLabel = "Canonical products"
+        },
+        new OperatorActionCardModel
+        {
+            Eyebrow = "Review Quality",
+            Title = "Audit quality and disagreement",
+            Description = "Review coverage, conflict, backlog, and stability for the current category lens.",
+            Href = QualityUrl,
+            AccentValue = ConflictRateSummary,
+            AccentLabel = "Conflict rate"
+        },
+        new OperatorActionCardModel
+        {
+            Eyebrow = "Manage Sources",
+            Title = "Review source health and coverage",
+            Description = "Open source management to adjust enabled sources, throttling posture, and category coverage.",
+            Href = SourcesUrl,
+            AccentValue = EnabledCategorySourceCount.ToString(),
+            AccentLabel = "Enabled in scope"
+        }
+    ];
+
+    public string CategorySelectionUrl => BuildUrl("/Categories/Index", includePrimaryCategory: false);
+
+    public string CrawlJobsUrl => BuildUrl("/CrawlJobs/Index", includePrimaryCategory: false);
+
+    public string ProductsUrl => BuildUrl("/Products/Index");
+
+    public string QualityUrl => BuildUrl("/Quality/Index");
+
+    public string SourcesUrl => BuildUrl("/Sources/Index");
+
+    public string SourceIntelligenceUrl => BuildUrl("/Sources/Intelligence");
+
     public PageHeroModel Hero => new()
     {
-        Eyebrow = "Operations Dashboard",
-        Title = "Internal control surface for category, source, product, and crawl orchestration",
-        Description = "Razor Pages is the pragmatic fit here: rich enough for an internal dashboard, server-rendered by default, and simple to wire into the Admin API with typed HTTP clients and page-model state.",
+        Eyebrow = "Operator Console",
+        Title = HasCategoryContext
+            ? $"Milestone 1 operations for {CurrentCategoryContext!.SelectionSummary}"
+            : "Milestone 1 operator landing",
+        Description = HasCategoryContext
+            ? "Use the current category context to launch crawl work, monitor active jobs, inspect product health, and review source posture without leaving the control surface."
+            : "This console is the deliberate entry point for crawl, quality, products, and sources. Select rollout categories first, then move into the main operating paths.",
         Metrics =
         [
-            new HeroMetricModel { Label = "Enabled categories", Value = Categories.Count(category => category.IsEnabled).ToString() },
-            new HeroMetricModel { Label = "Managed sources", Value = Sources.Count.ToString() },
+            new HeroMetricModel { Label = "Context", Value = HasCategoryContext ? CurrentCategoryContext!.SelectionSummary : "No category" },
+            new HeroMetricModel { Label = "Active jobs", Value = ActiveJobs.Count.ToString() },
             new HeroMetricModel { Label = "Canonical products", Value = Stats.TotalCanonicalProducts.ToString() },
-            new HeroMetricModel { Label = "Recent jobs", Value = RecentJobs.Count.ToString() }
+            new HeroMetricModel { Label = "Sources in scope", Value = CategorySources.Count.ToString() }
         ]
     };
 
@@ -76,60 +269,21 @@ public sealed class IndexModel(
             }, cancellationToken);
 
             StatusMessage = $"Queued crawl job '{job.JobId}' for category '{categoryKey}'.";
-            return RedirectToPage("/CrawlJobs/Index", new { jobId = job.JobId, category = categoryKey });
+            return RedirectToPage("/CrawlJobs/Index", new { jobId = job.JobId, selectedCategory = CurrentCategoryContext?.SelectedCategoryKeys.ToArray() ?? [categoryKey] });
         }
         catch (AdminApiValidationException exception)
         {
-            AddValidationErrors(exception);
+            foreach (var entry in exception.Errors)
+            {
+                foreach (var message in entry.Value)
+                {
+                    ModelState.AddModelError($"{nameof(QuickCrawl)}.{nameof(QuickCrawl.CategoryKey)}", message);
+                }
+            }
         }
         catch (AdminApiException exception)
         {
             logger.LogWarning(exception, "Failed to create crawl job from the dashboard.");
-            ErrorMessage = exception.Message;
-        }
-
-        await LoadDashboardAsync(cancellationToken);
-        return Page();
-    }
-
-    public async Task<IActionResult> OnPostRegisterSourceAsync(CancellationToken cancellationToken)
-    {
-        if (!ModelState.IsValid)
-        {
-            await LoadDashboardAsync(cancellationToken);
-            return Page();
-        }
-
-        try
-        {
-            await adminApiClient.RegisterSourceAsync(new RegisterSourceRequest
-            {
-                SourceId = RegisterSource.SourceId,
-                DisplayName = RegisterSource.DisplayName,
-                BaseUrl = RegisterSource.BaseUrl,
-                Description = RegisterSource.Description,
-                IsEnabled = RegisterSource.IsEnabled,
-                SupportedCategoryKeys = RegisterSource.SelectedCategoryKeys,
-                ThrottlingPolicy = new SourceThrottlingPolicyDto
-                {
-                    MinDelayMs = RegisterSource.MinDelayMs,
-                    MaxDelayMs = RegisterSource.MaxDelayMs,
-                    MaxConcurrentRequests = RegisterSource.MaxConcurrentRequests,
-                    RequestsPerMinute = RegisterSource.RequestsPerMinute,
-                    RespectRobotsTxt = RegisterSource.RespectRobotsTxt
-                }
-            }, cancellationToken);
-
-            StatusMessage = $"Registered source '{RegisterSource.DisplayName}'.";
-            return RedirectToPage(new { category = SelectedCategoryKey });
-        }
-        catch (AdminApiValidationException exception)
-        {
-            AddValidationErrors(exception);
-        }
-        catch (AdminApiException exception)
-        {
-            logger.LogWarning(exception, "Failed to register source from the dashboard.");
             ErrorMessage = exception.Message;
         }
 
@@ -149,7 +303,7 @@ public sealed class IndexModel(
             await Task.WhenAll(categoriesTask, sourcesTask, statsTask, jobsTask);
 
             Categories = InteractiveCategoryFilter.Apply(categoriesTask.Result);
-            var categoryContext = CategoryContextStateFactory.Resolve(
+            CurrentCategoryContext = CategoryContextStateFactory.Resolve(
                 Categories,
                 SelectedCategoryKey,
                 null,
@@ -158,7 +312,7 @@ public sealed class IndexModel(
             Stats = statsTask.Result;
             RecentJobs = jobsTask.Result.Items;
 
-            var effectiveCategoryKey = categoryContext.PrimaryCategoryKey;
+            var effectiveCategoryKey = CurrentCategoryContext.PrimaryCategoryKey;
 
             if (!string.IsNullOrWhiteSpace(effectiveCategoryKey))
             {
@@ -171,79 +325,47 @@ public sealed class IndexModel(
                 QuickCrawl.CategoryKey = SelectedCategoryKey;
             }
 
-            if (RegisterSource.SelectedCategoryKeys.Count == 0 && categoryContext.SelectedCategoryKeys.Count > 0)
-            {
-                RegisterSource.SelectedCategoryKeys = categoryContext.SelectedCategoryKeys.ToList();
-            }
+            LandingState = Categories.Count == 0 ? OperatorLandingState.Empty : OperatorLandingState.Ready;
         }
         catch (AdminApiException exception)
         {
             logger.LogWarning(exception, "Failed to load dashboard data from Admin API.");
             ErrorMessage = exception.Message;
             Categories = [];
+            CurrentCategoryContext = null;
             Sources = [];
             SelectedCategory = null;
             RecentJobs = [];
             Stats = new StatsDto();
+            LandingState = OperatorLandingState.Error;
         }
-    }
-
-    private void AddValidationErrors(AdminApiValidationException exception)
-    {
-        foreach (var entry in exception.Errors)
-        {
-            var field = entry.Key switch
-            {
-                "sourceId" => nameof(RegisterSource.SourceId),
-                "displayName" => nameof(RegisterSource.DisplayName),
-                "baseUrl" => nameof(RegisterSource.BaseUrl),
-                "supportedCategoryKeys" or "categoryKeys" => nameof(RegisterSource.SelectedCategoryKeys),
-                _ => string.Empty
-            };
-
-            foreach (var message in entry.Value)
-            {
-                ModelState.AddModelError(string.IsNullOrWhiteSpace(field) ? string.Empty : $"{nameof(RegisterSource)}.{field}", message);
-            }
-        }
-    }
-
-    public sealed class RegisterSourceInput
-    {
-        [Required]
-        public string SourceId { get; set; } = string.Empty;
-
-        [Required]
-        public string DisplayName { get; set; } = string.Empty;
-
-        [Required]
-        [Url]
-        public string BaseUrl { get; set; } = string.Empty;
-
-        public string? Description { get; set; }
-
-        public bool IsEnabled { get; set; } = true;
-
-        public List<string> SelectedCategoryKeys { get; set; } = [];
-
-        [Range(0, int.MaxValue)]
-        public int MinDelayMs { get; set; } = 1000;
-
-        [Range(0, int.MaxValue)]
-        public int MaxDelayMs { get; set; } = 3500;
-
-        [Range(1, int.MaxValue)]
-        public int MaxConcurrentRequests { get; set; } = 2;
-
-        [Range(1, int.MaxValue)]
-        public int RequestsPerMinute { get; set; } = 30;
-
-        public bool RespectRobotsTxt { get; set; } = true;
     }
 
     public sealed class QuickCrawlInput
     {
         [Required]
         public string CategoryKey { get; set; } = string.Empty;
+    }
+
+    private string BuildUrl(string basePath, bool includePrimaryCategory = true)
+    {
+        var queryParts = new List<string>();
+
+        if (includePrimaryCategory && !string.IsNullOrWhiteSpace(SelectedCategoryKey))
+        {
+            queryParts.Add($"category={Uri.EscapeDataString(SelectedCategoryKey)}");
+        }
+
+        foreach (var categoryKey in CurrentCategoryContext?.SelectedCategoryKeys ?? [])
+        {
+            queryParts.Add($"selectedCategory={Uri.EscapeDataString(categoryKey)}");
+        }
+
+        if (queryParts.Count == 0)
+        {
+            return basePath;
+        }
+
+        return $"{basePath}?{string.Join("&", queryParts)}";
     }
 }

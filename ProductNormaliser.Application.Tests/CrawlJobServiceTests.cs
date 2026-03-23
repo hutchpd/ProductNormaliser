@@ -39,6 +39,38 @@ public sealed class CrawlJobServiceTests
     }
 
     [Test]
+    public async Task CreateAsync_BuildsDistinctTotalsAndBreakdownsAcrossMultipleCategories()
+    {
+        var jobStore = new FakeCrawlJobStore();
+        var queueWriter = new FakeCrawlJobQueueWriter();
+        var targetStore = new FakeKnownCrawlTargetStore(
+            categoryTargets:
+            [
+                new CrawlJobTargetDescriptor { SourceName = "currys", SourceUrl = "https://currys.example/tv-1", CategoryKey = "tv" },
+                new CrawlJobTargetDescriptor { SourceName = "currys", SourceUrl = "https://currys.example/tv-1", CategoryKey = "tv" },
+                new CrawlJobTargetDescriptor { SourceName = "ao", SourceUrl = "https://ao.example/monitor-1", CategoryKey = "monitor" }
+            ]);
+        var service = new CrawlJobService(jobStore, targetStore, queueWriter, new PermissiveCrawlGovernanceService(), new RecordingAuditService());
+
+        var job = await service.CreateAsync(new CreateCrawlJobRequest
+        {
+            RequestType = CrawlJobRequestTypes.Category,
+            RequestedCategories = ["tv", "monitor"]
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(job.TotalTargets, Is.EqualTo(2));
+            Assert.That(queueWriter.Items, Has.Count.EqualTo(2));
+            Assert.That(job.PerCategoryBreakdown.Select(item => (item.CategoryKey, item.TotalTargets)), Is.EqualTo(new[]
+            {
+                ("monitor", 1),
+                ("tv", 1)
+            }));
+        });
+    }
+
+    [Test]
     public async Task RecordTargetOutcomeAsync_UpdatesProgressAndCompletesJob()
     {
         var job = CreateJob(totalTargets: 2, categoryKey: "tv");
@@ -101,6 +133,28 @@ public sealed class CrawlJobServiceTests
             Assert.That(stored, Is.Not.Null);
             Assert.That(stored!.Status, Is.EqualTo(CrawlJobStatuses.Failed));
             Assert.That(stored.FailedCount, Is.EqualTo(2));
+        });
+    }
+
+    [Test]
+    public async Task RecordTargetOutcomeAsync_IgnoresDuplicateOutcomeOnceJobIsComplete()
+    {
+        var job = CreateJob(totalTargets: 1, categoryKey: "tv");
+        var jobStore = new FakeCrawlJobStore(job);
+        var service = new CrawlJobService(jobStore, new FakeKnownCrawlTargetStore(), new FakeCrawlJobQueueWriter(), new PermissiveCrawlGovernanceService(), new RecordingAuditService());
+
+        await service.RecordTargetOutcomeAsync(job.JobId, "tv", "completed");
+        await service.RecordTargetOutcomeAsync(job.JobId, "tv", "failed");
+
+        var stored = await jobStore.GetAsync(job.JobId);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(stored, Is.Not.Null);
+            Assert.That(stored!.ProcessedTargets, Is.EqualTo(1));
+            Assert.That(stored.SuccessCount, Is.EqualTo(1));
+            Assert.That(stored.FailedCount, Is.EqualTo(0));
+            Assert.That(stored.Status, Is.EqualTo(CrawlJobStatuses.Completed));
         });
     }
 

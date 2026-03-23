@@ -11,7 +11,7 @@
             shellCategoryContext = CategoryContextStateFactory.Resolve(
                 shellCategories,
                 Context.Request.Query["category"].ToString(),
-                Context.Request.Query["selectedCategory"].ToArray(),
+                Context.Request.Query["selectedCategory"].Where(static value => !string.IsNullOrWhiteSpace(value)).Select(static value => value!).ToArray(),
                 Context.Request.Cookies[CategoryContextState.CookieName]);
             CategoryContextStateFactory.Persist(Context.Response, shellCategoryContext);
         }
