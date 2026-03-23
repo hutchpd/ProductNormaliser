@@ -25,10 +25,13 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public Exception? AnalyticsException { get; set; }
     public CreateCrawlJobRequest? LastCreatedJobRequest { get; private set; }
     public string? LastCancelledJobId { get; private set; }
+    public string? LastRequestedCrawlJobId { get; private set; }
     public ProductListResponseDto ProductPage { get; set; } = new();
     public ProductDetailDto? Product { get; set; }
     public IReadOnlyList<ProductChangeEventDto> ProductHistory { get; set; } = [];
     public ProductListQueryDto? LastProductQuery { get; private set; }
+    public string? LastRequestedProductId { get; private set; }
+    public string? LastRequestedProductHistoryId { get; private set; }
     public DetailedCoverageResponseDto DetailedCoverage { get; set; } = new();
     public IReadOnlyList<UnmappedAttributeDto> UnmappedAttributes { get; set; } = [];
     public IReadOnlyList<SourceQualityScoreDto> SourceQualityScores { get; set; } = [];
@@ -67,7 +70,11 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public Task<SourceDto> UpdateThrottlingAsync(string sourceId, UpdateSourceThrottlingRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
     public Task<CrawlJobListResponseDto> GetCrawlJobsAsync(CrawlJobQueryDto? query = null, CancellationToken cancellationToken = default)
         => CrawlJobsException is null ? Task.FromResult(CrawlJobsPage) : Task.FromException<CrawlJobListResponseDto>(CrawlJobsException);
-    public Task<CrawlJobDto?> GetCrawlJobAsync(string jobId, CancellationToken cancellationToken = default) => Task.FromResult(CrawlJob);
+    public Task<CrawlJobDto?> GetCrawlJobAsync(string jobId, CancellationToken cancellationToken = default)
+    {
+        LastRequestedCrawlJobId = jobId;
+        return Task.FromResult(CrawlJob);
+    }
     public Task<CrawlJobDto> CreateCrawlJobAsync(CreateCrawlJobRequest request, CancellationToken cancellationToken = default)
     {
         LastCreatedJobRequest = request;
@@ -90,8 +97,17 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         LastProductQuery = query;
         return Task.FromResult(ProductPage);
     }
-    public Task<ProductDetailDto?> GetProductAsync(string productId, CancellationToken cancellationToken = default) => Task.FromResult(Product);
-    public Task<IReadOnlyList<ProductChangeEventDto>> GetProductHistoryAsync(string productId, CancellationToken cancellationToken = default) => Task.FromResult(ProductHistory);
+    public Task<ProductDetailDto?> GetProductAsync(string productId, CancellationToken cancellationToken = default)
+    {
+        LastRequestedProductId = productId;
+        return Task.FromResult(Product);
+    }
+
+    public Task<IReadOnlyList<ProductChangeEventDto>> GetProductHistoryAsync(string productId, CancellationToken cancellationToken = default)
+    {
+        LastRequestedProductHistoryId = productId;
+        return Task.FromResult(ProductHistory);
+    }
 
     public Task<DetailedCoverageResponseDto> GetDetailedCoverageAsync(string categoryKey, CancellationToken cancellationToken = default)
     {
