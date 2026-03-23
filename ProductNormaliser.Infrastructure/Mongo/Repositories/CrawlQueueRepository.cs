@@ -1,10 +1,11 @@
 using MongoDB.Driver;
+using ProductNormaliser.Application.Discovery;
 using ProductNormaliser.Application.Crawls;
 using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Infrastructure.Mongo.Repositories;
 
-public sealed class CrawlQueueRepository(MongoDbContext context) : MongoRepositoryBase<CrawlQueueItem>(context.CrawlQueueItems), ICrawlQueueStore, ICrawlJobQueueWriter
+public sealed class CrawlQueueRepository(MongoDbContext context) : MongoRepositoryBase<CrawlQueueItem>(context.CrawlQueueItems), ICrawlQueueStore, ICrawlJobQueueWriter, IProductTargetQueueStore
 {
     public async Task<CrawlQueueItem?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
     {

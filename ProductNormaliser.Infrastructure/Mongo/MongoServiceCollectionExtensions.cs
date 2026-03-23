@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using ProductNormaliser.Application.Analyst;
 using ProductNormaliser.Application.Categories;
+using ProductNormaliser.Application.Discovery;
 using ProductNormaliser.Application.Crawls;
 using ProductNormaliser.Application.Governance;
 using ProductNormaliser.Application.Sources;
@@ -73,6 +74,7 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<ICanonicalProductStore>(serviceProvider => serviceProvider.GetRequiredService<CanonicalProductRepository>());
         services.AddSingleton<IProductOfferStore>(serviceProvider => serviceProvider.GetRequiredService<ProductOfferRepository>());
         services.AddSingleton<IMergeConflictStore>(serviceProvider => serviceProvider.GetRequiredService<MergeConflictRepository>());
+        services.AddSingleton<IProductTargetQueueStore>(serviceProvider => serviceProvider.GetRequiredService<CrawlQueueRepository>());
         services.AddSingleton<ICrawlQueueStore>(serviceProvider => serviceProvider.GetRequiredService<CrawlQueueRepository>());
         services.AddSingleton<ICrawlJobQueueWriter>(serviceProvider => serviceProvider.GetRequiredService<CrawlQueueRepository>());
         services.AddSingleton<ICrawlLogStore>(serviceProvider => serviceProvider.GetRequiredService<CrawlLogRepository>());
@@ -111,17 +113,22 @@ public static class MongoServiceCollectionExtensions
             .Bind(configuration.GetSection(CrawlGovernanceOptions.SectionName));
 
         services.AddSingleton<IDeltaProcessor, DeltaProcessor>();
+        services.AddSingleton<DiscoveryJobProgressService>();
+        services.AddSingleton<ProductTargetEnqueuer>();
+        services.AddSingleton<SourceDiscoveryService>();
         services.AddSingleton<ICrawlPriorityService, CrawlPriorityService>();
         services.AddSingleton<ICrawlQueueService, CrawlQueueService>();
         services.AddSingleton<ISourceProductBuilder, SourceProductBuilder>();
         services.AddSingleton<DiscoveryLinkPolicy>();
         services.AddSingleton<SitemapLocator>();
+        services.AddSingleton<ISitemapLocator>(serviceProvider => serviceProvider.GetRequiredService<SitemapLocator>());
         services.AddSingleton<SitemapParser>();
         services.AddSingleton<ProductLinkExtractor>();
         services.AddSingleton<ProductPageClassifier>();
         services.AddSingleton<ListingPageClassifier>();
-        services.AddSingleton<IDiscoveryQueueService, DiscoveryQueueService>();
-        services.AddSingleton<DiscoverySeedService>();
+        services.AddSingleton<DiscoveryQueueService>();
+        services.AddSingleton<IDiscoveryQueueService>(serviceProvider => serviceProvider.GetRequiredService<DiscoveryQueueService>());
+        services.AddSingleton<IDiscoverySeedWriter>(serviceProvider => serviceProvider.GetRequiredService<DiscoveryQueueService>());
 
         return services;
     }

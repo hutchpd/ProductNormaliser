@@ -13,6 +13,10 @@ public sealed class CrawlJob
     public int SkippedCount { get; set; }
     public int FailedCount { get; set; }
     public int CancelledCount { get; set; }
+    public int DiscoveredUrlCount { get; set; }
+    public int ConfirmedProductCount { get; set; }
+    public int RejectedPageCount { get; set; }
+    public int BlockedPageCount { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime LastUpdatedAt { get; set; }
     public DateTime? EstimatedCompletion { get; set; }

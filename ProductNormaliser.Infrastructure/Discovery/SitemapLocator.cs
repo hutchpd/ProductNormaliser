@@ -1,9 +1,10 @@
+using ProductNormaliser.Application.Discovery;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Infrastructure.Crawling;
 
 namespace ProductNormaliser.Infrastructure.Discovery;
 
-public sealed class SitemapLocator(IHttpFetcher httpFetcher, DiscoveryLinkPolicy discoveryLinkPolicy)
+public sealed class SitemapLocator(IHttpFetcher httpFetcher, DiscoveryLinkPolicy discoveryLinkPolicy) : ISitemapLocator
 {
     public async Task<IReadOnlyList<string>> LocateAsync(CrawlSource source, CancellationToken cancellationToken)
     {

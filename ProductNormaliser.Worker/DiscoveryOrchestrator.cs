@@ -75,7 +75,7 @@ public sealed class DiscoveryOrchestrator(
             }
 
             if (discoveryLinkPolicy.IsAllowed(source, item.CategoryKey, sitemapUrl, item.Depth + 1)
-                && await discoveryQueueService.EnqueueAsync(source, item.CategoryKey, sitemapUrl, "sitemap", item.Depth + 1, item.Url, cancellationToken))
+                && await discoveryQueueService.EnqueueAsync(source, item.CategoryKey, sitemapUrl, "sitemap", item.Depth + 1, item.Url, item.JobId, cancellationToken))
             {
                 enqueuedCount += 1;
             }
@@ -94,7 +94,7 @@ public sealed class DiscoveryOrchestrator(
         var productClassification = productPageClassifier.Classify(source, item.Url, html);
         if (productClassification.IsProductPage)
         {
-            var promoted = await discoveryQueueService.EnqueueProductAsync(source, item.CategoryKey, item.Url, item.Depth, item.ParentUrl, cancellationToken);
+            var promoted = await discoveryQueueService.EnqueueProductAsync(source, item.CategoryKey, item.Url, item.Depth, item.ParentUrl, item.JobId, cancellationToken);
             var message = promoted
                 ? $"Current page classified as product. {productClassification.Reason}"
                 : $"Current page matched product classification but was already queued. {productClassification.Reason}";
@@ -110,7 +110,7 @@ public sealed class DiscoveryOrchestrator(
         var enqueuedCount = 0;
         foreach (var productLink in listingClassification.Links.ProductLinks.Take(source.DiscoveryProfile.MaxUrlsPerRun))
         {
-            enqueuedCount += await discoveryQueueService.EnqueueProductAsync(source, item.CategoryKey, productLink, item.Depth + 1, item.Url, cancellationToken) ? 1 : 0;
+            enqueuedCount += await discoveryQueueService.EnqueueProductAsync(source, item.CategoryKey, productLink, item.Depth + 1, item.Url, item.JobId, cancellationToken) ? 1 : 0;
         }
 
         var listingLinks = listingClassification.Links.PaginationLinks
@@ -121,7 +121,7 @@ public sealed class DiscoveryOrchestrator(
 
         foreach (var link in listingLinks)
         {
-            enqueuedCount += await discoveryQueueService.EnqueueAsync(source, item.CategoryKey, link, "listing", item.Depth + 1, item.Url, cancellationToken) ? 1 : 0;
+            enqueuedCount += await discoveryQueueService.EnqueueAsync(source, item.CategoryKey, link, "listing", item.Depth + 1, item.Url, item.JobId, cancellationToken) ? 1 : 0;
         }
 
         return DiscoveryProcessResult.Completed($"Processed listing page and routed {enqueuedCount} URL(s).");
@@ -136,17 +136,17 @@ public sealed class DiscoveryOrchestrator(
 
         if (discoveryLinkPolicy.LooksLikeSitemap(url) && depth <= source.DiscoveryProfile.MaxDiscoveryDepth)
         {
-            return await discoveryQueueService.EnqueueAsync(source, categoryKey, url, "sitemap", depth, parentUrl, cancellationToken);
+            return await discoveryQueueService.EnqueueAsync(source, categoryKey, url, "sitemap", depth, parentUrl, null, cancellationToken);
         }
 
         if (productPageClassifier.IsLikelyProductUrl(source, url))
         {
-            return await discoveryQueueService.EnqueueProductAsync(source, categoryKey, url, depth, parentUrl, cancellationToken);
+            return await discoveryQueueService.EnqueueProductAsync(source, categoryKey, url, depth, parentUrl, null, cancellationToken);
         }
 
         if (listingPageClassifier.IsLikelyListingUrl(source, url) && depth <= source.DiscoveryProfile.MaxDiscoveryDepth)
         {
-            return await discoveryQueueService.EnqueueAsync(source, categoryKey, url, "listing", depth, parentUrl, cancellationToken);
+            return await discoveryQueueService.EnqueueAsync(source, categoryKey, url, "listing", depth, parentUrl, null, cancellationToken);
         }
 
         return false;

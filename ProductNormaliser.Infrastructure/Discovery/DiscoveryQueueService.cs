@@ -1,4 +1,4 @@
-using ProductNormaliser.Application.Crawls;
+using ProductNormaliser.Application.Discovery;
 using ProductNormaliser.Application.Sources;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Infrastructure.Mongo.Repositories;
@@ -8,8 +8,8 @@ namespace ProductNormaliser.Infrastructure.Discovery;
 public sealed class DiscoveryQueueService(
     IDiscoveryQueueStore discoveryQueueStore,
     IDiscoveredUrlStore discoveredUrlStore,
-    ICrawlQueueStore crawlQueueStore,
-    ICrawlJobQueueWriter crawlJobQueueWriter) : IDiscoveryQueueService
+    ProductTargetEnqueuer productTargetEnqueuer,
+    DiscoveryJobProgressService discoveryJobProgressService) : IDiscoveryQueueService, IDiscoverySeedWriter
 {
     public async Task<DiscoveryQueueLease?> DequeueAsync(CancellationToken cancellationToken)
     {
@@ -30,13 +30,20 @@ public sealed class DiscoveryQueueService(
         return null;
     }
 
-    public async Task<bool> EnqueueAsync(CrawlSource source, string categoryKey, string url, string itemType, int depth, string? parentUrl, CancellationToken cancellationToken)
+    public async Task<bool> EnqueueAsync(CrawlSource source, string categoryKey, string url, string itemType, int depth, string? parentUrl, string? jobId, CancellationToken cancellationToken)
     {
         var normalizedUrl = DiscoveryIdentity.NormalizeUrl(url);
         var queueId = DiscoveryIdentity.BuildDiscoveryQueueId(source.Id, categoryKey, url, itemType);
-        if (await discoveryQueueStore.GetByIdAsync(queueId, cancellationToken) is not null)
+        var existingQueueItem = await discoveryQueueStore.GetByIdAsync(queueId, cancellationToken);
+        if (existingQueueItem is not null)
         {
-            await RecordDiscoveredUrlAsync(source.Id, categoryKey, url, normalizedUrl, itemType, "pending", depth, parentUrl, promotedToCrawlUtc: null, nextAttemptUtc: DateTime.UtcNow, lastError: null, cancellationToken);
+            if (string.IsNullOrWhiteSpace(existingQueueItem.JobId) && !string.IsNullOrWhiteSpace(jobId))
+            {
+                existingQueueItem.JobId = jobId;
+                await discoveryQueueStore.UpsertAsync(existingQueueItem, cancellationToken);
+            }
+
+            await RecordDiscoveredUrlAsync(jobId, source.Id, categoryKey, url, normalizedUrl, itemType, "pending", depth, parentUrl, promotedToCrawlUtc: null, nextAttemptUtc: DateTime.UtcNow, lastError: null, cancellationToken);
             return false;
         }
 
@@ -44,7 +51,7 @@ public sealed class DiscoveryQueueService(
         await discoveryQueueStore.UpsertAsync(new DiscoveryQueueItem
         {
             Id = queueId,
-            JobId = null,
+            JobId = jobId,
             SourceId = source.Id,
             CategoryKey = categoryKey,
             Url = url,
@@ -58,38 +65,17 @@ public sealed class DiscoveryQueueService(
             NextAttemptUtc = now
         }, cancellationToken);
 
-        await RecordDiscoveredUrlAsync(source.Id, categoryKey, url, normalizedUrl, itemType, "pending", depth, parentUrl, promotedToCrawlUtc: null, nextAttemptUtc: now, lastError: null, cancellationToken);
+        await RecordDiscoveredUrlAsync(jobId, source.Id, categoryKey, url, normalizedUrl, itemType, "pending", depth, parentUrl, promotedToCrawlUtc: null, nextAttemptUtc: now, lastError: null, cancellationToken);
         return true;
     }
 
-    public async Task<bool> EnqueueProductAsync(CrawlSource source, string categoryKey, string url, int depth, string? parentUrl, CancellationToken cancellationToken)
+    public async Task<bool> EnqueueProductAsync(CrawlSource source, string categoryKey, string url, int depth, string? parentUrl, string? jobId, CancellationToken cancellationToken)
     {
         var normalizedUrl = DiscoveryIdentity.NormalizeUrl(url);
-        var crawlQueueId = DiscoveryIdentity.BuildCrawlQueueId(source.Id, categoryKey, url);
-        if (await crawlQueueStore.GetByIdAsync(crawlQueueId, cancellationToken) is not null)
-        {
-            await RecordDiscoveredUrlAsync(source.Id, categoryKey, url, normalizedUrl, "product", "pending", depth, parentUrl, DateTime.UtcNow, nextAttemptUtc: DateTime.UtcNow, lastError: null, cancellationToken);
-            return false;
-        }
-
         var now = DateTime.UtcNow;
-        await crawlJobQueueWriter.UpsertAsync(new CrawlQueueItem
-        {
-            Id = crawlQueueId,
-            JobId = null,
-            SourceName = source.Id,
-            SourceUrl = url,
-            CategoryKey = categoryKey,
-            Status = "queued",
-            AttemptCount = 0,
-            ConsecutiveFailureCount = 0,
-            ImportanceScore = 0.75m,
-            EnqueuedUtc = now,
-            NextAttemptUtc = now
-        }, cancellationToken);
-
-        await RecordDiscoveredUrlAsync(source.Id, categoryKey, url, normalizedUrl, "product", "pending", depth, parentUrl, now, nextAttemptUtc: now, lastError: null, cancellationToken);
-        return true;
+        var enqueued = await productTargetEnqueuer.EnqueueAsync(jobId, source, categoryKey, url, cancellationToken);
+        await RecordDiscoveredUrlAsync(jobId, source.Id, categoryKey, url, normalizedUrl, "product", "pending", depth, parentUrl, now, nextAttemptUtc: now, lastError: null, cancellationToken);
+        return enqueued;
     }
 
     public async Task MarkCompletedAsync(string queueItemId, CancellationToken cancellationToken)
@@ -105,6 +91,7 @@ public sealed class DiscoveryQueueService(
         existing.LastError = null;
         await discoveryQueueStore.UpsertAsync(existing, cancellationToken);
         await UpdateDiscoveredUrlStateAsync(existing, "processed", lastError: null, cancellationToken);
+        await discoveryJobProgressService.RecordProcessedPageAsync(existing.JobId, existing.CategoryKey, "completed", cancellationToken);
     }
 
     public async Task MarkSkippedAsync(string queueItemId, string reason, CancellationToken cancellationToken)
@@ -124,6 +111,7 @@ public sealed class DiscoveryQueueService(
             ? "blocked"
             : "skipped";
         await UpdateDiscoveredUrlStateAsync(existing, discoveredState, reason, cancellationToken);
+        await discoveryJobProgressService.RecordProcessedPageAsync(existing.JobId, existing.CategoryKey, discoveredState, cancellationToken);
     }
 
     public async Task MarkFailedAsync(string queueItemId, string reason, CancellationToken cancellationToken)
@@ -139,9 +127,11 @@ public sealed class DiscoveryQueueService(
         existing.LastError = reason;
         await discoveryQueueStore.UpsertAsync(existing, cancellationToken);
         await UpdateDiscoveredUrlStateAsync(existing, "rejected", reason, cancellationToken);
+        await discoveryJobProgressService.RecordProcessedPageAsync(existing.JobId, existing.CategoryKey, "rejected", cancellationToken);
     }
 
     private async Task RecordDiscoveredUrlAsync(
+        string? jobId,
         string sourceId,
         string categoryKey,
         string url,
@@ -158,11 +148,12 @@ public sealed class DiscoveryQueueService(
         var id = DiscoveryIdentity.BuildDiscoveredUrlId(sourceId, categoryKey, url);
         var now = DateTime.UtcNow;
         var existing = await discoveredUrlStore.GetByNormalizedUrlAsync(sourceId, categoryKey, normalizedUrl, cancellationToken);
+        var isNew = existing is null;
 
         await discoveredUrlStore.UpsertAsync(new DiscoveredUrl
         {
             Id = existing?.Id ?? id,
-            JobId = existing?.JobId,
+            JobId = existing?.JobId ?? jobId,
             SourceId = sourceId,
             CategoryKey = categoryKey,
             Url = url,
@@ -179,6 +170,11 @@ public sealed class DiscoveryQueueService(
             PromotedToCrawlUtc = promotedToCrawlUtc ?? existing?.PromotedToCrawlUtc,
             LastError = lastError ?? existing?.LastError
         }, cancellationToken);
+
+        if (isNew)
+        {
+            await discoveryJobProgressService.RecordDiscoveredUrlAsync(jobId, categoryKey, cancellationToken);
+        }
     }
 
     private async Task UpdateDiscoveredUrlStateAsync(DiscoveryQueueItem queueItem, string state, string? lastError, CancellationToken cancellationToken)

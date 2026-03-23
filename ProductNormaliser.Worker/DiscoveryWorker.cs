@@ -1,3 +1,4 @@
+using ProductNormaliser.Application.Discovery;
 using Microsoft.Extensions.Options;
 using ProductNormaliser.Infrastructure.Crawling;
 using ProductNormaliser.Infrastructure.Discovery;
@@ -5,7 +6,7 @@ using ProductNormaliser.Infrastructure.Discovery;
 namespace ProductNormaliser.Worker;
 
 public sealed class DiscoveryWorker(
-    DiscoverySeedService discoverySeedService,
+    SourceDiscoveryService sourceDiscoveryService,
     IDiscoveryQueueService discoveryQueueService,
     DiscoveryOrchestrator discoveryOrchestrator,
     IOptions<CrawlPipelineOptions> options,
@@ -17,7 +18,7 @@ public sealed class DiscoveryWorker(
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            await discoverySeedService.EnsureSeededAsync(stoppingToken);
+            await sourceDiscoveryService.EnsureSeededAsync(stoppingToken);
 
             var lease = await discoveryQueueService.DequeueAsync(stoppingToken);
             if (lease is null)
