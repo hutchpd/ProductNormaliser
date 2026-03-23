@@ -97,7 +97,7 @@ public sealed class QualityDashboardPageTests
     }
 
     [Test]
-    public async Task QualityDashboard_OnGetAsync_WithoutCategory_ShowsSelectionState()
+    public async Task QualityDashboard_OnGetAsync_WithoutCategory_DefaultsToFirstRolloutCategory()
     {
         var client = new FakeAdminApiClient
         {
@@ -110,8 +110,9 @@ public sealed class QualityDashboardPageTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(model.IsAwaitingSelection, Is.True);
-            Assert.That(client.LastCoverageCategoryKey, Is.Null);
+            Assert.That(model.IsAwaitingSelection, Is.False);
+            Assert.That(model.CategoryKey, Is.EqualTo("tv"));
+            Assert.That(client.LastCoverageCategoryKey, Is.EqualTo("tv"));
             Assert.That(model.ErrorMessage, Is.Null);
         });
     }

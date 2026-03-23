@@ -86,7 +86,7 @@ public sealed class SourceIntelligencePageTests
     }
 
     [Test]
-    public async Task SourceIntelligence_OnGetAsync_WithoutCategory_ShowsSelectionState()
+    public async Task SourceIntelligence_OnGetAsync_WithoutCategory_DefaultsToFirstRolloutCategory()
     {
         var client = new FakeAdminApiClient
         {
@@ -100,8 +100,9 @@ public sealed class SourceIntelligencePageTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(model.IsAwaitingSelection, Is.True);
-            Assert.That(client.LastSourceQualityCategoryKey, Is.Null);
+            Assert.That(model.IsAwaitingSelection, Is.False);
+            Assert.That(model.CategoryKey, Is.EqualTo("tv"));
+            Assert.That(client.LastSourceQualityCategoryKey, Is.EqualTo("tv"));
         });
     }
 

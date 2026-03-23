@@ -67,10 +67,7 @@ public sealed class ProductPageRenderingTests
         };
 
         await using var factory = new ProductWebApplicationFactory(fakeAdminApiClient);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            BaseAddress = new Uri("https://localhost")
-        });
+        using var client = await factory.CreateOperatorClientAsync();
 
         var html = await client.GetStringAsync("/Products?search=OLED&category=tv&minSourceCount=2&freshness=stale&conflictStatus=with_conflicts&completeness=partial&sort=stale&page=2");
 
@@ -99,10 +96,7 @@ public sealed class ProductPageRenderingTests
         };
 
         await using var factory = new ProductWebApplicationFactory(fakeAdminApiClient);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            BaseAddress = new Uri("https://localhost")
-        });
+        using var client = await factory.CreateOperatorClientAsync();
 
         var html = await client.GetStringAsync("/Products");
 
@@ -209,10 +203,7 @@ public sealed class ProductPageRenderingTests
         };
 
         await using var factory = new ProductWebApplicationFactory(fakeAdminApiClient);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            BaseAddress = new Uri("https://localhost")
-        });
+        using var client = await factory.CreateOperatorClientAsync();
 
         var html = await client.GetStringAsync("/Products/Details?productId=prod_tv_oled_001&category=tv&search=OLED&returnPage=3&minSourceCount=2&freshness=aging&conflictStatus=with_conflicts&completeness=partial&sort=conflicts_desc");
 

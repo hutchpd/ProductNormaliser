@@ -83,11 +83,12 @@ public sealed class IndexModel(
         try
         {
             Categories = InteractiveCategoryFilter.Apply(await adminApiClient.GetCategoriesAsync(cancellationToken));
-
-            if (Categories.All(category => !string.Equals(category.CategoryKey, CategoryKey, StringComparison.OrdinalIgnoreCase)))
-            {
-                CategoryKey = null;
-            }
+            var categoryContext = CategoryContextStateFactory.Resolve(
+                Categories,
+                CategoryKey,
+                null,
+                PageContext?.HttpContext?.Request.Cookies[CategoryContextState.CookieName]);
+            CategoryKey = categoryContext.PrimaryCategoryKey;
 
             if (IsAwaitingSelection)
             {

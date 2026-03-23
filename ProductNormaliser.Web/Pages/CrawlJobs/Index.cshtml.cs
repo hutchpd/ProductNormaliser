@@ -220,17 +220,18 @@ public sealed class IndexModel(
 
         Categories = InteractiveCategoryFilter.Apply(categoriesTask.Result);
         Sources = sourcesTask.Result.OrderBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
+        var categoryContext = CategoryContextStateFactory.Resolve(
+            Categories,
+            CategoryKey,
+            SeedSelectedCategoryKeys,
+            PageContext?.HttpContext?.Request.Cookies[CategoryContextState.CookieName]);
 
         Launch.RequestType = "category";
+        CategoryKey = categoryContext.PrimaryCategoryKey;
 
-        if (Launch.SelectedCategoryKeys.Count == 0 && SeedSelectedCategoryKeys.Count > 0)
+        if (Launch.SelectedCategoryKeys.Count == 0)
         {
-            Launch.SelectedCategoryKeys = CategorySelectorStateFactory.NormalizeSelection(Categories, SeedSelectedCategoryKeys).ToList();
-        }
-
-        if (Launch.SelectedCategoryKeys.Count == 0 && !string.IsNullOrWhiteSpace(CategoryKey))
-        {
-            Launch.SelectedCategoryKeys = [CategoryKey];
+            Launch.SelectedCategoryKeys = categoryContext.SelectedCategoryKeys.ToList();
         }
 
         CategorySelector = CategorySelectorStateFactory.Create(

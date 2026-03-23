@@ -13,6 +13,9 @@ public sealed class DetailsModel(
     [BindProperty(SupportsGet = true, Name = "jobId")]
     public string JobId { get; set; } = string.Empty;
 
+    [BindProperty(SupportsGet = true, Name = "selectedCategory")]
+    public List<string> SelectedCategoryKeys { get; set; } = [];
+
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -25,6 +28,10 @@ public sealed class DetailsModel(
     public StatusBadgeModel StatusBadge => CrawlJobPresentation.GetStatusBadge(Job?.Status);
 
     public int ProgressPercent => Job is null ? 0 : CrawlJobPresentation.GetProgressPercent(Job);
+
+    public IReadOnlyList<string> EffectiveSelectedCategoryKeys { get; private set; } = [];
+
+    public string BackToJobsUrl => BuildBackToJobsUrl(EffectiveSelectedCategoryKeys);
 
     public PageHeroModel Hero => Job is null
         ? new PageHeroModel
@@ -65,7 +72,7 @@ public sealed class DetailsModel(
         {
             var job = await adminApiClient.CancelCrawlJobAsync(JobId, cancellationToken);
             StatusMessage = $"Requested cancellation for crawl job '{job.JobId}'.";
-            return RedirectToPage(new { jobId = job.JobId });
+            return RedirectToPage(new { jobId = job.JobId, selectedCategory = SelectedCategoryKeys.ToArray() });
         }
         catch (AdminApiException exception)
         {
@@ -79,15 +86,23 @@ public sealed class DetailsModel(
 
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(JobId))
-        {
-            ErrorMessage = "Select a crawl job to view its progress details.";
-            Job = null;
-            return;
-        }
-
         try
         {
+            var categories = InteractiveCategoryFilter.Apply(await adminApiClient.GetCategoriesAsync(cancellationToken));
+            var categoryContext = CategoryContextStateFactory.Resolve(
+                categories,
+                null,
+                SelectedCategoryKeys,
+                PageContext?.HttpContext?.Request.Cookies[CategoryContextState.CookieName]);
+            EffectiveSelectedCategoryKeys = categoryContext.SelectedCategoryKeys;
+
+            if (string.IsNullOrWhiteSpace(JobId))
+            {
+                ErrorMessage = "Select a crawl job to view its progress details.";
+                Job = null;
+                return;
+            }
+
             Job = await adminApiClient.GetCrawlJobAsync(JobId, cancellationToken);
             if (Job is null)
             {
@@ -100,5 +115,16 @@ public sealed class DetailsModel(
             ErrorMessage = exception.Message;
             Job = null;
         }
+    }
+
+    private static string BuildBackToJobsUrl(IReadOnlyList<string> selectedCategoryKeys)
+    {
+        if (selectedCategoryKeys.Count == 0)
+        {
+            return "/CrawlJobs/Index";
+        }
+
+        var query = string.Join("&", selectedCategoryKeys.Select(categoryKey => $"selectedCategory={Uri.EscapeDataString(categoryKey)}"));
+        return $"/CrawlJobs/Index?{query}";
     }
 }

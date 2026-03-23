@@ -36,8 +36,13 @@ public sealed class IndexModel(
     {
         try
         {
-            Categories = await adminApiClient.GetCategoriesAsync(cancellationToken);
-            SelectedCategoryKeys = CategorySelectorStateFactory.NormalizeSelection(Categories, SelectedCategoryKeys).ToList();
+            Categories = InteractiveCategoryFilter.Apply(await adminApiClient.GetCategoriesAsync(cancellationToken));
+            var categoryContext = CategoryContextStateFactory.Resolve(
+                Categories,
+                null,
+                SelectedCategoryKeys,
+                PageContext?.HttpContext?.Request.Cookies[CategoryContextState.CookieName]);
+            SelectedCategoryKeys = categoryContext.SelectedCategoryKeys.ToList();
             Selector = CategorySelectorStateFactory.Create(
                 Categories,
                 SelectedCategoryKeys,

@@ -36,7 +36,7 @@ public sealed class CrawlJobsPageTests
     }
 
     [Test]
-    public async Task CrawlJobsIndex_OnPostLaunchAsync_ReturnsPageForEmptySelection()
+    public async Task CrawlJobsIndex_OnPostLaunchAsync_DefaultsToCurrentCategoryContextWhenSelectionIsEmpty()
     {
         var client = CreateClient();
         var model = new ProductNormaliser.Web.Pages.CrawlJobs.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.CrawlJobs.IndexModel>.Instance)
@@ -48,8 +48,9 @@ public sealed class CrawlJobsPageTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result, Is.TypeOf<PageResult>());
-            Assert.That(model.ModelState[$"{nameof(model.Launch)}.{nameof(model.Launch.SelectedCategoryKeys)}"]?.Errors.Select(error => error.ErrorMessage), Does.Contain("Choose at least one category before launching a crawl."));
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
+            Assert.That(client.LastCreatedJobRequest, Is.Not.Null);
+            Assert.That(client.LastCreatedJobRequest!.RequestedCategories, Is.EqualTo(new[] { "tv" }));
         });
     }
 

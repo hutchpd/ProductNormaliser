@@ -1,0 +1,66 @@
+@using ProductNormaliser.Web.Models
+@model CategoryContextState
+
+@if (Model.AvailableCategories.Count > 0)
+{
+    var currentPath = Context.Request.Path.HasValue ? Context.Request.Path.Value! : "/";
+
+    <section class="category-context-shell panel panel-muted">
+        <div class="category-context-copy">
+            <span class="eyebrow">Current Category Context</span>
+            <strong>@Model.SelectionSummary</strong>
+            <span class="subtle-copy">Products and Quality follow the primary category. Crawl pages preserve the full selected set.</span>
+            @if (Model.InvalidCategoryKeys.Count > 0)
+            {
+                <span class="subtle-copy text-danger">Ignored invalid categories: @string.Join(", ", Model.InvalidCategoryKeys)</span>
+            }
+        </div>
+
+        <form method="get" action="@currentPath" class="category-context-form">
+            @foreach (var queryEntry in Context.Request.Query)
+            {
+                if (string.Equals(queryEntry.Key, "category", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(queryEntry.Key, "selectedCategory", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(queryEntry.Key, "page", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                foreach (var value in queryEntry.Value)
+                {
+                    <input type="hidden" name="@queryEntry.Key" value="@value" />
+                }
+            }
+
+            @foreach (var categoryKey in Model.SelectedCategoryKeys.Where(categoryKey => !string.Equals(categoryKey, Model.PrimaryCategoryKey, StringComparison.OrdinalIgnoreCase)))
+            {
+                <input type="hidden" name="selectedCategory" value="@categoryKey" />
+            }
+
+            <label class="subtle-copy" for="shell-category-context">Primary category</label>
+            <select id="shell-category-context" name="category" class="form-select form-select-sm" onchange="this.form.submit()">
+                @foreach (var category in Model.AvailableCategories)
+                {
+                    <option value="@category.CategoryKey" selected="@string.Equals(category.CategoryKey, Model.PrimaryCategoryKey, StringComparison.OrdinalIgnoreCase)">@category.DisplayName</option>
+                }
+            </select>
+        </form>
+
+        <div class="category-context-actions">
+            <a href="@BuildEditContextUrl(Model.SelectedCategoryKeys)" class="btn btn-outline-dark btn-sm">Edit category set</a>
+        </div>
+    </section>
+}
+
+@functions {
+    private string BuildEditContextUrl(IReadOnlyList<string> selectedCategoryKeys)
+    {
+        if (selectedCategoryKeys.Count == 0)
+        {
+            return "/Categories/Index";
+        }
+
+        var query = string.Join("&", selectedCategoryKeys.Select(categoryKey => $"selectedCategory={Uri.EscapeDataString(categoryKey)}"));
+        return $"/Categories/Index?{query}";
+    }
+}

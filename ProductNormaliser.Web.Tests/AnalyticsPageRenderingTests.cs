@@ -78,7 +78,7 @@ public sealed class AnalyticsPageRenderingTests
         };
 
         await using var factory = new ProductWebApplicationFactory(fakeAdminApiClient);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+        using var client = await factory.CreateOperatorClientAsync();
 
         var html = await client.GetStringAsync("/Quality?category=monitor");
 
@@ -148,7 +148,7 @@ public sealed class AnalyticsPageRenderingTests
         };
 
         await using var factory = new ProductWebApplicationFactory(fakeAdminApiClient);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri("https://localhost") });
+        using var client = await factory.CreateOperatorClientAsync();
 
         var html = await client.GetStringAsync("/Sources/Intelligence?category=monitor&source=Northwind");
 

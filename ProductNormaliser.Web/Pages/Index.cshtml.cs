@@ -149,16 +149,16 @@ public sealed class IndexModel(
             await Task.WhenAll(categoriesTask, sourcesTask, statsTask, jobsTask);
 
             Categories = InteractiveCategoryFilter.Apply(categoriesTask.Result);
+            var categoryContext = CategoryContextStateFactory.Resolve(
+                Categories,
+                SelectedCategoryKey,
+                null,
+                PageContext?.HttpContext?.Request.Cookies[CategoryContextState.CookieName]);
             Sources = sourcesTask.Result.OrderBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
             Stats = statsTask.Result;
             RecentJobs = jobsTask.Result.Items;
 
-            var effectiveCategoryKey = SelectedCategoryKey;
-            if (string.IsNullOrWhiteSpace(effectiveCategoryKey))
-            {
-                effectiveCategoryKey = Categories.FirstOrDefault(category => category.IsEnabled)?.CategoryKey
-                    ?? Categories.FirstOrDefault()?.CategoryKey;
-            }
+            var effectiveCategoryKey = categoryContext.PrimaryCategoryKey;
 
             if (!string.IsNullOrWhiteSpace(effectiveCategoryKey))
             {
@@ -171,9 +171,9 @@ public sealed class IndexModel(
                 QuickCrawl.CategoryKey = SelectedCategoryKey;
             }
 
-            if (RegisterSource.SelectedCategoryKeys.Count == 0 && !string.IsNullOrWhiteSpace(SelectedCategoryKey))
+            if (RegisterSource.SelectedCategoryKeys.Count == 0 && categoryContext.SelectedCategoryKeys.Count > 0)
             {
-                RegisterSource.SelectedCategoryKeys = [SelectedCategoryKey];
+                RegisterSource.SelectedCategoryKeys = categoryContext.SelectedCategoryKeys.ToList();
             }
         }
         catch (AdminApiException exception)

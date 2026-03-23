@@ -23,7 +23,7 @@
             <div class="empty-panel">
                 <p class="empty-state">No crawl job details are available yet.</p>
                 <div class="actions-bar inline-actions">
-                    <a asp-page="/CrawlJobs/Index" class="btn btn-outline-dark">Back to crawl jobs</a>
+                    <a href="@Model.BackToJobsUrl" class="btn btn-outline-dark">Back to crawl jobs</a>
                 </div>
             </div>
         </section>
@@ -96,11 +96,15 @@
                 </dl>
 
                 <div class="actions-bar inline-actions">
-                    <a asp-page="/CrawlJobs/Index" class="btn btn-outline-dark">Back to crawl jobs</a>
+                    <a href="@Model.BackToJobsUrl" class="btn btn-outline-dark">Back to crawl jobs</a>
                     @if (Model.ShouldAutoRefresh)
                     {
                         <form method="post" asp-page-handler="Cancel" class="inline-form">
                             <input type="hidden" asp-for="JobId" />
+                            @foreach (var categoryKey in Model.EffectiveSelectedCategoryKeys)
+                            {
+                                <input type="hidden" name="selectedCategory" value="@categoryKey" />
+                            }
                             <button type="submit" class="btn btn-outline-danger">Stop crawl job</button>
                         </form>
                     }

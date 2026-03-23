@@ -109,8 +109,14 @@ public sealed class IndexModel(
     {
         try
         {
-            var categoriesTask = adminApiClient.GetCategoriesAsync(cancellationToken);
-            var productsTask = adminApiClient.GetProductsAsync(new ProductListQueryDto
+            Categories = InteractiveCategoryFilter.Apply(await adminApiClient.GetCategoriesAsync(cancellationToken));
+            var categoryContext = CategoryContextStateFactory.Resolve(
+                Categories,
+                CategoryKey,
+                null,
+                PageContext?.HttpContext?.Request.Cookies[CategoryContextState.CookieName]);
+            CategoryKey = categoryContext.PrimaryCategoryKey;
+            Products = await adminApiClient.GetProductsAsync(new ProductListQueryDto
             {
                 CategoryKey = CategoryKey,
                 Search = Search,
@@ -122,11 +128,6 @@ public sealed class IndexModel(
                 Page = Math.Max(1, PageNumber),
                 PageSize = 12
             }, cancellationToken);
-
-            await Task.WhenAll(categoriesTask, productsTask);
-
-            Categories = InteractiveCategoryFilter.Apply(categoriesTask.Result);
-            Products = productsTask.Result;
         }
         catch (AdminApiException exception)
         {

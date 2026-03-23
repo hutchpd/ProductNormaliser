@@ -1,4 +1,27 @@
-﻿<!DOCTYPE html>
+﻿@using ProductNormaliser.Web.Models
+@inject ProductNormaliser.Web.Services.IProductNormaliserAdminApiClient AdminApiClient
+@{
+    CategoryContextState? shellCategoryContext = null;
+
+    if (User.Identity?.IsAuthenticated == true)
+    {
+        try
+        {
+            var shellCategories = InteractiveCategoryFilter.Apply(await AdminApiClient.GetCategoriesAsync());
+            shellCategoryContext = CategoryContextStateFactory.Resolve(
+                shellCategories,
+                Context.Request.Query["category"].ToString(),
+                Context.Request.Query["selectedCategory"].ToArray(),
+                Context.Request.Cookies[CategoryContextState.CookieName]);
+            CategoryContextStateFactory.Persist(Context.Response, shellCategoryContext);
+        }
+        catch
+        {
+            shellCategoryContext = null;
+        }
+    }
+}
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
@@ -59,6 +82,11 @@
         </nav>
     </header>
     <div class="container-xl">
+        @if (shellCategoryContext is not null)
+        {
+            <partial name="_CategoryContextShell" model="shellCategoryContext" />
+        }
+
         <main role="main" class="pb-3">
             @RenderBody()
         </main>

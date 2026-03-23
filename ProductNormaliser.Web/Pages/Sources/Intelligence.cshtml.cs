@@ -91,14 +91,16 @@ public sealed class IntelligenceModel(
             await Task.WhenAll(categoriesTask, sourcesTask);
 
             Categories = InteractiveCategoryFilter.Apply(categoriesTask.Result);
+            var categoryContext = CategoryContextStateFactory.Resolve(
+                Categories,
+                CategoryKey,
+                null,
+                PageContext?.HttpContext?.Request.Cookies[CategoryContextState.CookieName]);
             Sources = sourcesTask.Result
                 .OrderBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
-            if (Categories.All(category => !string.Equals(category.CategoryKey, CategoryKey, StringComparison.OrdinalIgnoreCase)))
-            {
-                CategoryKey = null;
-            }
+            CategoryKey = categoryContext.PrimaryCategoryKey;
 
             if (IsAwaitingSelection)
             {
