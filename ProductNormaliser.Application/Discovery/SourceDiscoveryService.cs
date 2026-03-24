@@ -9,7 +9,7 @@ public sealed class SourceDiscoveryService(
     ICrawlSourceStore crawlSourceStore,
     ISitemapLocator sitemapLocator,
     IDiscoverySeedWriter discoverySeedWriter,
-    ILogger<SourceDiscoveryService>? logger = null)
+    ILogger<SourceDiscoveryService>? logger = null) : ISourceDiscoveryService
 {
     private readonly ILogger<SourceDiscoveryService> logger = logger ?? NullLogger<SourceDiscoveryService>.Instance;
 
@@ -18,10 +18,9 @@ public sealed class SourceDiscoveryService(
         return SeedAsync([], [], jobId: null, cancellationToken);
     }
 
-    public async Task<SourceDiscoverySeedResult> SeedAsync(
+    public async Task<SourceDiscoveryPreview> PreviewAsync(
         IReadOnlyCollection<string>? categoryKeys,
         IReadOnlyCollection<string>? sourceIds,
-        string? jobId,
         CancellationToken cancellationToken = default)
     {
         var normalizedCategories = NormalizeValues(categoryKeys);
@@ -39,11 +38,8 @@ public sealed class SourceDiscoveryService(
             .Where(item => item.Categories.Count > 0)
             .ToArray();
 
-        var result = new SourceDiscoverySeedResult
-        {
-            SourceCount = selectedSources.Length,
-            CategoryCount = selectedSources.Sum(item => item.Categories.Count)
-        };
+        var seeds = new List<SourceDiscoverySeedDescriptor>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var selection in selectedSources)
         {
@@ -54,20 +50,68 @@ public sealed class SourceDiscoveryService(
                 {
                     foreach (var entryPage in entryPages)
                     {
-                        if (await discoverySeedWriter.EnqueueAsync(selection.Source, categoryKey, entryPage, "listing", depth: 0, parentUrl: null, jobId, cancellationToken))
-                        {
-                            result.SeedCount += 1;
-                        }
+                        AddSeed(selection.Source.Id, categoryKey, entryPage, "listing");
                     }
                 }
 
                 foreach (var sitemapUrl in sitemapUrls)
                 {
-                    if (await discoverySeedWriter.EnqueueAsync(selection.Source, categoryKey, sitemapUrl, "sitemap", depth: 0, parentUrl: null, jobId, cancellationToken))
-                    {
-                        result.SeedCount += 1;
-                    }
+                    AddSeed(selection.Source.Id, categoryKey, sitemapUrl, "sitemap");
                 }
+            }
+        }
+
+        return new SourceDiscoveryPreview
+        {
+            SourceCount = selectedSources.Length,
+            CategoryCount = selectedSources.Sum(item => item.Categories.Count),
+            Seeds = seeds
+        };
+
+        void AddSeed(string sourceId, string categoryKey, string url, string classification)
+        {
+            var key = $"{sourceId}|{categoryKey}|{classification}|{url}";
+            if (!seen.Add(key))
+            {
+                return;
+            }
+
+            seeds.Add(new SourceDiscoverySeedDescriptor
+            {
+                SourceId = sourceId,
+                CategoryKey = categoryKey,
+                Url = url,
+                Classification = classification
+            });
+        }
+    }
+
+    public async Task<SourceDiscoverySeedResult> SeedAsync(
+        IReadOnlyCollection<string>? categoryKeys,
+        IReadOnlyCollection<string>? sourceIds,
+        string? jobId,
+        CancellationToken cancellationToken = default)
+    {
+        var preview = await PreviewAsync(categoryKeys, sourceIds, cancellationToken);
+        var sources = await crawlSourceStore.ListAsync(cancellationToken);
+        var sourceMap = sources.ToDictionary(source => source.Id, StringComparer.OrdinalIgnoreCase);
+
+        var result = new SourceDiscoverySeedResult
+        {
+            SourceCount = preview.SourceCount,
+            CategoryCount = preview.CategoryCount
+        };
+
+        foreach (var seed in preview.Seeds)
+        {
+            if (!sourceMap.TryGetValue(seed.SourceId, out var source))
+            {
+                continue;
+            }
+
+            if (await discoverySeedWriter.EnqueueAsync(source, seed.CategoryKey, seed.Url, seed.Classification, depth: 0, parentUrl: null, jobId, cancellationToken))
+            {
+                result.SeedCount += 1;
             }
         }
 
@@ -103,9 +147,24 @@ public sealed class SourceDiscoveryService(
     }
 }
 
+public sealed class SourceDiscoveryPreview
+{
+    public int SourceCount { get; init; }
+    public int CategoryCount { get; init; }
+    public IReadOnlyList<SourceDiscoverySeedDescriptor> Seeds { get; init; } = [];
+}
+
 public sealed class SourceDiscoverySeedResult
 {
     public int SourceCount { get; init; }
     public int CategoryCount { get; init; }
     public int SeedCount { get; set; }
+}
+
+public sealed class SourceDiscoverySeedDescriptor
+{
+    public string SourceId { get; init; } = string.Empty;
+    public string CategoryKey { get; init; } = string.Empty;
+    public string Url { get; init; } = string.Empty;
+    public string Classification { get; init; } = string.Empty;
 }

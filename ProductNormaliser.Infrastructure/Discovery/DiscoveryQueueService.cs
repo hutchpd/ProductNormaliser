@@ -35,6 +35,9 @@ public sealed class DiscoveryQueueService(
         var normalizedUrl = DiscoveryIdentity.NormalizeUrl(url);
         var queueId = DiscoveryIdentity.BuildDiscoveryQueueId(source.Id, categoryKey, url, itemType);
         var existingQueueItem = await discoveryQueueStore.GetByIdAsync(queueId, cancellationToken);
+        var shouldCountForJob = !string.IsNullOrWhiteSpace(jobId)
+            && (existingQueueItem is null || string.IsNullOrWhiteSpace(existingQueueItem.JobId));
+
         if (existingQueueItem is not null)
         {
             if (string.IsNullOrWhiteSpace(existingQueueItem.JobId) && !string.IsNullOrWhiteSpace(jobId))
@@ -43,7 +46,7 @@ public sealed class DiscoveryQueueService(
                 await discoveryQueueStore.UpsertAsync(existingQueueItem, cancellationToken);
             }
 
-            await RecordDiscoveredUrlAsync(jobId, source.Id, categoryKey, url, normalizedUrl, itemType, "pending", depth, parentUrl, promotedToCrawlUtc: null, nextAttemptUtc: DateTime.UtcNow, lastError: null, cancellationToken);
+            await RecordDiscoveredUrlAsync(jobId, source.Id, categoryKey, url, normalizedUrl, itemType, "pending", depth, parentUrl, promotedToCrawlUtc: null, nextAttemptUtc: DateTime.UtcNow, lastError: null, shouldCountForJob, cancellationToken);
             return false;
         }
 
@@ -65,7 +68,7 @@ public sealed class DiscoveryQueueService(
             NextAttemptUtc = now
         }, cancellationToken);
 
-        await RecordDiscoveredUrlAsync(jobId, source.Id, categoryKey, url, normalizedUrl, itemType, "pending", depth, parentUrl, promotedToCrawlUtc: null, nextAttemptUtc: now, lastError: null, cancellationToken);
+        await RecordDiscoveredUrlAsync(jobId, source.Id, categoryKey, url, normalizedUrl, itemType, "pending", depth, parentUrl, promotedToCrawlUtc: null, nextAttemptUtc: now, lastError: null, shouldCountForJob, cancellationToken);
         return true;
     }
 
@@ -74,7 +77,7 @@ public sealed class DiscoveryQueueService(
         var normalizedUrl = DiscoveryIdentity.NormalizeUrl(url);
         var now = DateTime.UtcNow;
         var enqueued = await productTargetEnqueuer.EnqueueAsync(jobId, source, categoryKey, url, cancellationToken);
-        await RecordDiscoveredUrlAsync(jobId, source.Id, categoryKey, url, normalizedUrl, "product", "pending", depth, parentUrl, now, nextAttemptUtc: now, lastError: null, cancellationToken);
+        await RecordDiscoveredUrlAsync(jobId, source.Id, categoryKey, url, normalizedUrl, "product", "pending", depth, parentUrl, now, nextAttemptUtc: now, lastError: null, countForJob: false, cancellationToken);
         return enqueued;
     }
 
@@ -143,6 +146,7 @@ public sealed class DiscoveryQueueService(
         DateTime? promotedToCrawlUtc,
         DateTime? nextAttemptUtc,
         string? lastError,
+        bool countForJob,
         CancellationToken cancellationToken)
     {
         var id = DiscoveryIdentity.BuildDiscoveredUrlId(sourceId, categoryKey, url);
@@ -171,7 +175,7 @@ public sealed class DiscoveryQueueService(
             LastError = lastError ?? existing?.LastError
         }, cancellationToken);
 
-        if (isNew)
+        if (countForJob)
         {
             await discoveryJobProgressService.RecordDiscoveredUrlAsync(jobId, categoryKey, cancellationToken);
         }

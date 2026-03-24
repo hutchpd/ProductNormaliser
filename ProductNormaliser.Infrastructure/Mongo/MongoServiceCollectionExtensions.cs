@@ -116,6 +116,7 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<DiscoveryJobProgressService>();
         services.AddSingleton<ProductTargetEnqueuer>();
         services.AddSingleton<SourceDiscoveryService>();
+        services.AddSingleton<ISourceDiscoveryService>(serviceProvider => serviceProvider.GetRequiredService<SourceDiscoveryService>());
         services.AddSingleton<IRobotsTxtCache, RobotsTxtCache>();
         services.AddSingleton<ICrawlPriorityService, CrawlPriorityService>();
         services.AddSingleton<ICrawlQueueService, CrawlQueueService>();

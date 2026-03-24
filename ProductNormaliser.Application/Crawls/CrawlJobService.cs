@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using ProductNormaliser.Application.Discovery;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ProductNormaliser.Application.Governance;
@@ -11,6 +12,7 @@ namespace ProductNormaliser.Application.Crawls;
 public sealed class CrawlJobService(
     ICrawlJobStore crawlJobStore,
     IKnownCrawlTargetStore knownCrawlTargetStore,
+    ISourceDiscoveryService sourceDiscoveryService,
     ICrawlJobQueueWriter crawlJobQueueWriter,
     ICrawlGovernanceService crawlGovernanceService,
     IManagementAuditService managementAuditService,
@@ -40,6 +42,11 @@ public sealed class CrawlJobService(
         var productIds = NormalizeValues(request.RequestedProductIds);
 
         ValidateRequest(requestType, categories, sources, productIds);
+
+        if (string.Equals(requestType, CrawlJobRequestTypes.Category, StringComparison.OrdinalIgnoreCase))
+        {
+            return await CreateDiscoverySeededCategoryJobAsync(requestType, categories, sources, productIds, request, activity, cancellationToken);
+        }
 
         var targets = await ResolveTargetsAsync(requestType, categories, sources, productIds, cancellationToken);
         if (targets.Count == 0)
@@ -133,6 +140,110 @@ public sealed class CrawlJobService(
         ProductNormaliserTelemetry.CrawlJobTargetCount.Record(targets.Count, createTags);
 
         return job;
+    }
+
+    private async Task<CrawlJob> CreateDiscoverySeededCategoryJobAsync(
+        string requestType,
+        IReadOnlyList<string> categories,
+        IReadOnlyList<string> sources,
+        IReadOnlyList<string> productIds,
+        CreateCrawlJobRequest request,
+        Activity? activity,
+        CancellationToken cancellationToken)
+    {
+        var preview = await sourceDiscoveryService.PreviewAsync(categories, sources, cancellationToken);
+        if (preview.Seeds.Count == 0)
+        {
+            throw new ArgumentException("No discovery seeds were found for the requested categories and sources.", nameof(request));
+        }
+
+        var governanceTargets = preview.Seeds
+            .Select(seed => new CrawlJobTargetDescriptor
+            {
+                SourceName = seed.SourceId,
+                SourceUrl = seed.Url,
+                CategoryKey = seed.CategoryKey
+            })
+            .ToArray();
+
+        crawlGovernanceService.ValidateCrawlRequest(requestType, categories, sources, productIds, governanceTargets, nameof(request));
+
+        var now = DateTime.UtcNow;
+        var jobId = $"job_{Guid.NewGuid():N}";
+        var categoryBreakdown = preview.Seeds
+            .Select(seed => seed.CategoryKey)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Union(categories, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(categoryKey => categoryKey, StringComparer.OrdinalIgnoreCase)
+            .Select(categoryKey => new CrawlJobCategoryBreakdown
+            {
+                CategoryKey = categoryKey,
+                TotalTargets = 0,
+                DiscoveredUrlCount = 0,
+                ConfirmedProductCount = 0,
+                RejectedPageCount = 0,
+                BlockedPageCount = 0
+            })
+            .ToList();
+
+        var job = new CrawlJob
+        {
+            JobId = jobId,
+            RequestType = requestType,
+            RequestedCategories = categories,
+            RequestedSources = sources,
+            RequestedProductIds = productIds,
+            TotalTargets = 0,
+            DiscoveredUrlCount = 0,
+            ConfirmedProductCount = 0,
+            RejectedPageCount = 0,
+            BlockedPageCount = 0,
+            StartedAt = now,
+            LastUpdatedAt = now,
+            Status = CrawlJobStatuses.Pending,
+            PerCategoryBreakdown = categoryBreakdown
+        };
+
+        activity?.SetTag("crawl.job.id", job.JobId);
+        activity?.SetTag("crawl.job.request_type", requestType);
+        activity?.SetTag("crawl.job.target_count", preview.Seeds.Count);
+
+        await crawlJobStore.UpsertAsync(job, cancellationToken);
+        var seedResult = await sourceDiscoveryService.SeedAsync(categories, sources, jobId, cancellationToken);
+        var seededJob = await crawlJobStore.GetAsync(jobId, cancellationToken) ?? job;
+
+        await managementAuditService.RecordAsync(
+            ManagementAuditActions.CrawlJobCreated,
+            "crawl_job",
+            seededJob.JobId,
+            new Dictionary<string, string>
+            {
+                ["requestType"] = requestType,
+                ["targetCount"] = seededJob.TotalTargets.ToString(CultureInfo.InvariantCulture),
+                ["requestedCategories"] = string.Join(",", categories),
+                ["requestedSources"] = string.Join(",", sources),
+                ["requestedProductIds"] = string.Join(",", productIds),
+                ["seededSourceCount"] = seedResult.SourceCount.ToString(CultureInfo.InvariantCulture),
+                ["seededCategoryCount"] = seedResult.CategoryCount.ToString(CultureInfo.InvariantCulture),
+                ["seededItemCount"] = seedResult.SeedCount.ToString(CultureInfo.InvariantCulture)
+            },
+            cancellationToken);
+
+        logger.LogInformation(
+            "Created discovery-seeded crawl job {JobId} with initialSeeds={InitialSeedCount}, categories={RequestedCategories}, sources={RequestedSources}",
+            seededJob.JobId,
+            seededJob.TotalTargets,
+            string.Join(',', categories),
+            string.Join(',', sources));
+
+        var createTags = new TagList
+        {
+            { "request.type", requestType }
+        };
+        ProductNormaliserTelemetry.CrawlJobsCreated.Add(1, createTags);
+        ProductNormaliserTelemetry.CrawlJobTargetCount.Record(seededJob.TotalTargets, createTags);
+
+        return seededJob;
     }
 
     public async Task<CrawlJob?> CancelAsync(string jobId, CancellationToken cancellationToken = default)

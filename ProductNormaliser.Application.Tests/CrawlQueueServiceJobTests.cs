@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using ProductNormaliser.Application.Crawls;
+using ProductNormaliser.Application.Discovery;
 using ProductNormaliser.Application.Governance;
 using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
@@ -28,7 +29,7 @@ public sealed class CrawlQueueServiceJobTests
         var context = MongoIntegrationTestFixture.Context;
         var queueStore = new CrawlQueueRepository(context);
         var jobStore = new CrawlJobRepository(context);
-        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), queueStore, new PermissiveCrawlGovernanceService(), new NullManagementAuditService());
+        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), new NoOpSourceDiscoveryService(), queueStore, new PermissiveCrawlGovernanceService(), new NullManagementAuditService());
         await jobStore.UpsertAsync(CreateJob("job_1", totalTargets: 1));
         await queueStore.UpsertAsync(new CrawlQueueItem
         {
@@ -62,7 +63,7 @@ public sealed class CrawlQueueServiceJobTests
         var context = MongoIntegrationTestFixture.Context;
         var queueStore = new CrawlQueueRepository(context);
         var jobStore = new CrawlJobRepository(context);
-        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), queueStore, new PermissiveCrawlGovernanceService(), new NullManagementAuditService());
+        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), new NoOpSourceDiscoveryService(), queueStore, new PermissiveCrawlGovernanceService(), new NullManagementAuditService());
         await jobStore.UpsertAsync(CreateJob("job_1", totalTargets: 1));
         await queueStore.UpsertAsync(new CrawlQueueItem
         {
@@ -102,7 +103,7 @@ public sealed class CrawlQueueServiceJobTests
         var context = MongoIntegrationTestFixture.Context;
         var queueStore = new CrawlQueueRepository(context);
         var jobStore = new CrawlJobRepository(context);
-        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), queueStore, new PermissiveCrawlGovernanceService(), new NullManagementAuditService());
+        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), new NoOpSourceDiscoveryService(), queueStore, new PermissiveCrawlGovernanceService(), new NullManagementAuditService());
         await jobStore.UpsertAsync(CreateJob("job_1", totalTargets: 1));
         await queueStore.UpsertAsync(new CrawlQueueItem
         {
@@ -143,7 +144,7 @@ public sealed class CrawlQueueServiceJobTests
         var context = MongoIntegrationTestFixture.Context;
         var queueStore = new CrawlQueueRepository(context);
         var jobStore = new CrawlJobRepository(context);
-        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), queueStore, new PermissiveCrawlGovernanceService(), new NullManagementAuditService());
+        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), new NoOpSourceDiscoveryService(), queueStore, new PermissiveCrawlGovernanceService(), new NullManagementAuditService());
         await jobStore.UpsertAsync(CreateJob("job_retry", totalTargets: 1));
         await queueStore.UpsertAsync(new CrawlQueueItem
         {
@@ -216,7 +217,7 @@ public sealed class CrawlQueueServiceJobTests
         var context = MongoIntegrationTestFixture.Context;
         var queueStore = new CrawlQueueRepository(context);
         var jobStore = new CrawlJobRepository(context);
-        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), queueStore, new PermissiveCrawlGovernanceService(), new NullManagementAuditService());
+        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), new NoOpSourceDiscoveryService(), queueStore, new PermissiveCrawlGovernanceService(), new NullManagementAuditService());
         await jobStore.UpsertAsync(CreateJob("job_partial", totalTargets: 2));
         await queueStore.UpsertAsync(new CrawlQueueItem
         {
@@ -271,7 +272,7 @@ public sealed class CrawlQueueServiceJobTests
         var context = MongoIntegrationTestFixture.Context;
         var queueStore = new CrawlQueueRepository(context);
         var jobStore = new CrawlJobRepository(context);
-        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), queueStore, new PermissiveCrawlGovernanceService(), new NullManagementAuditService());
+        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), new NoOpSourceDiscoveryService(), queueStore, new PermissiveCrawlGovernanceService(), new NullManagementAuditService());
         await jobStore.UpsertAsync(CreateJob("job_cancel", totalTargets: 2));
         await queueStore.UpsertAsync(new CrawlQueueItem
         {
@@ -334,7 +335,7 @@ public sealed class CrawlQueueServiceJobTests
         var context = MongoIntegrationTestFixture.Context;
         var queueStore = new CrawlQueueRepository(context);
         var jobStore = new CrawlJobRepository(context);
-        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), queueStore, new PermissiveCrawlGovernanceService(), new NullManagementAuditService());
+        var jobService = new CrawlJobService(jobStore, new EmptyKnownCrawlTargetStore(), new NoOpSourceDiscoveryService(), queueStore, new PermissiveCrawlGovernanceService(), new NullManagementAuditService());
         await jobStore.UpsertAsync(new CrawlJob
         {
             JobId = "job_multi",
@@ -472,6 +473,18 @@ public sealed class CrawlQueueServiceJobTests
         public void ValidateCrawlRequest(string requestType, IReadOnlyCollection<string> categories, IReadOnlyCollection<string> sources, IReadOnlyCollection<string> productIds, IReadOnlyCollection<CrawlJobTargetDescriptor> targets, string parameterName)
         {
         }
+    }
+
+    private sealed class NoOpSourceDiscoveryService : ISourceDiscoveryService
+    {
+        public Task<SourceDiscoveryPreview> PreviewAsync(IReadOnlyCollection<string>? categoryKeys, IReadOnlyCollection<string>? sourceIds, CancellationToken cancellationToken = default)
+            => Task.FromResult(new SourceDiscoveryPreview());
+
+        public Task<SourceDiscoverySeedResult> EnsureSeededAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(new SourceDiscoverySeedResult());
+
+        public Task<SourceDiscoverySeedResult> SeedAsync(IReadOnlyCollection<string>? categoryKeys, IReadOnlyCollection<string>? sourceIds, string? jobId, CancellationToken cancellationToken = default)
+            => Task.FromResult(new SourceDiscoverySeedResult());
     }
 
     private sealed class NullManagementAuditService : IManagementAuditService
