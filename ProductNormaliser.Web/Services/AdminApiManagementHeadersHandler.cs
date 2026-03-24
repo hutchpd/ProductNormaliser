@@ -6,22 +6,28 @@ using ProductNormaliser.Web.Security;
 
 namespace ProductNormaliser.Web.Services;
 
-public sealed class AdminApiManagementHeadersHandler(
-    IHttpContextAccessor httpContextAccessor,
-    IOptions<AdminApiOptions> options) : DelegatingHandler
+public sealed class AdminApiManagementHeadersHandler : DelegatingHandler
 {
-    private readonly IHttpContextAccessor httpContextAccessor = httpContextAccessor;
-    private readonly AdminApiOptions options = options.Value;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly AdminApiOptions _options;
+
+    public AdminApiManagementHeadersHandler(
+        IHttpContextAccessor httpContextAccessor,
+        IOptions<AdminApiOptions> options)
+    {
+        _httpContextAccessor = httpContextAccessor;
+        _options = options.Value;
+    }
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(options.ApiKey))
+        if (!string.IsNullOrWhiteSpace(_options.ApiKey))
         {
-            request.Headers.Remove(options.ApiKeyHeaderName);
-            request.Headers.TryAddWithoutValidation(options.ApiKeyHeaderName, options.ApiKey);
+            request.Headers.Remove(_options.ApiKeyHeaderName);
+            request.Headers.TryAddWithoutValidation(_options.ApiKeyHeaderName, _options.ApiKey);
         }
 
-        var user = httpContextAccessor.HttpContext?.User;
+        var user = _httpContextAccessor.HttpContext?.User;
         if (user?.Identity?.IsAuthenticated == true)
         {
             var userId = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? user.Identity.Name;

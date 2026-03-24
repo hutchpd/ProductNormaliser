@@ -4,9 +4,9 @@ public sealed class AdminApiOptions
 {
     public const string SectionName = "AdminApi";
 
-    public string BaseUrl { get; init; } = "http://localhost:5209/";
+    public string BaseUrl { get; set; } = "http://localhost:5209/";
 
-    public string ApiKeyHeaderName { get; init; } = Security.ManagementWebSecurityConstants.ApiKeyHeaderName;
+    public string ApiKeyHeaderName { get; set; } = Security.ManagementWebSecurityConstants.ApiKeyHeaderName;
 
-    public string ApiKey { get; init; } = string.Empty;
+    public string ApiKey { get; set; } = string.Empty;
 }
