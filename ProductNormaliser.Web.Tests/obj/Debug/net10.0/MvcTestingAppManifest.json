@@ -1,7 +1,0 @@
-{
-  "ProductNormaliser.AdminApi, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\Users\\xhabl\\ProductNormaliser\\ProductNormaliser.AdminApi",
-  "ProductNormaliser.Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\Users\\xhabl\\ProductNormaliser\\ProductNormaliser.Application",
-  "ProductNormaliser.Domain, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\Users\\xhabl\\ProductNormaliser\\ProductNormaliser.Domain",
-  "ProductNormaliser.Infrastructure, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\Users\\xhabl\\ProductNormaliser\\ProductNormaliser.Infrastructure",
-  "ProductNormaliser.Web, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "C:\\Users\\xhabl\\ProductNormaliser\\ProductNormaliser.Web"
-}
