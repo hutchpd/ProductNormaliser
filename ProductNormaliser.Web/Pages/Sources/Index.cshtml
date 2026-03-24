@@ -17,6 +17,111 @@
         <div class="notice error">@Model.ErrorMessage</div>
     }
 
+    <div asp-validation-summary="ModelOnly" class="notice error" role="alert"></div>
+
+    <div class="overview-grid">
+        <section class="panel panel-muted">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Boot And Populate</p>
+                    <h2>Registry startup posture</h2>
+                </div>
+            </div>
+
+            <div class="metric-strip">
+                <article>
+                    <span>Registered</span>
+                    <strong>@Model.TotalSources</strong>
+                </article>
+                <article>
+                    <span>Enabled</span>
+                    <strong>@Model.RegistryEnabledSources</strong>
+                </article>
+                <article>
+                    <span>Discovery-configured</span>
+                    <strong>@Model.RegistryDiscoveryConfiguredSources</strong>
+                </article>
+                <article>
+                    <span>Boot-ready</span>
+                    <strong>@Model.RegistryBootReadySources</strong>
+                </article>
+            </div>
+
+            <div class="empty-panel mt-3">
+                <p class="empty-state">Register a source, assign categories such as TV, Monitor, or Laptop, then adjust its discovery profile only if the startup defaults need tightening.</p>
+                <p class="subtle-copy">New sources start with conservative robots-on throttling plus bounded discovery seeds, sitemap hints, and retry limits so category launches can populate immediately.</p>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Add Source</p>
+                    <h2>Register a new crawl host</h2>
+                </div>
+            </div>
+
+            <form method="post" asp-page-handler="Register" class="source-form">
+                <div class="form-grid">
+                    <div>
+                        <label asp-for="Registration.SourceId" class="form-label"></label>
+                        <input asp-for="Registration.SourceId" class="form-control" placeholder="northwind_store" />
+                        <span asp-validation-for="Registration.SourceId" class="text-danger small"></span>
+                    </div>
+                    <div>
+                        <label asp-for="Registration.DisplayName" class="form-label"></label>
+                        <input asp-for="Registration.DisplayName" class="form-control" placeholder="Northwind" />
+                        <span asp-validation-for="Registration.DisplayName" class="text-danger small"></span>
+                    </div>
+                    <div>
+                        <label asp-for="Registration.BaseUrl" class="form-label"></label>
+                        <input asp-for="Registration.BaseUrl" class="form-control" placeholder="https://www.northwind.example/" />
+                        <span asp-validation-for="Registration.BaseUrl" class="text-danger small"></span>
+                    </div>
+                    <div class="wide">
+                        <label asp-for="Registration.Description" class="form-label"></label>
+                        <textarea asp-for="Registration.Description" rows="2" class="form-control" placeholder="Optional operator note about this source"></textarea>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">Categories</p>
+                            <h2>Select crawl coverage</h2>
+                        </div>
+                    </div>
+
+                    <div class="check-grid">
+                    @foreach (var category in Model.Categories)
+                    {
+                        <label class="check-card @(category.IsEnabled ? string.Empty : "disabled")">
+                            <input type="checkbox"
+                                   name="Registration.CategoryKeys"
+                                   value="@category.CategoryKey"
+                                   checked="@Model.Registration.CategoryKeys.Contains(category.CategoryKey)"
+                                   disabled="@(!category.IsEnabled)" />
+                            <span>
+                                <strong>@category.DisplayName</strong>
+                                <span class="subtle-copy d-block">@category.CrawlSupportStatus</span>
+                            </span>
+                        </label>
+                    }
+                    </div>
+                </div>
+
+                <label class="form-check">
+                    <input asp-for="Registration.IsEnabled" class="form-check-input" />
+                    <span class="form-check-label">Enable this source immediately after registration</span>
+                </label>
+
+                <div class="actions-bar">
+                    <button type="submit" class="btn btn-dark">Register source</button>
+                </div>
+            </form>
+        </section>
+    </div>
+
     <section class="panel">
         <div class="panel-heading">
             <div>
@@ -128,6 +233,7 @@
                             <td>
                                 <div>Queue @source.DiscoveryQueueDepth</div>
                                 <div class="text-muted small">sitemap @(source.SitemapReachable ? "reachable" : "unverified"), robots @(source.ThrottlingPolicy.RespectRobotsTxt ? "on" : "off")</div>
+                                <div class="text-muted small">@Model.GetSetupSummary(source)</div>
                             </td>
                             <td>
                                 <div>@source.ConfirmedProductUrlsLast24Hours confirmed products</div>

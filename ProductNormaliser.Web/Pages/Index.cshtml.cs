@@ -61,6 +61,10 @@ public sealed class IndexModel(
 
     public int EnabledCategorySourceCount => CategorySources.Count(source => source.IsEnabled);
 
+    public int BootReadyCategorySourceCount => CategorySources.Count(source => source.IsEnabled
+        && HasDiscoveryScaffold(source)
+        && source.Readiness.CrawlableCategoryCount > 0);
+
     public int ReadyCategorySourceCount => CategorySources.Count(source => string.Equals(source.Readiness.Status, "Ready", StringComparison.OrdinalIgnoreCase));
 
     public int AttentionCategorySourceCount => CategorySources.Count(source => string.Equals(source.Health.Status, "Watch", StringComparison.OrdinalIgnoreCase)
@@ -71,6 +75,10 @@ public sealed class IndexModel(
     public decimal AverageRequestsPerMinute => CategorySources.Count == 0
         ? 0m
         : decimal.Round(CategorySources.Average(source => (decimal)source.ThrottlingPolicy.RequestsPerMinute), 0, MidpointRounding.AwayFromZero);
+
+    public int EstimatedContextSeedCount => CategorySources
+        .Where(source => source.IsEnabled)
+        .Sum(source => EstimateSeedCount(source, CurrentCategoryContext?.SelectedCategoryKeys ?? []));
 
     public decimal SchemaCompletenessPercent => SelectedCategory?.Metadata.SchemaCompletenessScore is decimal score
         ? decimal.Round(score * 100m, 0, MidpointRounding.AwayFromZero)
@@ -396,6 +404,23 @@ public sealed class IndexModel(
 
         await LoadDashboardAsync(cancellationToken);
         return Page();
+    }
+
+    public bool HasDiscoveryScaffold(SourceDto source)
+    {
+        return source.DiscoveryProfile.CategoryEntryPages.Count > 0
+            || source.DiscoveryProfile.SitemapHints.Count > 0
+            || source.DiscoveryProfile.ProductUrlPatterns.Count > 0
+            || source.DiscoveryProfile.ListingUrlPatterns.Count > 0;
+    }
+
+    private static int EstimateSeedCount(SourceDto source, IReadOnlyList<string> categoryKeys)
+    {
+        var categorySeedCount = source.DiscoveryProfile.CategoryEntryPages
+            .Where(entry => categoryKeys.Contains(entry.Key, StringComparer.OrdinalIgnoreCase))
+            .Sum(entry => entry.Value.Count);
+
+        return categorySeedCount + source.DiscoveryProfile.SitemapHints.Count;
     }
 
     private async Task LoadDashboardAsync(CancellationToken cancellationToken)

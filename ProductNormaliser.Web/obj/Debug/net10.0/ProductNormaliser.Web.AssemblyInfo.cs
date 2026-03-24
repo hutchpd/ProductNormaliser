@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ProductNormaliser.Web")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8409f68713611e6a8d7a2c47275c4ba83d61aa27")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+79c3a809963e2f72083510084f6d38bbb70fe611")]
 [assembly: System.Reflection.AssemblyProductAttribute("ProductNormaliser.Web")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ProductNormaliser.Web")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

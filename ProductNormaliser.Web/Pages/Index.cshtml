@@ -79,6 +79,37 @@
             }
         </section>
 
+        <section class="panel panel-muted">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Boot And Populate</p>
+                    <h2>Current startup path</h2>
+                </div>
+                <a href="@Model.SourcesUrl" class="btn btn-outline-dark btn-sm">Prepare sources</a>
+            </div>
+
+            <div class="metric-strip">
+                <article>
+                    <span>Boot-ready sources</span>
+                    <strong>@Model.BootReadyCategorySourceCount</strong>
+                </article>
+                <article>
+                    <span>Categories in context</span>
+                    <strong>@(Model.CurrentCategoryContext?.SelectedCategoryKeys.Count ?? 0)</strong>
+                </article>
+                <article>
+                    <span>Estimated seeds</span>
+                    <strong>@Model.EstimatedContextSeedCount</strong>
+                </article>
+                <article>
+                    <span>Confirmed products 24h</span>
+                    <strong>@Model.Stats.ConfirmedProductUrlCountLast24Hours</strong>
+                </article>
+            </div>
+
+            <p class="subtle-copy mt-3">The intended path is: register or enable sources, choose categories, start a crawl job, then watch discovery queue depth, confirmed product targets, and canonical product counts move together from this console and the crawl-job detail view.</p>
+        </section>
+
         <section class="panel">
             <div class="panel-heading">
                 <div>
@@ -341,7 +372,7 @@
                                     <div class="progress-bar-shell">
                                         <div class="progress-bar-fill" style="width: @job.DiscoveryCompletionPercent%"></div>
                                     </div>
-                                    <div class="subtle-copy">Discovery @job.ProcessedTargets of @job.TotalTargets processed, @job.ProductQueueDepth product targets still queued</div>
+                                    <div class="subtle-copy">Discovery @job.ProcessedTargets of @job.TotalTargets processed, @job.ConfirmedProductTargetCount confirmed products, @job.ProductQueueDepth still queued, @job.RejectedPageCount rejected, @job.BlockedPageCount robots-blocked</div>
                                 </div>
                             </article>
                         }

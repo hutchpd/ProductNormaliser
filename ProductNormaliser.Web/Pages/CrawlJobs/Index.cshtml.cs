@@ -35,6 +35,12 @@ public sealed class IndexModel(
 
     public bool SupportsRecrawlMode => false;
 
+    public LaunchPlanModel CurrentLaunchPlan => BuildLaunchPlan(Launch.SelectedCategoryKeys, Launch.SelectedSourceIds);
+
+    public bool CanLaunchCurrentPlan => CurrentLaunchPlan.SelectedCategoryCount > 0
+        && CurrentLaunchPlan.EnabledSourceCount > 0
+        && CurrentLaunchPlan.EstimatedSeedCount > 0;
+
     public IReadOnlyList<CrawlJobDto> ActiveJobs => Jobs.Items
         .Where(job => CrawlJobPresentation.IsActiveStatus(job.Status))
         .OrderByDescending(job => job.LastUpdatedAt)
@@ -93,7 +99,7 @@ public sealed class IndexModel(
         try
         {
             var job = await adminApiClient.CreateCrawlJobAsync(request, cancellationToken);
-            StatusMessage = $"Queued crawl job '{job.JobId}' for {request.RequestedCategories.Count} categories{(request.RequestedSources.Count == 0 ? string.Empty : $" across {request.RequestedSources.Count} selected sources")}.";
+            StatusMessage = $"Queued crawl job '{job.JobId}' for {request.RequestedCategories.Count} categories with {job.TotalTargets} initial discovery seeds{(request.RequestedSources.Count == 0 ? string.Empty : $" across {request.RequestedSources.Count} selected sources")}.";
             return RedirectToPage("/CrawlJobs/Details", new
             {
                 jobId = job.JobId,
@@ -189,6 +195,34 @@ public sealed class IndexModel(
         return string.Join(", ", job.RequestedProductIds);
     }
 
+    public bool HasDiscoveryScaffold(SourceDto source)
+    {
+        return source.DiscoveryProfile.CategoryEntryPages.Count > 0
+            || source.DiscoveryProfile.SitemapHints.Count > 0
+            || source.DiscoveryProfile.ProductUrlPatterns.Count > 0
+            || source.DiscoveryProfile.ListingUrlPatterns.Count > 0;
+    }
+
+    public string GetLaunchReadiness(SourceDto source)
+    {
+        if (!source.IsEnabled)
+        {
+            return "Disabled";
+        }
+
+        if (!HasDiscoveryScaffold(source))
+        {
+            return "Needs discovery profile";
+        }
+
+        if (source.Readiness.CrawlableCategoryCount == 0)
+        {
+            return "Assigned categories not crawl-ready";
+        }
+
+        return "Ready to seed discovery";
+    }
+
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
         try
@@ -276,13 +310,38 @@ public sealed class IndexModel(
 
         var incompatibleSources = sources
             .Select(sourceId => sourcesById[sourceId])
-            .Where(source => categories.All(category => !source.SupportedCategoryKeys.Contains(category, StringComparer.OrdinalIgnoreCase)))
+            .Where(source => categories.All(category => !source.SupportedCategoryKeys.Any(supportedCategory => string.Equals(supportedCategory, category, StringComparison.OrdinalIgnoreCase))))
             .Select(source => source.DisplayName)
             .ToArray();
 
         if (incompatibleSources.Length > 0)
         {
             ModelState.AddModelError($"{nameof(Launch)}.{nameof(Launch.SelectedSourceIds)}", $"Selected sources do not support the chosen categories: {string.Join(", ", incompatibleSources)}.");
+            return false;
+        }
+
+        var disabledSources = sources
+            .Select(sourceId => sourcesById[sourceId])
+            .Where(source => !source.IsEnabled)
+            .Select(source => source.DisplayName)
+            .ToArray();
+
+        if (disabledSources.Length > 0)
+        {
+            ModelState.AddModelError($"{nameof(Launch)}.{nameof(Launch.SelectedSourceIds)}", $"Selected sources are currently disabled: {string.Join(", ", disabledSources)}.");
+            return false;
+        }
+
+        var launchPlan = BuildLaunchPlan(categories, sources);
+        if (launchPlan.EnabledSourceCount == 0)
+        {
+            ModelState.AddModelError($"{nameof(Launch)}.{nameof(Launch.SelectedCategoryKeys)}", "No enabled sources match the selected categories.");
+            return false;
+        }
+
+        if (launchPlan.EstimatedSeedCount == 0)
+        {
+            ModelState.AddModelError($"{nameof(Launch)}.{nameof(Launch.SelectedCategoryKeys)}", "The current source selection does not expose any discovery seeds yet. Configure or enable a source discovery profile before launching.");
             return false;
         }
 
@@ -306,6 +365,46 @@ public sealed class IndexModel(
             .ToList();
     }
 
+    private LaunchPlanModel BuildLaunchPlan(IReadOnlyList<string> selectedCategoryKeys, IReadOnlyList<string> selectedSourceIds)
+    {
+        var categories = NormalizeValues(selectedCategoryKeys);
+        var sourceIds = NormalizeValues(selectedSourceIds);
+        if (categories.Count == 0)
+        {
+            return new LaunchPlanModel();
+        }
+
+        IEnumerable<SourceDto> candidates = Sources.Where(source => categories.Any(category => source.SupportedCategoryKeys.Any(supportedCategory => string.Equals(supportedCategory, category, StringComparison.OrdinalIgnoreCase))));
+        if (sourceIds.Count > 0)
+        {
+            candidates = candidates.Where(source => sourceIds.Any(sourceId => string.Equals(sourceId, source.SourceId, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        var candidateArray = candidates.ToArray();
+        var enabledArray = candidateArray.Where(source => source.IsEnabled).ToArray();
+
+        return new LaunchPlanModel
+        {
+            SelectedCategoryCount = categories.Count,
+            CandidateSourceCount = candidateArray.Length,
+            EnabledSourceCount = enabledArray.Length,
+            DiscoveryConfiguredSourceCount = enabledArray.Count(HasDiscoveryScaffold),
+            ReadySourceCount = enabledArray.Count(source => HasDiscoveryScaffold(source) && source.Readiness.CrawlableCategoryCount > 0),
+            AttentionSourceCount = enabledArray.Count(source => string.Equals(source.Health.Status, "Watch", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(source.Health.Status, "Attention", StringComparison.OrdinalIgnoreCase)),
+            EstimatedSeedCount = enabledArray.Sum(source => EstimateSeedCount(source, categories))
+        };
+    }
+
+    private int EstimateSeedCount(SourceDto source, IReadOnlyList<string> categories)
+    {
+        var categoryEntrySeedCount = source.DiscoveryProfile.CategoryEntryPages
+            .Where(entry => categories.Any(category => string.Equals(category, entry.Key, StringComparison.OrdinalIgnoreCase)))
+            .Sum(entry => entry.Value.Count);
+
+        return categoryEntrySeedCount + source.DiscoveryProfile.SitemapHints.Count;
+    }
+
     public sealed class LaunchCrawlJobInput
     {
         public string RequestType { get; set; } = "category";
@@ -313,5 +412,16 @@ public sealed class IndexModel(
         public List<string> SelectedCategoryKeys { get; set; } = [];
 
         public List<string> SelectedSourceIds { get; set; } = [];
+    }
+
+    public sealed class LaunchPlanModel
+    {
+        public int SelectedCategoryCount { get; init; }
+        public int CandidateSourceCount { get; init; }
+        public int EnabledSourceCount { get; init; }
+        public int DiscoveryConfiguredSourceCount { get; init; }
+        public int ReadySourceCount { get; init; }
+        public int AttentionSourceCount { get; init; }
+        public int EstimatedSeedCount { get; init; }
     }
 }

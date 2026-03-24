@@ -79,6 +79,8 @@ public sealed class SourceManagementRenderingTests
 
         Assert.Multiple(() =>
         {
+            Assert.That(html, Does.Contain("Register a new crawl host"));
+            Assert.That(html, Does.Contain("Register source"));
             Assert.That(html, Does.Contain("Managed source hosts and health"));
             Assert.That(html, Does.Contain("Ready sources"));
             Assert.That(html, Does.Contain("AO UK"));

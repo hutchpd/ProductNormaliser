@@ -241,7 +241,7 @@ public sealed class SourceManagementService(
         string host,
         CancellationToken cancellationToken)
     {
-        profile ??= new SourceDiscoveryProfile();
+        profile ??= CreateDefaultDiscoveryProfile(supportedCategoryKeys);
 
         if (profile.MaxDiscoveryDepth < 0)
         {
@@ -286,6 +286,71 @@ public sealed class SourceManagementService(
             RetryBackoffBaseMs = profile.RetryBackoffBaseMs,
             RetryBackoffMaxMs = profile.RetryBackoffMaxMs
         };
+    }
+
+    private static SourceDiscoveryProfile CreateDefaultDiscoveryProfile(IReadOnlyCollection<string> supportedCategoryKeys)
+    {
+        var profile = new SourceDiscoveryProfile
+        {
+            SitemapHints = ["/sitemap.xml", "/sitemap_index.xml", "/sitemap-products.xml"],
+            ExcludedPathPrefixes = ["/support", "/help", "/blog", "/news", "/contact", "/account", "/cart", "/checkout"],
+            ProductUrlPatterns = ["/product/", "/products/", "/p/"],
+            ListingUrlPatterns = ["/category/", "/collections/", "/c/", "/department/"]
+        };
+
+        foreach (var categoryKey in supportedCategoryKeys)
+        {
+            var entryPages = BuildDefaultEntryPages(categoryKey);
+            if (entryPages.Count > 0)
+            {
+                profile.CategoryEntryPages[categoryKey] = entryPages;
+            }
+        }
+
+        return profile;
+    }
+
+    private static List<string> BuildDefaultEntryPages(string categoryKey)
+    {
+        var normalizedKey = categoryKey.Trim().ToLowerInvariant();
+        string[] slugs = normalizedKey switch
+        {
+            "tv" => ["tv", "tvs", "television", "televisions"],
+            "monitor" => ["monitor", "monitors"],
+            "laptop" => ["laptop", "laptops", "notebook", "notebooks"],
+            _ => [BuildCategorySlug(normalizedKey), BuildPluralCategorySlug(normalizedKey)]
+        };
+
+        return slugs
+            .Where(slug => !string.IsNullOrWhiteSpace(slug))
+            .Select(slug => $"/{slug}")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string BuildCategorySlug(string categoryKey)
+    {
+        return categoryKey
+            .Trim()
+            .ToLowerInvariant()
+            .Replace('_', '-')
+            .Replace(' ', '-');
+    }
+
+    private static string BuildPluralCategorySlug(string categoryKey)
+    {
+        var slug = BuildCategorySlug(categoryKey);
+        if (slug.EndsWith("s", StringComparison.OrdinalIgnoreCase))
+        {
+            return slug;
+        }
+
+        if (slug.EndsWith("y", StringComparison.OrdinalIgnoreCase) && slug.Length > 1)
+        {
+            return $"{slug[..^1]}ies";
+        }
+
+        return $"{slug}s";
     }
 
     private async Task<Dictionary<string, List<string>>> NormaliseCategoryEntryPagesAsync(

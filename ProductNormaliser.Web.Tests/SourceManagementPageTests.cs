@@ -69,6 +69,38 @@ public sealed class SourceManagementPageTests
     }
 
     [Test]
+    public async Task SourcesIndex_OnPostRegisterAsync_RegistersSourceAndRedirectsToDetails()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            Sources = []
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IndexModel>.Instance)
+        {
+            Registration = new ProductNormaliser.Web.Pages.Sources.IndexModel.RegisterSourceInput
+            {
+                SourceId = "northwind",
+                DisplayName = "Northwind",
+                BaseUrl = "https://www.northwind.example/",
+                CategoryKeys = ["tv", "monitor"],
+                IsEnabled = true
+            }
+        };
+
+        var result = await model.OnPostRegisterAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(client.LastRegisteredSourceRequest, Is.Not.Null);
+            Assert.That(client.LastRegisteredSourceRequest!.SupportedCategoryKeys, Is.EqualTo(new[] { "tv", "monitor" }));
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
+            Assert.That(((RedirectToPageResult)result).PageName, Is.EqualTo("/Sources/Details"));
+        });
+    }
+
+    [Test]
     public async Task SourceDetails_OnPostCategoriesAsync_SubmitsAssignmentsAndRedirects()
     {
         var client = new FakeAdminApiClient

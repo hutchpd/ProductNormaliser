@@ -17,6 +17,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public CategoryDetailDto? CategoryDetail { get; set; }
     public IReadOnlyList<SourceDto> Sources { get; set; } = [];
     public SourceDto? Source { get; set; }
+    public RegisterSourceRequest? LastRegisteredSourceRequest { get; private set; }
     public UpdateSourceRequest? LastUpdatedSourceRequest { get; private set; }
     public string? LastUpdatedSourceId { get; private set; }
     public string? LastEnabledSourceId { get; private set; }
@@ -209,7 +210,48 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         => SourcesException is null ? Task.FromResult(Sources) : Task.FromException<IReadOnlyList<SourceDto>>(SourcesException);
     public Task<SourceDto?> GetSourceAsync(string sourceId, CancellationToken cancellationToken = default)
         => Task.FromResult(Source ?? Sources.FirstOrDefault(item => string.Equals(item.SourceId, sourceId, StringComparison.OrdinalIgnoreCase)));
-    public Task<SourceDto> RegisterSourceAsync(RegisterSourceRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+    public Task<SourceDto> RegisterSourceAsync(RegisterSourceRequest request, CancellationToken cancellationToken = default)
+    {
+        LastRegisteredSourceRequest = request;
+
+        var source = new SourceDto
+        {
+            SourceId = request.SourceId,
+            DisplayName = request.DisplayName,
+            BaseUrl = request.BaseUrl,
+            Host = new Uri(request.BaseUrl).Host,
+            Description = request.Description,
+            IsEnabled = request.IsEnabled,
+            SupportedCategoryKeys = request.SupportedCategoryKeys.ToArray(),
+            DiscoveryProfile = request.DiscoveryProfile ?? new SourceDiscoveryProfileDto(),
+            ThrottlingPolicy = request.ThrottlingPolicy ?? new SourceThrottlingPolicyDto
+            {
+                MinDelayMs = 1000,
+                MaxDelayMs = 3000,
+                MaxConcurrentRequests = 1,
+                RequestsPerMinute = 30,
+                RespectRobotsTxt = true
+            },
+            Readiness = new SourceReadinessDto
+            {
+                Status = request.SupportedCategoryKeys.Count == 0 ? "Unassigned" : "Ready",
+                AssignedCategoryCount = request.SupportedCategoryKeys.Count,
+                CrawlableCategoryCount = request.SupportedCategoryKeys.Count,
+                Summary = request.SupportedCategoryKeys.Count == 0
+                    ? "No categories are currently assigned."
+                    : $"All {request.SupportedCategoryKeys.Count} assigned categories are crawl-ready."
+            },
+            Health = new SourceHealthSummaryDto
+            {
+                Status = "Unknown"
+            },
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow
+        };
+
+        UpsertSource(source);
+        return Task.FromResult(source);
+    }
     public Task<SourceDto> UpdateSourceAsync(string sourceId, UpdateSourceRequest request, CancellationToken cancellationToken = default)
     {
         LastUpdatedSourceId = sourceId;

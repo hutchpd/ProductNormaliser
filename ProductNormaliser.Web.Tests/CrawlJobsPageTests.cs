@@ -119,6 +119,40 @@ public sealed class CrawlJobsPageTests
     }
 
     [Test]
+    public async Task CrawlJobsIndex_OnPostLaunchAsync_RejectsSourcesWithoutDiscoverySeeds()
+    {
+        var client = CreateClient();
+        client.Sources =
+        [
+            new SourceDto
+            {
+                SourceId = "ao_uk",
+                DisplayName = "AO UK",
+                IsEnabled = true,
+                SupportedCategoryKeys = ["tv"],
+                DiscoveryProfile = new SourceDiscoveryProfileDto()
+            }
+        ];
+
+        var model = new ProductNormaliser.Web.Pages.CrawlJobs.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.CrawlJobs.IndexModel>.Instance)
+        {
+            Launch = new ProductNormaliser.Web.Pages.CrawlJobs.IndexModel.LaunchCrawlJobInput
+            {
+                SelectedCategoryKeys = ["tv"]
+            }
+        };
+
+        var result = await model.OnPostLaunchAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<PageResult>());
+            Assert.That(client.LastCreatedJobRequest, Is.Null);
+            Assert.That(model.ModelState[$"{nameof(model.Launch)}.{nameof(model.Launch.SelectedCategoryKeys)}"]?.Errors.Select(error => error.ErrorMessage), Does.Contain("The current source selection does not expose any discovery seeds yet. Configure or enable a source discovery profile before launching."));
+        });
+    }
+
+    [Test]
     public async Task CrawlJobsIndex_OnGetAsync_GroupsProgressStatesAndEnablesPollingForActiveJobs()
     {
         var client = CreateClient();
@@ -231,7 +265,15 @@ public sealed class CrawlJobsPageTests
                     SourceId = "ao_uk",
                     DisplayName = "AO UK",
                     IsEnabled = true,
-                    SupportedCategoryKeys = ["tv"]
+                    SupportedCategoryKeys = ["tv"],
+                    DiscoveryProfile = new SourceDiscoveryProfileDto
+                    {
+                        CategoryEntryPages = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["tv"] = ["https://ao.example/tvs"]
+                        },
+                        ProductUrlPatterns = ["/product/"]
+                    }
                 }
             ]
         };

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using ProductNormaliser.Web.Contracts;
 using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
+using System.ComponentModel.DataAnnotations;
 
 namespace ProductNormaliser.Web.Pages.Sources;
 
@@ -22,9 +23,14 @@ public sealed class IndexModel(
     [TempData]
     public string? StatusMessage { get; set; }
 
+    [BindProperty]
+    public RegisterSourceInput Registration { get; set; } = new();
+
     public string? ErrorMessage { get; private set; }
 
     public IReadOnlyList<CategoryMetadataDto> Categories { get; private set; } = [];
+
+    public IReadOnlyList<SourceDto> AllSources { get; private set; } = [];
 
     public IReadOnlyList<SourceDto> Sources { get; private set; } = [];
 
@@ -37,6 +43,12 @@ public sealed class IndexModel(
     public int DiscoveryBacklogSources => Sources.Count(source => source.DiscoveryQueueDepth > 0);
 
     public int ActiveDiscoverySources => Sources.Count(source => source.LastDiscoveryUtc is not null || source.ConfirmedProductUrlsLast24Hours > 0);
+
+    public int RegistryEnabledSources => AllSources.Count(source => source.IsEnabled);
+
+    public int RegistryDiscoveryConfiguredSources => AllSources.Count(HasDiscoveryScaffold);
+
+    public int RegistryBootReadySources => AllSources.Count(IsBootReady);
 
     public PageHeroModel Hero => new()
     {
@@ -55,6 +67,49 @@ public sealed class IndexModel(
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         await LoadAsync(cancellationToken);
+    }
+
+    public async Task<IActionResult> OnPostRegisterAsync(CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        try
+        {
+            var source = await adminApiClient.RegisterSourceAsync(new RegisterSourceRequest
+            {
+                SourceId = Registration.SourceId,
+                DisplayName = Registration.DisplayName,
+                BaseUrl = Registration.BaseUrl,
+                Description = Registration.Description,
+                IsEnabled = Registration.IsEnabled,
+                SupportedCategoryKeys = Registration.CategoryKeys
+            }, cancellationToken);
+
+            StatusMessage = $"Registered source '{source.DisplayName}'. Startup discovery defaults were applied automatically.";
+            return RedirectToPage("/Sources/Details", new { sourceId = source.SourceId });
+        }
+        catch (AdminApiValidationException exception)
+        {
+            foreach (var entry in exception.Errors)
+            {
+                foreach (var message in entry.Value)
+                {
+                    ModelState.AddModelError(string.Empty, message);
+                }
+            }
+        }
+        catch (AdminApiException exception)
+        {
+            logger.LogWarning(exception, "Failed to register source from sources index.");
+            ErrorMessage = exception.Message;
+        }
+
+        await LoadAsync(cancellationToken);
+        return Page();
     }
 
     public async Task<IActionResult> OnPostToggleAsync(string sourceId, bool currentlyEnabled, string? category, string? search, bool? enabled, CancellationToken cancellationToken)
@@ -112,6 +167,41 @@ public sealed class IndexModel(
             : $"/Sources/Intelligence?category={Uri.EscapeDataString(categoryKey)}&source={Uri.EscapeDataString(source.DisplayName)}";
     }
 
+    public bool HasDiscoveryScaffold(SourceDto source)
+    {
+        return source.DiscoveryProfile.CategoryEntryPages.Count > 0
+            || source.DiscoveryProfile.SitemapHints.Count > 0
+            || source.DiscoveryProfile.ProductUrlPatterns.Count > 0
+            || source.DiscoveryProfile.ListingUrlPatterns.Count > 0;
+    }
+
+    public bool IsBootReady(SourceDto source)
+    {
+        return source.IsEnabled
+            && HasDiscoveryScaffold(source)
+            && source.Readiness.CrawlableCategoryCount > 0;
+    }
+
+    public string GetSetupSummary(SourceDto source)
+    {
+        if (!source.IsEnabled)
+        {
+            return "Disabled until explicitly enabled.";
+        }
+
+        if (!HasDiscoveryScaffold(source))
+        {
+            return "No discovery seed profile is configured yet.";
+        }
+
+        if (source.Readiness.CrawlableCategoryCount == 0)
+        {
+            return "Assigned categories are not crawl-ready yet.";
+        }
+
+        return "Ready to seed discovery from startup defaults or an edited profile.";
+    }
+
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
         try
@@ -129,6 +219,7 @@ public sealed class IndexModel(
             CategoryKey = categoryContext.PrimaryCategoryKey;
 
             var allSources = sourcesTask.Result.OrderBy(source => source.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
+            AllSources = allSources;
             TotalSources = allSources.Length;
 
             IEnumerable<SourceDto> filtered = allSources;
@@ -151,13 +242,42 @@ public sealed class IndexModel(
             }
 
             Sources = filtered.ToArray();
+
+            if (Registration.CategoryKeys.Count == 0 && !string.IsNullOrWhiteSpace(CategoryKey))
+            {
+                Registration.CategoryKeys = [CategoryKey];
+            }
         }
         catch (AdminApiException exception)
         {
             logger.LogWarning(exception, "Failed to load sources page data.");
             ErrorMessage = exception.Message;
             Categories = [];
+            AllSources = [];
             Sources = [];
         }
+    }
+
+    public sealed class RegisterSourceInput
+    {
+        [Required]
+        [Display(Name = "Source id")]
+        public string SourceId { get; set; } = string.Empty;
+
+        [Required]
+        [Display(Name = "Display name")]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [Required]
+        [Url]
+        [Display(Name = "Base URL")]
+        public string BaseUrl { get; set; } = string.Empty;
+
+        [Display(Name = "Description")]
+        public string? Description { get; set; }
+
+        public bool IsEnabled { get; set; } = true;
+
+        public List<string> CategoryKeys { get; set; } = [];
     }
 }

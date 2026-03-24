@@ -86,6 +86,14 @@
                         <dd>@Model.Job.SkippedCount</dd>
                     </div>
                     <div>
+                        <dt>Governance rejected</dt>
+                        <dd>@Model.Job.RejectedPageCount</dd>
+                    </div>
+                    <div>
+                        <dt>Robots blocked</dt>
+                        <dd>@Model.Job.BlockedPageCount</dd>
+                    </div>
+                    <div>
                         <dt>Rejected pages</dt>
                         <dd>@Model.Job.FailedCount</dd>
                     </div>
@@ -213,7 +221,7 @@
                         <div class="subtle-copy">Discovery @breakdown.ProcessedTargets / @breakdown.TotalTargets, queue @breakdown.DiscoveryQueueDepth, completion @breakdown.DiscoveryCompletionPercent.ToString("0.#")%</div>
                         <div class="subtle-copy">Discovered @breakdown.DiscoveredUrlCount, confirmed @breakdown.ConfirmedProductTargetCount, crawled @breakdown.CrawledProductUrlCount</div>
                         <div class="subtle-copy">Product queue @breakdown.ProductQueueDepth, product failures @breakdown.ProductFailureCount, source coverage @breakdown.ActiveSourceCoverage (@breakdown.SourceCoveragePercent.ToString("0.#")%)</div>
-                        <div class="subtle-copy">Success @breakdown.SuccessCount, skipped @breakdown.SkippedCount, failed @breakdown.FailedCount, cancelled @breakdown.CancelledCount</div>
+                        <div class="subtle-copy">Success @breakdown.SuccessCount, skipped @breakdown.SkippedCount, rejected @breakdown.RejectedPageCount, robots blocked @breakdown.BlockedPageCount, failed @breakdown.FailedCount, cancelled @breakdown.CancelledCount</div>
                     </article>
                 }
                 </div>

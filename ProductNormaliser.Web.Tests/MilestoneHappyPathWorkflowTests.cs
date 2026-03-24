@@ -189,6 +189,15 @@ public sealed class MilestoneHappyPathWorkflowTests
                     Description = "Primary TV source",
                     IsEnabled = true,
                     SupportedCategoryKeys = ["tv"],
+                    DiscoveryProfile = new SourceDiscoveryProfileDto
+                    {
+                        CategoryEntryPages = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["tv"] = ["https://ao.example/tvs"]
+                        },
+                        SitemapHints = ["https://ao.example/sitemap.xml"],
+                        ProductUrlPatterns = ["/product/"]
+                    },
                     ThrottlingPolicy = new SourceThrottlingPolicyDto
                     {
                         MinDelayMs = 1000,

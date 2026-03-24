@@ -115,6 +115,30 @@ public sealed class SourceManagementServiceTests
     }
 
     [Test]
+    public async Task RegisterAsync_AppliesStartupDiscoveryDefaultsWhenProfileIsOmitted()
+    {
+        var store = new FakeCrawlSourceStore();
+        var service = CreateService(store, new FakeCategoryMetadataService(CreateCategory("tv"), CreateCategory("laptop")));
+
+        var result = await service.RegisterAsync(new CrawlSourceRegistration
+        {
+            SourceId = "northwind",
+            DisplayName = "Northwind",
+            BaseUrl = "https://www.northwind.example/",
+            SupportedCategoryKeys = ["tv", "laptop"]
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.DiscoveryProfile.SitemapHints, Is.Not.Empty);
+            Assert.That(result.DiscoveryProfile.CategoryEntryPages["tv"], Does.Contain("https://www.northwind.example/tv"));
+            Assert.That(result.DiscoveryProfile.CategoryEntryPages["laptop"], Does.Contain("https://www.northwind.example/laptops"));
+            Assert.That(result.DiscoveryProfile.ProductUrlPatterns, Does.Contain("/product/"));
+            Assert.That(result.DiscoveryProfile.ExcludedPathPrefixes, Does.Contain("/support"));
+        });
+    }
+
+    [Test]
     public void RegisterAsync_RejectsUnknownCategories()
     {
         var service = CreateService(new FakeCrawlSourceStore(), new FakeCategoryMetadataService(CreateCategory("tv")));

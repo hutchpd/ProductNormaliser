@@ -313,6 +313,8 @@ public sealed class CrawlJobDto
     public int CancelledCount { get; init; }
     public int DiscoveredUrlCount { get; init; }
     public int ConfirmedProductTargetCount { get; init; }
+    public int RejectedPageCount { get; init; }
+    public int BlockedPageCount { get; init; }
     public int DiscoveryQueueDepth { get; init; }
     public int ActiveSourceCoverage { get; init; }
     public decimal SourceCoveragePercent { get; init; }
@@ -338,6 +340,8 @@ public sealed class CrawlJobCategoryBreakdownDto
     public int CancelledCount { get; init; }
     public int DiscoveredUrlCount { get; init; }
     public int ConfirmedProductTargetCount { get; init; }
+    public int RejectedPageCount { get; init; }
+    public int BlockedPageCount { get; init; }
     public int DiscoveryQueueDepth { get; init; }
     public int ActiveSourceCoverage { get; init; }
     public decimal SourceCoveragePercent { get; init; }

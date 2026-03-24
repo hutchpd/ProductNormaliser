@@ -32,8 +32,8 @@
                 <input asp-for="Launch.RequestType" type="hidden" value="category" />
 
                 <div class="empty-panel">
-                    <p class="empty-state">Launch a category-targeted crawl from the dashboard. Category selection is required, source filtering is optional, and the newly created job will open immediately after submission.</p>
-                    <p class="subtle-copy">Large category-wide launches are blocked by API safety checks until you narrow scope with explicit source selection, and oversized jobs are rejected outright.</p>
+                    <p class="empty-state">Launch a category-targeted crawl from the dashboard. Each category job seeds discovery first, then confirmed product URLs flow into the downstream product crawl queue.</p>
+                    <p class="subtle-copy">Choose categories, optionally narrow to specific sources, and use the launch plan below to confirm that the current selection is ready to populate.</p>
                 </div>
 
                 <div>
@@ -74,6 +74,7 @@
                                     <strong>@source.DisplayName</strong>
                                     <span class="subtle-copy d-block">@((source.SupportedCategoryKeys.Count == 0 ? "No category metadata" : string.Join(", ", source.SupportedCategoryKeys)))</span>
                                     <span class="subtle-copy d-block">@source.ThrottlingPolicy.RequestsPerMinute rpm, @source.ThrottlingPolicy.MaxConcurrentRequests concurrent, robots @(source.ThrottlingPolicy.RespectRobotsTxt ? "on" : "off")</span>
+                                    <span class="subtle-copy d-block">@Model.GetLaunchReadiness(source)</span>
                                 </span>
                             </label>
                         }
@@ -82,13 +83,54 @@
                     <span asp-validation-for="Launch.SelectedSourceIds" class="text-danger small"></span>
                 </div>
 
+                <section class="panel panel-muted">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">Launch Plan</p>
+                            <h2>Discovery seeding readiness</h2>
+                        </div>
+                    </div>
+
+                    <div class="metric-strip">
+                        <article>
+                            <span>Categories</span>
+                            <strong>@Model.CurrentLaunchPlan.SelectedCategoryCount</strong>
+                        </article>
+                        <article>
+                            <span>Enabled sources</span>
+                            <strong>@Model.CurrentLaunchPlan.EnabledSourceCount</strong>
+                        </article>
+                        <article>
+                            <span>Discovery-configured</span>
+                            <strong>@Model.CurrentLaunchPlan.DiscoveryConfiguredSourceCount</strong>
+                        </article>
+                        <article>
+                            <span>Estimated seeds</span>
+                            <strong>@Model.CurrentLaunchPlan.EstimatedSeedCount</strong>
+                        </article>
+                    </div>
+
+                    @if (Model.CurrentLaunchPlan.SelectedCategoryCount == 0)
+                    {
+                        <p class="subtle-copy mt-3">Pick at least one category to estimate how many entry pages and sitemaps will seed discovery.</p>
+                    }
+                    else if (Model.CurrentLaunchPlan.EstimatedSeedCount == 0)
+                    {
+                        <p class="subtle-copy mt-3">The current selection has no usable discovery seeds yet. Configure or enable a source discovery profile before launching.</p>
+                    }
+                    else
+                    {
+                        <p class="subtle-copy mt-3">This launch is expected to seed discovery from @Model.CurrentLaunchPlan.EstimatedSeedCount entry points across @Model.CurrentLaunchPlan.EnabledSourceCount enabled source(s). @Model.CurrentLaunchPlan.AttentionSourceCount source(s) currently report watch or attention health.</p>
+                    }
+                </section>
+
                 <div class="empty-panel">
                     <p class="eyebrow">Recrawl Mode</p>
                     <p class="empty-state">The current Admin API does not expose a separate recrawl mode for category launches, so this panel submits standard category jobs with optional source filtering only.</p>
                 </div>
 
                 <div class="actions-bar">
-                    <button type="submit" class="btn btn-dark" data-category-launch disabled="@(!Model.CategorySelector.HasSelection)">Launch crawl</button>
+                    <button type="submit" class="btn btn-dark" data-category-launch disabled="@(!Model.CanLaunchCurrentPlan)">Launch seeded crawl</button>
                 </div>
             </form>
         </section>
@@ -163,6 +205,9 @@
                         <div><dt>Success</dt><dd>@job.SuccessCount</dd></div>
                         <div><dt>Failed</dt><dd>@job.FailedCount</dd></div>
                         <div><dt>Skipped</dt><dd>@job.SkippedCount</dd></div>
+                        <div><dt>Confirmed</dt><dd>@job.ConfirmedProductTargetCount</dd></div>
+                        <div><dt>Rejected</dt><dd>@job.RejectedPageCount</dd></div>
+                        <div><dt>Robots blocked</dt><dd>@job.BlockedPageCount</dd></div>
                         <div><dt>Updated</dt><dd>@job.LastUpdatedAt.ToString("u")</dd></div>
                     </dl>
 
