@@ -31,6 +31,7 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AllowAnonymousToPage("/Login");
     options.Conventions.AllowAnonymousToPage("/Forbidden");
     options.Conventions.AllowAnonymousToPage("/Privacy");
+    options.Conventions.AllowAnonymousToPage("/SetupRequired");
 });
 builder.Services.Configure<AdminApiOptions>(builder.Configuration.GetSection(AdminApiOptions.SectionName));
 builder.Services.Configure<ManagementWebSecurityOptions>(builder.Configuration.GetSection(ManagementWebSecurityOptions.SectionName));
@@ -63,6 +64,39 @@ app.UseRouting();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/SetupRequired", StringComparison.OrdinalIgnoreCase)
+        || context.Request.Path.StartsWithSegments(ManagementWebSecurityConstants.LoginPath, StringComparison.OrdinalIgnoreCase)
+        || context.Request.Path.StartsWithSegments("/Privacy", StringComparison.OrdinalIgnoreCase)
+        || context.Request.Path.StartsWithSegments("/Forbidden", StringComparison.OrdinalIgnoreCase)
+        || context.Request.Path.StartsWithSegments("/Error", StringComparison.OrdinalIgnoreCase)
+        || context.Request.Path.StartsWithSegments("/css", StringComparison.OrdinalIgnoreCase)
+        || context.Request.Path.StartsWithSegments("/js", StringComparison.OrdinalIgnoreCase)
+        || context.Request.Path.StartsWithSegments("/lib", StringComparison.OrdinalIgnoreCase)
+        || context.Request.Path.StartsWithSegments("/_framework", StringComparison.OrdinalIgnoreCase))
+    {
+        await next();
+        return;
+    }
+
+    if (context.User.Identity?.IsAuthenticated == true)
+    {
+        try
+        {
+            var client = context.RequestServices.GetRequiredService<IProductNormaliserAdminApiClient>();
+            await client.GetStatsAsync(context.RequestAborted);
+        }
+        catch
+        {
+            context.Response.Redirect("/SetupRequired");
+            return;
+        }
+    }
+
+    await next();
+});
 
 app.MapStaticAssets();
 app.MapRazorPages()

@@ -5,4 +5,84 @@
 }
 <h1>@ViewData["Title"]</h1>
 
-<p>Use this page to detail your site's privacy policy.</p>
+<p class="lead">
+    This page explains how the ProductNormaliser management console (the “Service”) processes information when you use it.
+</p>
+
+<h2>Who this policy is for</h2>
+<p>
+    The Service is an operator-facing web console used to manage sources, categories, crawl jobs, and product-normalisation workflows.
+    It is intended for authorised operators.
+</p>
+
+<h2>What information we process</h2>
+<p>The Service may process the following categories of information:</p>
+<ul>
+    <li>
+        <strong>Account and authentication information</strong> - a username and an authentication cookie used to keep you signed in.
+    </li>
+    <li>
+        <strong>Operational and administrative data</strong> - configuration and status data you view or change in the console (for example: sources, crawl jobs, and category context).
+    </li>
+    <li>
+        <strong>Technical information</strong> - standard web server logs such as timestamps, request paths, response codes, and IP addresses.
+    </li>
+</ul>
+
+<h2>Cookies</h2>
+<p>
+    The Service uses a cookie to implement sign-in using ASP.NET Core cookie authentication.
+    This cookie is required for the Service to function.
+</p>
+<p>
+    The Service may also store a small cookie to remember your selected category context.
+</p>
+
+<h2>How data is used</h2>
+<ul>
+    <li>To authenticate operators and protect access to administrative features.</li>
+    <li>To display operational status and allow operators to perform management actions.</li>
+    <li>To troubleshoot issues and improve reliability (for example, using logs and error reports).</li>
+</ul>
+
+<h2>Backend services</h2>
+<p>
+    The Service is a UI layer only. It calls a backend “Admin API” over HTTP to read and update operational data.
+    The Service does not directly connect to databases.
+</p>
+
+<h2>Data sharing</h2>
+<p>
+    Information you view or submit in the console is shared with the Admin API so it can perform the requested actions.
+    We do not sell personal information.
+</p>
+
+<h2>Retention</h2>
+<p>
+    Authentication cookies are stored in your browser and expire according to the configured sign-in settings.
+    Operational records (jobs, sources, products, and related logs) are retained by the backend systems according to your organisation’s retention policy.
+</p>
+
+<h2>Security</h2>
+<p>
+    The Service is designed to be accessed over HTTPS.
+    Access is restricted to authorised operators.
+    No security system is perfect; if you believe you have found a vulnerability, please report it to the Service administrator.
+</p>
+
+<h2>Your choices</h2>
+<ul>
+    <li>You can sign out at any time to clear the active sign-in session.</li>
+    <li>You can clear cookies in your browser to remove stored session and preference data.</li>
+</ul>
+
+<h2>Changes to this policy</h2>
+<p>
+    This policy may be updated from time to time to reflect changes in the Service.
+    The effective version is the one published on this page.
+</p>
+
+<h2>Contact</h2>
+<p>
+    For privacy questions or requests, contact the Service owner or your organisation’s administrator.
+</p>

@@ -1,0 +1,71 @@
+@page
+@model ProductNormaliser.Web.Pages.SetupRequiredModel
+@{
+    ViewData["Title"] = "Setup required";
+}
+
+<div class="container py-4">
+    <h1 class="display-6">Setup required</h1>
+    <p class="lead">
+        This app can’t load because it can’t reach the backing services it expects (most commonly: MongoDB isn’t running yet,
+        or the Admin API can’t connect to MongoDB).
+    </p>
+
+    <div class="alert alert-warning" role="alert">
+        <div class="fw-semibold">What I tried</div>
+        <div>Called the Admin API health endpoint (stats) at: <code>@Model.AdminApiBaseUrl</code></div>
+        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+        {
+            <div class="mt-2"><span class="fw-semibold">Error:</span> <code>@Model.ErrorMessage</code></div>
+        }
+    </div>
+
+    <h2 class="h4 mt-4">First-time local setup</h2>
+    <ol>
+        <li>
+            <div class="fw-semibold">Install MongoDB Community (or run it via Docker)</div>
+            <ul>
+                <li>
+                    MongoDB download: <a href="https://www.mongodb.com/try/download/community" target="_blank" rel="noreferrer">https://www.mongodb.com/try/download/community</a>
+                </li>
+                <li>
+                    Docker (example):
+                    <pre class="mt-2"><code>docker run --name productnormaliser-mongo -p 27017:27017 -d mongo:latest</code></pre>
+                </li>
+            </ul>
+        </li>
+        <li>
+            <div class="fw-semibold">Start MongoDB</div>
+            <p class="mb-2">
+                Ensure MongoDB is listening on <code>mongodb://127.0.0.1:27017</code> (default), or update the connection string in the API/worker configuration.
+            </p>
+        </li>
+        <li>
+            <div class="fw-semibold">Create the database indexes</div>
+            <p class="mb-2">
+                This repo has an indexes bootstrap built into the Worker service. Run it once against your configured database:
+            </p>
+            <pre><code># From the repository root
+
+# Ensure the worker can see your Mongo settings (typically via appsettings / user secrets / env vars)
+
+dotnet run --project .\ProductNormaliser.Worker\ProductNormaliser.Worker.csproj -- --ensure-indexes</code></pre>
+            <p class="text-muted mb-0">
+                If <code>--ensure-indexes</code> isn’t supported in your current build, search for <code>EnsureIndexesAsync</code> in the solution
+                to see where index creation is wired up.
+            </p>
+        </li>
+        <li>
+            <div class="fw-semibold">Start the Admin API + Web app</div>
+            <pre class="mt-2"><code>dotnet run --project .\ProductNormaliser.AdminApi\ProductNormaliser.AdminApi.csproj
+
+dotnet run --project .\ProductNormaliser.Web\ProductNormaliser.Web.csproj</code></pre>
+        </li>
+    </ol>
+
+    <h2 class="h4 mt-4">After you’ve fixed it</h2>
+    <p>
+        <a class="btn btn-primary" href="/">Try again</a>
+        <a class="btn btn-outline-secondary" href="/Login">Go to login</a>
+    </p>
+</div>
