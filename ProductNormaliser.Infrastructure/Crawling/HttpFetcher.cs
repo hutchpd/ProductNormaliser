@@ -17,6 +17,12 @@ public sealed class HttpFetcher(HttpClient httpClient, IOptions<CrawlPipelineOpt
         ArgumentNullException.ThrowIfNull(target);
 
         var uri = new Uri(target.Url, UriKind.Absolute);
+        var source = await ResolveSourceAsync(target, cancellationToken);
+        if (source is not null && !source.GetDiscoveryHosts().Contains(NormaliseHost(uri.Host), StringComparer.OrdinalIgnoreCase))
+        {
+            return Failed(target.Url, $"Host '{uri.Host}' is not allowed for source '{source.Id}'.");
+        }
+
         var throttleProfile = await ResolveThrottleProfileAsync(target, uri, cancellationToken);
         var hostLock = HostLocks.GetOrAdd(throttleProfile.ThrottleKey, _ => new SemaphoreSlim(throttleProfile.MaxConcurrentRequests, throttleProfile.MaxConcurrentRequests));
 
@@ -100,25 +106,38 @@ public sealed class HttpFetcher(HttpClient httpClient, IOptions<CrawlPipelineOpt
 
     private async Task<FetchThrottleProfile> ResolveThrottleProfileAsync(CrawlTarget target, Uri uri, CancellationToken cancellationToken)
     {
-        if (target.Metadata.TryGetValue("sourceName", out var sourceName)
-            && !string.IsNullOrWhiteSpace(sourceName))
+        var source = await ResolveSourceAsync(target, cancellationToken);
+        if (source is not null
+            && source.GetDiscoveryHosts().Contains(NormaliseHost(uri.Host), StringComparer.OrdinalIgnoreCase))
         {
-            var source = await crawlSourceStore.GetAsync(sourceName.Trim(), cancellationToken);
-            if (source is not null
-                && (string.Equals(source.Host, uri.Host, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(new Uri(source.BaseUrl, UriKind.Absolute).Host, uri.Host, StringComparison.OrdinalIgnoreCase)))
-            {
-                return new FetchThrottleProfile(
-                    ThrottleKey: $"source:{source.Id}",
-                    MaxConcurrentRequests: Math.Max(1, source.ThrottlingPolicy.MaxConcurrentRequests),
-                    Delay: GetSourceDelay(source.ThrottlingPolicy));
-            }
+            return new FetchThrottleProfile(
+                ThrottleKey: $"source:{source.Id}",
+                MaxConcurrentRequests: Math.Max(1, source.ThrottlingPolicy.MaxConcurrentRequests),
+                Delay: GetSourceDelay(source.ThrottlingPolicy));
         }
 
         return new FetchThrottleProfile(
             ThrottleKey: $"host:{uri.Host}",
             MaxConcurrentRequests: 1,
             Delay: GetDefaultHostDelay(uri.Host));
+    }
+
+    private async Task<CrawlSource?> ResolveSourceAsync(CrawlTarget target, CancellationToken cancellationToken)
+    {
+        if (!target.Metadata.TryGetValue("sourceName", out var sourceName) || string.IsNullOrWhiteSpace(sourceName))
+        {
+            return null;
+        }
+
+        var normalized = sourceName.Trim();
+        var source = await crawlSourceStore.GetAsync(normalized, cancellationToken);
+        if (source is not null)
+        {
+            return source;
+        }
+
+        var sources = await crawlSourceStore.ListAsync(cancellationToken);
+        return sources.FirstOrDefault(item => string.Equals(item.DisplayName, normalized, StringComparison.OrdinalIgnoreCase));
     }
 
     private TimeSpan GetDefaultHostDelay(string hostKey)
@@ -161,6 +180,14 @@ public sealed class HttpFetcher(HttpClient httpClient, IOptions<CrawlPipelineOpt
             FailureReason = reason,
             FetchedUtc = DateTime.UtcNow
         };
+    }
+
+    private static string NormaliseHost(string host)
+    {
+        var trimmed = host.Trim().TrimEnd('.');
+        return trimmed.StartsWith("www.", StringComparison.OrdinalIgnoreCase)
+            ? trimmed[4..]
+            : trimmed;
     }
 
     private sealed record FetchThrottleProfile(string ThrottleKey, int MaxConcurrentRequests, TimeSpan Delay);

@@ -344,6 +344,7 @@ public sealed class DetailsModel(
 
             if (string.IsNullOrWhiteSpace(Discovery.CategoryEntryPages)
                 && string.IsNullOrWhiteSpace(Discovery.SitemapHints)
+                && string.IsNullOrWhiteSpace(Discovery.AllowedHosts)
                 && string.IsNullOrWhiteSpace(Discovery.AllowedPathPrefixes)
                 && string.IsNullOrWhiteSpace(Discovery.ExcludedPathPrefixes)
                 && string.IsNullOrWhiteSpace(Discovery.ProductUrlPatterns)
@@ -353,12 +354,16 @@ public sealed class DetailsModel(
                 {
                     CategoryEntryPages = FormatCategoryEntryPages(CurrentSource.DiscoveryProfile.CategoryEntryPages),
                     SitemapHints = FormatLineList(CurrentSource.DiscoveryProfile.SitemapHints),
+                    AllowedHosts = FormatLineList(CurrentSource.DiscoveryProfile.AllowedHosts),
                     AllowedPathPrefixes = FormatLineList(CurrentSource.DiscoveryProfile.AllowedPathPrefixes),
                     ExcludedPathPrefixes = FormatLineList(CurrentSource.DiscoveryProfile.ExcludedPathPrefixes),
                     ProductUrlPatterns = FormatLineList(CurrentSource.DiscoveryProfile.ProductUrlPatterns),
                     ListingUrlPatterns = FormatLineList(CurrentSource.DiscoveryProfile.ListingUrlPatterns),
                     MaxDiscoveryDepth = CurrentSource.DiscoveryProfile.MaxDiscoveryDepth,
-                    MaxUrlsPerRun = CurrentSource.DiscoveryProfile.MaxUrlsPerRun
+                    MaxUrlsPerRun = CurrentSource.DiscoveryProfile.MaxUrlsPerRun,
+                    MaxRetryCount = CurrentSource.DiscoveryProfile.MaxRetryCount,
+                    RetryBackoffBaseMs = CurrentSource.DiscoveryProfile.RetryBackoffBaseMs,
+                    RetryBackoffMaxMs = CurrentSource.DiscoveryProfile.RetryBackoffMaxMs
                 };
             }
 
@@ -395,12 +400,16 @@ public sealed class DetailsModel(
         {
             CategoryEntryPages = categoryEntryPages,
             SitemapHints = ParseLineList(Discovery.SitemapHints),
+            AllowedHosts = ParseLineList(Discovery.AllowedHosts),
             AllowedPathPrefixes = ParseLineList(Discovery.AllowedPathPrefixes),
             ExcludedPathPrefixes = ParseLineList(Discovery.ExcludedPathPrefixes),
             ProductUrlPatterns = ParseLineList(Discovery.ProductUrlPatterns),
             ListingUrlPatterns = ParseLineList(Discovery.ListingUrlPatterns),
             MaxDiscoveryDepth = Discovery.MaxDiscoveryDepth,
-            MaxUrlsPerRun = Discovery.MaxUrlsPerRun
+            MaxUrlsPerRun = Discovery.MaxUrlsPerRun,
+            MaxRetryCount = Discovery.MaxRetryCount,
+            RetryBackoffBaseMs = Discovery.RetryBackoffBaseMs,
+            RetryBackoffMaxMs = Discovery.RetryBackoffMaxMs
         };
 
         return true;
@@ -518,6 +527,9 @@ public sealed class DetailsModel(
         [Display(Name = "Allowed path prefixes")]
         public string AllowedPathPrefixes { get; set; } = string.Empty;
 
+        [Display(Name = "Allowed hosts")]
+        public string AllowedHosts { get; set; } = string.Empty;
+
         [Display(Name = "Excluded path prefixes")]
         public string ExcludedPathPrefixes { get; set; } = string.Empty;
 
@@ -534,6 +546,18 @@ public sealed class DetailsModel(
         [Range(1, int.MaxValue)]
         [Display(Name = "Maximum URLs per run")]
         public int MaxUrlsPerRun { get; set; } = 500;
+
+        [Range(0, int.MaxValue)]
+        [Display(Name = "Maximum retries")]
+        public int MaxRetryCount { get; set; } = 3;
+
+        [Range(1, int.MaxValue)]
+        [Display(Name = "Retry backoff base (ms)")]
+        public int RetryBackoffBaseMs { get; set; } = 1000;
+
+        [Range(1, int.MaxValue)]
+        [Display(Name = "Retry backoff max (ms)")]
+        public int RetryBackoffMaxMs { get; set; } = 30000;
     }
 
     public sealed class AnalystNoteInput

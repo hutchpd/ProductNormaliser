@@ -204,12 +204,16 @@ public sealed class SourcesController(
                     entry => (IReadOnlyList<string>)entry.Value.ToArray(),
                     StringComparer.OrdinalIgnoreCase),
                 SitemapHints = source.DiscoveryProfile.SitemapHints.ToArray(),
+                AllowedHosts = source.DiscoveryProfile.AllowedHosts.ToArray(),
                 AllowedPathPrefixes = source.DiscoveryProfile.AllowedPathPrefixes.ToArray(),
                 ExcludedPathPrefixes = source.DiscoveryProfile.ExcludedPathPrefixes.ToArray(),
                 ProductUrlPatterns = source.DiscoveryProfile.ProductUrlPatterns.ToArray(),
                 ListingUrlPatterns = source.DiscoveryProfile.ListingUrlPatterns.ToArray(),
                 MaxDiscoveryDepth = source.DiscoveryProfile.MaxDiscoveryDepth,
-                MaxUrlsPerRun = source.DiscoveryProfile.MaxUrlsPerRun
+                MaxUrlsPerRun = source.DiscoveryProfile.MaxUrlsPerRun,
+                MaxRetryCount = source.DiscoveryProfile.MaxRetryCount,
+                RetryBackoffBaseMs = source.DiscoveryProfile.RetryBackoffBaseMs,
+                RetryBackoffMaxMs = source.DiscoveryProfile.RetryBackoffMaxMs
             },
             ThrottlingPolicy = new SourceThrottlingPolicyDto
             {
@@ -255,12 +259,16 @@ public sealed class SourcesController(
                 entry => entry.Value.Where(value => !string.IsNullOrWhiteSpace(value)).ToList(),
                 StringComparer.OrdinalIgnoreCase),
             SitemapHints = discoveryProfile.SitemapHints.Where(value => !string.IsNullOrWhiteSpace(value)).ToList(),
+            AllowedHosts = discoveryProfile.AllowedHosts.Where(value => !string.IsNullOrWhiteSpace(value)).ToList(),
             AllowedPathPrefixes = discoveryProfile.AllowedPathPrefixes.Where(value => !string.IsNullOrWhiteSpace(value)).ToList(),
             ExcludedPathPrefixes = discoveryProfile.ExcludedPathPrefixes.Where(value => !string.IsNullOrWhiteSpace(value)).ToList(),
             ProductUrlPatterns = discoveryProfile.ProductUrlPatterns.Where(value => !string.IsNullOrWhiteSpace(value)).ToList(),
             ListingUrlPatterns = discoveryProfile.ListingUrlPatterns.Where(value => !string.IsNullOrWhiteSpace(value)).ToList(),
             MaxDiscoveryDepth = discoveryProfile.MaxDiscoveryDepth,
-            MaxUrlsPerRun = discoveryProfile.MaxUrlsPerRun
+            MaxUrlsPerRun = discoveryProfile.MaxUrlsPerRun,
+            MaxRetryCount = discoveryProfile.MaxRetryCount,
+            RetryBackoffBaseMs = discoveryProfile.RetryBackoffBaseMs,
+            RetryBackoffMaxMs = discoveryProfile.RetryBackoffMaxMs
         };
     }
 

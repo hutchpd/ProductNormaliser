@@ -165,17 +165,7 @@ public sealed class DiscoveryLinkPolicy
 
     private static bool HostMatches(CrawlSource source, string candidateHost)
     {
-        var expectedHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            NormaliseHost(source.Host)
-        };
-
-        if (Uri.TryCreate(source.BaseUrl, UriKind.Absolute, out var baseUri))
-        {
-            expectedHosts.Add(NormaliseHost(baseUri.Host));
-        }
-
-        return expectedHosts.Contains(NormaliseHost(candidateHost));
+        return source.GetDiscoveryHosts().Contains(NormaliseHost(candidateHost), StringComparer.OrdinalIgnoreCase);
     }
 
     private static string NormaliseHost(string host)

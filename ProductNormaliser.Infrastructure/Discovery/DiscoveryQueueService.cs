@@ -8,6 +8,7 @@ namespace ProductNormaliser.Infrastructure.Discovery;
 public sealed class DiscoveryQueueService(
     IDiscoveryQueueStore discoveryQueueStore,
     IDiscoveredUrlStore discoveredUrlStore,
+    ICrawlSourceStore crawlSourceStore,
     ProductTargetEnqueuer productTargetEnqueuer,
     DiscoveryJobProgressService discoveryJobProgressService) : IDiscoveryQueueService, IDiscoverySeedWriter
 {
@@ -32,6 +33,11 @@ public sealed class DiscoveryQueueService(
 
     public async Task<bool> EnqueueAsync(CrawlSource source, string categoryKey, string url, string itemType, int depth, string? parentUrl, string? jobId, CancellationToken cancellationToken)
     {
+        if (!await HasCapacityAsync(source, categoryKey, jobId, cancellationToken))
+        {
+            return false;
+        }
+
         var normalizedUrl = DiscoveryIdentity.NormalizeUrl(url);
         var queueId = DiscoveryIdentity.BuildDiscoveryQueueId(source.Id, categoryKey, url, itemType);
         var existingQueueItem = await discoveryQueueStore.GetByIdAsync(queueId, cancellationToken);
@@ -74,6 +80,11 @@ public sealed class DiscoveryQueueService(
 
     public async Task<bool> EnqueueProductAsync(CrawlSource source, string categoryKey, string url, int depth, string? parentUrl, string? jobId, CancellationToken cancellationToken)
     {
+        if (!await HasCapacityAsync(source, categoryKey, jobId, cancellationToken))
+        {
+            return false;
+        }
+
         var normalizedUrl = DiscoveryIdentity.NormalizeUrl(url);
         var now = DateTime.UtcNow;
         var enqueued = await productTargetEnqueuer.EnqueueAsync(jobId, source, categoryKey, url, cancellationToken);
@@ -125,12 +136,51 @@ public sealed class DiscoveryQueueService(
             return;
         }
 
+        var source = await crawlSourceStore.GetAsync(existing.SourceId, cancellationToken);
+        if (source is not null && ShouldRetry(existing, source.DiscoveryProfile))
+        {
+            existing.State = "queued";
+            existing.CompletedUtc = null;
+            existing.LastError = reason;
+            existing.NextAttemptUtc = ComputeNextAttemptUtc(existing, source.DiscoveryProfile);
+            await discoveryQueueStore.UpsertAsync(existing, cancellationToken);
+            await UpdateDiscoveredUrlRetryStateAsync(existing, reason, cancellationToken);
+            return;
+        }
+
         existing.State = "failed";
         existing.CompletedUtc = DateTime.UtcNow;
         existing.LastError = reason;
+        existing.NextAttemptUtc = null;
         await discoveryQueueStore.UpsertAsync(existing, cancellationToken);
         await UpdateDiscoveredUrlStateAsync(existing, "rejected", reason, cancellationToken);
         await discoveryJobProgressService.RecordProcessedPageAsync(existing.JobId, existing.CategoryKey, "rejected", cancellationToken);
+    }
+
+    private async Task<bool> HasCapacityAsync(CrawlSource source, string categoryKey, string? jobId, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(jobId))
+        {
+            var discoveredCount = await discoveredUrlStore.CountByScopeAsync(source.Id, categoryKey, jobId, cancellationToken);
+            return discoveredCount < source.DiscoveryProfile.MaxUrlsPerRun;
+        }
+
+        var activeCount = await discoveryQueueStore.CountActiveAsync(source.Id, categoryKey, cancellationToken);
+        return activeCount < source.DiscoveryProfile.MaxUrlsPerRun;
+    }
+
+    private static bool ShouldRetry(DiscoveryQueueItem queueItem, SourceDiscoveryProfile profile)
+    {
+        return queueItem.AttemptCount <= Math.Max(0, profile.MaxRetryCount);
+    }
+
+    private static DateTime ComputeNextAttemptUtc(DiscoveryQueueItem queueItem, SourceDiscoveryProfile profile)
+    {
+        var exponent = Math.Max(0, queueItem.AttemptCount - 1);
+        var baseDelay = Math.Max(1, profile.RetryBackoffBaseMs);
+        var maxDelay = Math.Max(baseDelay, profile.RetryBackoffMaxMs);
+        var computedDelay = Math.Min(maxDelay, (int)Math.Round(baseDelay * Math.Pow(2d, exponent), MidpointRounding.AwayFromZero));
+        return DateTime.UtcNow.AddMilliseconds(computedDelay);
     }
 
     private async Task RecordDiscoveredUrlAsync(
@@ -193,6 +243,22 @@ public sealed class DiscoveryQueueService(
         existing.AttemptCount = Math.Max(existing.AttemptCount, queueItem.AttemptCount);
         existing.LastProcessedUtc = DateTime.UtcNow;
         existing.NextAttemptUtc = null;
+        existing.LastError = lastError;
+        await discoveredUrlStore.UpsertAsync(existing, cancellationToken);
+    }
+
+    private async Task UpdateDiscoveredUrlRetryStateAsync(DiscoveryQueueItem queueItem, string lastError, CancellationToken cancellationToken)
+    {
+        var existing = await discoveredUrlStore.GetByNormalizedUrlAsync(queueItem.SourceId, queueItem.CategoryKey, queueItem.NormalizedUrl, cancellationToken);
+        if (existing is null)
+        {
+            return;
+        }
+
+        existing.State = "pending";
+        existing.AttemptCount = Math.Max(existing.AttemptCount, queueItem.AttemptCount);
+        existing.LastProcessedUtc = DateTime.UtcNow;
+        existing.NextAttemptUtc = queueItem.NextAttemptUtc;
         existing.LastError = lastError;
         await discoveredUrlStore.UpsertAsync(existing, cancellationToken);
     }

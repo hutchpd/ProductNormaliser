@@ -40,6 +40,15 @@ public sealed class DiscoveryQueueRepository(MongoDbContext context)
             cancellationToken);
     }
 
+    public async Task<long> CountActiveAsync(string sourceId, string categoryKey, CancellationToken cancellationToken = default)
+    {
+        return await Collection.CountDocumentsAsync(
+            item => item.SourceId == sourceId
+                && item.CategoryKey == categoryKey
+                && (item.State == "queued" || item.State == "processing"),
+            cancellationToken: cancellationToken);
+    }
+
     public async Task<IReadOnlyList<DiscoveryQueueItem>> ListQueuedAsync(DateTime utcNow, CancellationToken cancellationToken = default)
     {
         return await Collection.Find(item => item.State == "queued" && (item.NextAttemptUtc == null || item.NextAttemptUtc <= utcNow))

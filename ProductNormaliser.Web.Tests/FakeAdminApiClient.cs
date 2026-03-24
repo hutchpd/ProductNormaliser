@@ -444,12 +444,16 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
                     entry => (IReadOnlyList<string>)entry.Value.ToArray(),
                     StringComparer.OrdinalIgnoreCase),
                 SitemapHints = discoveryProfile.SitemapHints.ToArray(),
+                AllowedHosts = discoveryProfile.AllowedHosts.ToArray(),
                 AllowedPathPrefixes = discoveryProfile.AllowedPathPrefixes.ToArray(),
                 ExcludedPathPrefixes = discoveryProfile.ExcludedPathPrefixes.ToArray(),
                 ProductUrlPatterns = discoveryProfile.ProductUrlPatterns.ToArray(),
                 ListingUrlPatterns = discoveryProfile.ListingUrlPatterns.ToArray(),
                 MaxDiscoveryDepth = discoveryProfile.MaxDiscoveryDepth,
-                MaxUrlsPerRun = discoveryProfile.MaxUrlsPerRun
+                MaxUrlsPerRun = discoveryProfile.MaxUrlsPerRun,
+                MaxRetryCount = discoveryProfile.MaxRetryCount,
+                RetryBackoffBaseMs = discoveryProfile.RetryBackoffBaseMs,
+                RetryBackoffMaxMs = discoveryProfile.RetryBackoffMaxMs
             },
             ThrottlingPolicy = new SourceThrottlingPolicyDto
             {

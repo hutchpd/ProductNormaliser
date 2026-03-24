@@ -231,6 +231,7 @@ internal static class AdminApiContractValidator
         }
 
         ValidateStringItems(payload.SitemapHints, $"{path}.sitemapHints");
+        ValidateStringItems(payload.AllowedHosts, $"{path}.allowedHosts");
         ValidateStringItems(payload.AllowedPathPrefixes, $"{path}.allowedPathPrefixes");
         ValidateStringItems(payload.ExcludedPathPrefixes, $"{path}.excludedPathPrefixes");
         ValidateStringItems(payload.ProductUrlPatterns, $"{path}.productUrlPatterns");

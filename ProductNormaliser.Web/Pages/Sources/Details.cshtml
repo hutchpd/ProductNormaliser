@@ -357,6 +357,12 @@
                             <span asp-validation-for="Discovery.SitemapHints" class="text-danger small"></span>
                         </div>
                         <div>
+                            <label asp-for="Discovery.AllowedHosts" class="form-label"></label>
+                            <textarea asp-for="Discovery.AllowedHosts" rows="4" class="form-control" placeholder="cdn.alpha.example&#10;images.alpha.example"></textarea>
+                            <div class="subtle-copy">Optional extra hosts discovery may traverse in addition to the source base host.</div>
+                            <span asp-validation-for="Discovery.AllowedHosts" class="text-danger small"></span>
+                        </div>
+                        <div>
                             <label asp-for="Discovery.AllowedPathPrefixes" class="form-label"></label>
                             <textarea asp-for="Discovery.AllowedPathPrefixes" rows="4" class="form-control" placeholder="/tv&#10;/product"></textarea>
                             <span asp-validation-for="Discovery.AllowedPathPrefixes" class="text-danger small"></span>
@@ -387,6 +393,21 @@
                             <label asp-for="Discovery.MaxUrlsPerRun" class="form-label"></label>
                             <input asp-for="Discovery.MaxUrlsPerRun" class="form-control" />
                             <span asp-validation-for="Discovery.MaxUrlsPerRun" class="text-danger small"></span>
+                        </div>
+                        <div>
+                            <label asp-for="Discovery.MaxRetryCount" class="form-label"></label>
+                            <input asp-for="Discovery.MaxRetryCount" class="form-control" />
+                            <span asp-validation-for="Discovery.MaxRetryCount" class="text-danger small"></span>
+                        </div>
+                        <div>
+                            <label asp-for="Discovery.RetryBackoffBaseMs" class="form-label"></label>
+                            <input asp-for="Discovery.RetryBackoffBaseMs" class="form-control" />
+                            <span asp-validation-for="Discovery.RetryBackoffBaseMs" class="text-danger small"></span>
+                        </div>
+                        <div>
+                            <label asp-for="Discovery.RetryBackoffMaxMs" class="form-label"></label>
+                            <input asp-for="Discovery.RetryBackoffMaxMs" class="form-control" />
+                            <span asp-validation-for="Discovery.RetryBackoffMaxMs" class="text-danger small"></span>
                         </div>
                     </div>
                     <div class="actions-bar">

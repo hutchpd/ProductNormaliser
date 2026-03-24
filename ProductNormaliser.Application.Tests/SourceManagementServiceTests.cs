@@ -28,12 +28,16 @@ public sealed class SourceManagementServiceTests
                     ["refrigerator"] = ["/cooling"]
                 },
                 SitemapHints = ["/sitemap.xml", "https://www.retailer-one.example/sitemap.xml"],
+                AllowedHosts = ["media.retailer-one.example", "https://img.retailer-one.example/assets"],
                 AllowedPathPrefixes = ["tv", "/tv", "https://www.retailer-one.example/product"],
                 ExcludedPathPrefixes = ["/support/", "/support"],
                 ProductUrlPatterns = ["/product/", " /p/ "],
                 ListingUrlPatterns = ["/category/", " /department/ "],
                 MaxDiscoveryDepth = 4,
-                MaxUrlsPerRun = 750
+                MaxUrlsPerRun = 750,
+                MaxRetryCount = 2,
+                RetryBackoffBaseMs = 1500,
+                RetryBackoffMaxMs = 12000
             }
         });
 
@@ -45,14 +49,46 @@ public sealed class SourceManagementServiceTests
             Assert.That(result.DiscoveryProfile.CategoryEntryPages["tv"], Is.EqualTo(new[] { "https://www.retailer-one.example/televisions" }));
             Assert.That(result.DiscoveryProfile.CategoryEntryPages["refrigerator"], Is.EqualTo(new[] { "https://www.retailer-one.example/cooling" }));
             Assert.That(result.DiscoveryProfile.SitemapHints, Is.EqualTo(new[] { "https://www.retailer-one.example/sitemap.xml" }));
+            Assert.That(result.DiscoveryProfile.AllowedHosts, Is.EqualTo(new[] { "media.retailer-one.example", "img.retailer-one.example" }));
             Assert.That(result.DiscoveryProfile.AllowedPathPrefixes, Is.EqualTo(new[] { "/tv", "/product" }));
             Assert.That(result.DiscoveryProfile.ExcludedPathPrefixes, Is.EqualTo(new[] { "/support" }));
             Assert.That(result.DiscoveryProfile.ProductUrlPatterns, Is.EqualTo(new[] { "/product/", "/p/" }));
             Assert.That(result.DiscoveryProfile.ListingUrlPatterns, Is.EqualTo(new[] { "/category/", "/department/" }));
             Assert.That(result.DiscoveryProfile.MaxDiscoveryDepth, Is.EqualTo(4));
             Assert.That(result.DiscoveryProfile.MaxUrlsPerRun, Is.EqualTo(750));
+            Assert.That(result.DiscoveryProfile.MaxRetryCount, Is.EqualTo(2));
+            Assert.That(result.DiscoveryProfile.RetryBackoffBaseMs, Is.EqualTo(1500));
+            Assert.That(result.DiscoveryProfile.RetryBackoffMaxMs, Is.EqualTo(12000));
             Assert.That(store.Items, Has.Count.EqualTo(1));
         });
+    }
+
+    [Test]
+    public void SetThrottlingAsync_RejectsRobotsBypass()
+    {
+        var store = new FakeCrawlSourceStore(new CrawlSource
+        {
+            Id = "alpha",
+            DisplayName = "Alpha",
+            BaseUrl = "https://alpha.example",
+            Host = "alpha.example",
+            IsEnabled = true,
+            ThrottlingPolicy = new SourceThrottlingPolicy(),
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow
+        });
+        var service = CreateService(store, new FakeCategoryMetadataService(CreateCategory("tv")));
+
+        var action = async () => await service.SetThrottlingAsync("alpha", new SourceThrottlingPolicy
+        {
+            MinDelayMs = 1000,
+            MaxDelayMs = 2000,
+            MaxConcurrentRequests = 1,
+            RequestsPerMinute = 10,
+            RespectRobotsTxt = false
+        });
+
+        Assert.That(action, Throws.ArgumentException.With.Message.Contain("Robots.txt checks are mandatory"));
     }
 
     [Test]

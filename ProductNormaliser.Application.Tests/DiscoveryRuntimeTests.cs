@@ -77,11 +77,20 @@ public sealed class DiscoveryRuntimeTests
     }
 
     [Test]
-    public async Task RobotsPolicyService_AllowsWhenSourceDisablesRobotsRespect()
+    public async Task RobotsPolicyService_AlwaysEnforcesRobotsRules()
     {
         var source = CreateSource();
         source.ThrottlingPolicy.RespectRobotsTxt = false;
-        var httpFetcher = new StubHttpFetcher(new Dictionary<string, FetchResult>(StringComparer.OrdinalIgnoreCase));
+        var httpFetcher = new StubHttpFetcher(new Dictionary<string, FetchResult>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["https://alpha.example/robots.txt"] = new()
+            {
+                Url = "https://alpha.example/robots.txt",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "User-agent: *\nDisallow: /support"
+            }
+        });
         var robotsPolicyService = new RobotsPolicyService(new RobotsTxtCache(httpFetcher), new FakeCrawlSourceStore(source));
 
         var decision = await robotsPolicyService.EvaluateAsync(new CrawlTarget
@@ -96,8 +105,9 @@ public sealed class DiscoveryRuntimeTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(decision.IsAllowed, Is.True);
-            Assert.That(httpFetcher.FetchCount, Is.EqualTo(0));
+            Assert.That(decision.IsAllowed, Is.False);
+            Assert.That(decision.Reason, Does.Contain("Blocked by robots policy"));
+            Assert.That(httpFetcher.FetchCount, Is.EqualTo(1));
         });
     }
 
@@ -147,6 +157,7 @@ public sealed class DiscoveryRuntimeTests
     public void DiscoveryLinkPolicy_NormalizesUrlsAndAppliesBoundaryRules()
     {
         var source = CreateSource();
+        source.DiscoveryProfile.AllowedHosts = ["media.alpha.example"];
         var sut = new DiscoveryLinkPolicy();
 
         var normalized = sut.NormalizeUrl("https://alpha.example/product/item-1/?utm_source=newsletter&ref=promo&sku=123");
@@ -155,6 +166,7 @@ public sealed class DiscoveryRuntimeTests
         {
             Assert.That(normalized, Is.EqualTo("https://alpha.example/product/item-1?sku=123"));
             Assert.That(sut.IsAllowed(source, "tv", "https://alpha.example/product/item-1?utm_campaign=spring", depth: 1), Is.True);
+            Assert.That(sut.IsAllowed(source, "tv", "https://media.alpha.example/category/tv?page=2", depth: 1), Is.True);
             Assert.That(sut.IsAllowed(source, "tv", "https://alpha.example/support/faq", depth: 1), Is.False);
             Assert.That(sut.IsAllowed(source, "tv", "https://external.example/product/item-1", depth: 1), Is.False);
             Assert.That(sut.IsAllowed(source, "tv", "https://alpha.example/category/tv", depth: 5), Is.False);
@@ -309,6 +321,7 @@ public sealed class DiscoveryRuntimeTests
             DisplayName = "Alpha",
             BaseUrl = "https://alpha.example/",
             Host = "alpha.example",
+            IsEnabled = true,
             DiscoveryProfile = new SourceDiscoveryProfile
             {
                 AllowedPathPrefixes = ["/product", "/category", "/guides", "/sitemap", "/catalog"],

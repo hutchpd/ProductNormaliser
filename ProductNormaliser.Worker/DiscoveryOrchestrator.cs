@@ -24,6 +24,11 @@ public sealed class DiscoveryOrchestrator(
             return DiscoveryProcessResult.Skipped($"Source '{item.SourceId}' is not available for discovery.");
         }
 
+        if (!discoveryLinkPolicy.IsAllowed(source, item.CategoryKey, item.Url, item.Depth))
+        {
+            return DiscoveryProcessResult.Skipped("Discovery target is outside the configured source bounds.");
+        }
+
         var target = new CrawlTarget
         {
             Url = item.Url,
@@ -83,7 +88,7 @@ public sealed class DiscoveryOrchestrator(
 
         foreach (var pageUrl in parsed.CandidateUrls.Take(source.DiscoveryProfile.MaxUrlsPerRun))
         {
-            enqueuedCount += await RouteSitemapCandidateAsync(source, item.CategoryKey, pageUrl, item.Depth + 1, item.Url, cancellationToken) ? 1 : 0;
+            enqueuedCount += await RouteSitemapCandidateAsync(source, item.CategoryKey, pageUrl, item.Depth + 1, item.Url, item.JobId, cancellationToken) ? 1 : 0;
         }
 
         return DiscoveryProcessResult.Completed($"Processed sitemap and routed {enqueuedCount} URL(s).");
@@ -127,7 +132,7 @@ public sealed class DiscoveryOrchestrator(
         return DiscoveryProcessResult.Completed($"Processed listing page and routed {enqueuedCount} URL(s).");
     }
 
-    private async Task<bool> RouteSitemapCandidateAsync(CrawlSource source, string categoryKey, string url, int depth, string parentUrl, CancellationToken cancellationToken)
+    private async Task<bool> RouteSitemapCandidateAsync(CrawlSource source, string categoryKey, string url, int depth, string parentUrl, string? jobId, CancellationToken cancellationToken)
     {
         if (!discoveryLinkPolicy.IsAllowed(source, categoryKey, url, depth))
         {
@@ -136,17 +141,17 @@ public sealed class DiscoveryOrchestrator(
 
         if (discoveryLinkPolicy.LooksLikeSitemap(url) && depth <= source.DiscoveryProfile.MaxDiscoveryDepth)
         {
-            return await discoveryQueueService.EnqueueAsync(source, categoryKey, url, "sitemap", depth, parentUrl, null, cancellationToken);
+            return await discoveryQueueService.EnqueueAsync(source, categoryKey, url, "sitemap", depth, parentUrl, jobId, cancellationToken);
         }
 
         if (productPageClassifier.IsLikelyProductUrl(source, url))
         {
-            return await discoveryQueueService.EnqueueProductAsync(source, categoryKey, url, depth, parentUrl, null, cancellationToken);
+            return await discoveryQueueService.EnqueueProductAsync(source, categoryKey, url, depth, parentUrl, jobId, cancellationToken);
         }
 
         if (listingPageClassifier.IsLikelyListingUrl(source, url) && depth <= source.DiscoveryProfile.MaxDiscoveryDepth)
         {
-            return await discoveryQueueService.EnqueueAsync(source, categoryKey, url, "listing", depth, parentUrl, null, cancellationToken);
+            return await discoveryQueueService.EnqueueAsync(source, categoryKey, url, "listing", depth, parentUrl, jobId, cancellationToken);
         }
 
         return false;

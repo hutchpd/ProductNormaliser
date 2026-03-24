@@ -10,16 +10,6 @@ public sealed class RobotsPolicyService(IRobotsTxtCache robotsTxtCache, ICrawlSo
     {
         ArgumentNullException.ThrowIfNull(target);
 
-        var source = await ResolveSourceAsync(target, cancellationToken);
-        if (source is not null && !source.ThrottlingPolicy.RespectRobotsTxt)
-        {
-            return new RobotsPolicyDecision
-            {
-                IsAllowed = true,
-                Reason = "Source is configured to bypass robots policy checks."
-            };
-        }
-
         var uri = new Uri(target.Url, UriKind.Absolute);
         var rules = await robotsTxtCache.GetAsync(target, cancellationToken);
         var path = string.IsNullOrWhiteSpace(uri.PathAndQuery) ? "/" : uri.PathAndQuery;
@@ -38,15 +28,5 @@ public sealed class RobotsPolicyService(IRobotsTxtCache robotsTxtCache, ICrawlSo
             IsAllowed = true,
             Reason = "Allowed by robots policy."
         };
-    }
-
-    private async Task<CrawlSource?> ResolveSourceAsync(CrawlTarget target, CancellationToken cancellationToken)
-    {
-        if (!target.Metadata.TryGetValue("sourceName", out var sourceName) || string.IsNullOrWhiteSpace(sourceName))
-        {
-            return null;
-        }
-
-        return await crawlSourceStore.GetAsync(sourceName.Trim(), cancellationToken);
     }
 }

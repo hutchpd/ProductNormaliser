@@ -219,6 +219,11 @@ public sealed class SourceManagementService(
             throw new ArgumentException("Requests per minute must be greater than zero.", nameof(policy));
         }
 
+        if (!policy.RespectRobotsTxt)
+        {
+            throw new ArgumentException("Robots.txt checks are mandatory for source throttling.", nameof(policy));
+        }
+
         return new SourceThrottlingPolicy
         {
             MinDelayMs = policy.MinDelayMs,
@@ -248,6 +253,21 @@ public sealed class SourceManagementService(
             throw new ArgumentException("Maximum URLs per run must be greater than zero.", nameof(profile));
         }
 
+        if (profile.MaxRetryCount < 0)
+        {
+            throw new ArgumentException("Maximum retry count must be zero or greater.", nameof(profile));
+        }
+
+        if (profile.RetryBackoffBaseMs <= 0)
+        {
+            throw new ArgumentException("Retry backoff base must be greater than zero.", nameof(profile));
+        }
+
+        if (profile.RetryBackoffMaxMs < profile.RetryBackoffBaseMs)
+        {
+            throw new ArgumentException("Retry backoff max must be greater than or equal to retry backoff base.", nameof(profile));
+        }
+
         var supportedCategorySet = supportedCategoryKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var categoryEntryPages = await NormaliseCategoryEntryPagesAsync(profile.CategoryEntryPages, supportedCategorySet, baseUrl, host, cancellationToken);
 
@@ -255,12 +275,16 @@ public sealed class SourceManagementService(
         {
             CategoryEntryPages = categoryEntryPages,
             SitemapHints = NormaliseOrderedValues(profile.SitemapHints, value => NormaliseDiscoveryUrl(value, baseUrl, host)),
+            AllowedHosts = NormaliseOrderedValues(profile.AllowedHosts, value => NormaliseAllowedHost(value, host, crawlGovernanceService)),
             AllowedPathPrefixes = NormaliseOrderedValues(profile.AllowedPathPrefixes, value => NormalisePathPrefix(value, baseUrl, host)),
             ExcludedPathPrefixes = NormaliseOrderedValues(profile.ExcludedPathPrefixes, value => NormalisePathPrefix(value, baseUrl, host)),
             ProductUrlPatterns = NormaliseOrderedValues(profile.ProductUrlPatterns, static value => value.Trim()),
             ListingUrlPatterns = NormaliseOrderedValues(profile.ListingUrlPatterns, static value => value.Trim()),
             MaxDiscoveryDepth = profile.MaxDiscoveryDepth,
-            MaxUrlsPerRun = profile.MaxUrlsPerRun
+            MaxUrlsPerRun = profile.MaxUrlsPerRun,
+            MaxRetryCount = profile.MaxRetryCount,
+            RetryBackoffBaseMs = profile.RetryBackoffBaseMs,
+            RetryBackoffMaxMs = profile.RetryBackoffMaxMs
         };
     }
 
@@ -343,6 +367,38 @@ public sealed class SourceManagementService(
         }
 
         return NormalisePathSegment(combinedUri.PathAndQuery);
+    }
+
+    private static string NormaliseAllowedHost(string value, string baseHost, ICrawlGovernanceService crawlGovernanceService)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+
+        var trimmed = value.Trim();
+        string host;
+
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absoluteUri))
+        {
+            crawlGovernanceService.ValidateSourceBaseUrl($"{absoluteUri.Scheme}://{absoluteUri.Authority}", nameof(value));
+            host = absoluteUri.Host;
+        }
+        else
+        {
+            var normalizedHost = trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                || trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                ? new Uri(trimmed, UriKind.Absolute).Host
+                : trimmed;
+
+            crawlGovernanceService.ValidateSourceBaseUrl($"https://{normalizedHost}", nameof(value));
+            host = normalizedHost;
+        }
+
+        var normalized = host.Trim().TrimEnd('.').ToLowerInvariant();
+        if (string.Equals(normalized, baseHost, StringComparison.OrdinalIgnoreCase))
+        {
+            return normalized;
+        }
+
+        return normalized;
     }
 
     private static List<string> NormaliseOrderedValues(IEnumerable<string> values, Func<string, string> normalise)

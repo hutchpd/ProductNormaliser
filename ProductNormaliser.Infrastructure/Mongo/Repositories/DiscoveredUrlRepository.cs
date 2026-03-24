@@ -17,6 +17,13 @@ public sealed class DiscoveredUrlRepository(MongoDbContext context)
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<long> CountByScopeAsync(string sourceId, string categoryKey, string? jobId, CancellationToken cancellationToken = default)
+    {
+        return string.IsNullOrWhiteSpace(jobId)
+            ? await Collection.CountDocumentsAsync(item => item.SourceId == sourceId && item.CategoryKey == categoryKey && item.JobId == null, cancellationToken: cancellationToken)
+            : await Collection.CountDocumentsAsync(item => item.SourceId == sourceId && item.CategoryKey == categoryKey && item.JobId == jobId, cancellationToken: cancellationToken);
+    }
+
     public async Task UpsertAsync(DiscoveredUrl item, CancellationToken cancellationToken = default)
     {
         await Collection.ReplaceOneAsync(
