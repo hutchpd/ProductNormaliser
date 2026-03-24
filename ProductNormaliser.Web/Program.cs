@@ -30,6 +30,7 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizeFolder("/", ManagementWebSecurityConstants.OperatorPolicy);
     options.Conventions.AllowAnonymousToPage("/Login");
     options.Conventions.AllowAnonymousToPage("/Forbidden");
+    options.Conventions.AllowAnonymousToPage("/Privacy");
 });
 builder.Services.Configure<AdminApiOptions>(builder.Configuration.GetSection(AdminApiOptions.SectionName));
 builder.Services.Configure<ManagementWebSecurityOptions>(builder.Configuration.GetSection(ManagementWebSecurityOptions.SectionName));
