@@ -6,7 +6,7 @@ This project does not talk to MongoDB, HTTP, or ASP.NET directly. It defines the
 
 ## Responsibilities
 
-- define core product, evidence, offer, queue, conflict, history, and quality models
+- define core product, evidence, offer, crawl, discovery, conflict, history, and quality models
 - define category schema, metadata, and canonical attribute definitions for electrical-goods families
 - define interfaces for extraction, normalisation, identity resolution, merge, trust, stability, disagreement, and backoff services
 - implement merge logic and conflict detection
@@ -14,7 +14,7 @@ This project does not talk to MongoDB, HTTP, or ASP.NET directly. It defines the
 
 ## Main folders
 
-- `Models`: domain objects such as source products, canonical products, queue items, conflicts, change events, and trust snapshots
+- `Models`: domain objects such as source products, canonical products, crawl and discovery queue items, conflicts, change events, and trust snapshots
 - `Interfaces`: cross-project contracts implemented by infrastructure or runtime services
 - `Merging`: canonical merge logic, weighting, and conflict detection
 - `Normalisation`: attribute name/value normalisation and unit conversion logic
@@ -28,7 +28,9 @@ Important model groups include:
 - canonical state: `CanonicalProduct`, `CanonicalAttributeValue`, `AttributeEvidence`
 - identity and merge: `ProductFingerprint`, `ProductIdentityMatchResult`, `MergeConflict`
 - quality and time: `SourceQualitySnapshot`, `AttributeStabilityScore`, `ProductChangeEvent`, `SourceAttributeDisagreement`
-- crawl intelligence: `CrawlQueueItem`, `CrawlContext`, `AdaptiveCrawlPolicy`, `PageVolatilityProfile`
+- crawl and discovery intelligence: `CrawlQueueItem`, `DiscoveryQueueItem`, `DiscoveredUrl`, `SourceDiscoveryProfile`, `CrawlContext`, `AdaptiveCrawlPolicy`, `PageVolatilityProfile`
+
+`SourceDiscoveryProfile` is the core source-level policy object for deterministic discovery. It defines category entry pages, sitemap hints, host and path allowlists, deny prefixes, product and listing URL patterns, maximum discovery depth, and per-run retry or URL budgets.
 
 These types are the shared language of the system. Infrastructure persists them. The worker updates them. The admin API projects them into DTOs.
 
@@ -46,6 +48,8 @@ The main extension points defined here are:
 - `ISourceDisagreementService`: tracks where a source repeatedly diverges from consensus
 - `ICrawlBackoffService`: calculates future revisit timing based on page and source behavior
 - `IUnmappedAttributeRecorder`: captures unknown attributes for schema feedback loops
+
+The Domain project also defines the discovery-first language shared by the rest of the system. Infrastructure persists discovery queues and discovered URLs, the application layer validates and seeds discovery from managed sources, and the worker executes bounded traversal using these shared models.
 
 These interfaces are what make the solution composable. You can replace implementations without rewriting the domain model.
 

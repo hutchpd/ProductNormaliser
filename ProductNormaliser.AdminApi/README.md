@@ -1,12 +1,13 @@
 # ProductNormaliser.AdminApi
 
-ProductNormaliser.AdminApi is the operational, intelligence, and dashboard management API for the platform. It exposes queue state, crawl logs, conflicts, canonical product detail, change history, quality analytics, category metadata, and managed crawl-source administration over the shared MongoDB database.
+ProductNormaliser.AdminApi is the operational, intelligence, and dashboard management API for the platform. It exposes queue state, discovery progress, crawl logs, conflicts, canonical product detail, change history, quality analytics, category metadata, and managed crawl-source administration over the shared MongoDB database.
 
 This is an internal-facing service designed to help operators, analysts, and developers inspect what the system is doing and why.
 
 ## Responsibilities
 
 - expose operational monitoring endpoints
+- expose discovery-aware job and source progress views
 - expose product and change-history views
 - expose quality and source-intelligence analytics
 - expose category catalog and schema metadata for dashboard discovery
@@ -26,6 +27,8 @@ At startup the API registers:
 - `ISourceManagementService` for source registration, validation, and policy updates
 - `ISourceOperationalInsightsProvider` for source readiness, health, and recent-activity summaries
 
+The API composition now supports full source discovery profiles end to end, including category entry pages, sitemap hints, allow or deny rules, URL patterns, max depth, and per-run budgets.
+
 ## Main controllers and endpoints
 
 ### Stats
@@ -37,10 +40,11 @@ Returns a high-level operational summary.
 The stats payload now includes both catalogue counts and an operational snapshot covering:
 
 - active crawl jobs
-- queue depth, retry backlog, and failed queue items
+- crawl queue depth, discovery queue depth, retry backlog, and failed queue items
 - throughput and failures over the trailing 24 hours
 - per-source operational health metrics
 - per-category crawl pressure metrics
+- discovered URL counts and confirmed product target counts in the aggregate and per-category views
 
 ### Queue
 
@@ -78,6 +82,8 @@ These endpoints let you inspect filtered product lists, individual canonical rec
 
 These endpoints support the operator crawl console and quick-launch flow.
 
+The crawl-job payloads now carry discovery-aware progress such as discovered URL counts, confirmed product target counts, discovery queue depth, product queue depth, rejected pages, robots-blocked pages, and per-category or per-source coverage.
+
 ### Categories
 
 - `GET /api/categories`
@@ -102,7 +108,9 @@ These endpoints exist so the dashboard can discover supported electrical-goods c
 
 These endpoints manage the dedicated crawl-source registry used by the web UI. They include OpenAPI response annotations and concrete example payloads in the generated document so dashboard and client developers can inspect the expected shapes directly.
 
-The source payloads now include readiness, health, and recent activity summaries so the operator UI can surface crawl posture without separately stitching together telemetry.
+The source payloads now include readiness, health, recent activity, discovery queue depth, confirmed product counts, and the full source discovery profile so the operator UI can surface crawl posture without separately stitching together telemetry.
+
+`POST /api/sources` and `PUT /api/sources/{sourceId}` now support source discovery profile data directly. If a profile is omitted during registration, the application layer applies conservative startup defaults so a newly added source can participate in the boot-and-populate flow immediately.
 
 ### Quality and intelligence
 

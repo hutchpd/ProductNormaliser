@@ -67,7 +67,7 @@ The solution now contains ten projects:
 - [ProductNormaliser.Application](ProductNormaliser.Application/README.md): application-layer seam for use cases, orchestration, and future category-agnostic workflow composition
 - [ProductNormaliser.Infrastructure](ProductNormaliser.Infrastructure/README.md): MongoDB persistence, crawl queue, fetch/robots services, delta detection, extraction, trust, stability, and disagreement services
 - [ProductNormaliser.AdminApi](ProductNormaliser.AdminApi/README.md): operational and intelligence read API for queue state, crawl logs, conflicts, product history, and quality analytics
-- [ProductNormaliser.Worker](ProductNormaliser.Worker/README.md): background processing host that executes the crawl and merge pipeline
+- [ProductNormaliser.Worker](ProductNormaliser.Worker/README.md): background processing host that executes the discovery, crawl, and merge pipeline
 - [ProductNormaliser.Web](ProductNormaliser.Web/README.md): web UI host that will consume backend APIs rather than talking to persistence directly
 - [ProductNormaliser.Domain.Tests](ProductNormaliser.Domain.Tests/README.md): focused test project for domain-level rules and models
 - [ProductNormaliser.Application.Tests](ProductNormaliser.Application.Tests/README.md): current broad integration and orchestration test suite while responsibilities are being split by layer
@@ -76,16 +76,17 @@ The solution now contains ten projects:
 
 ## Architecture at a glance
 
-1. A crawl target is queued for a source URL.
-2. The worker fetches the page while respecting robots and host delay rules.
-3. Structured data is extracted from the page.
-4. A source product is built from extracted data.
-5. Attributes are normalised into the canonical schema.
-6. Identity resolution decides whether the source product matches an existing canonical product.
-7. Merge logic computes evidence-weighted attribute winners.
-8. Conflicts, quality signals, change events, trust snapshots, and disagreement analytics are persisted.
-9. Adaptive scheduling decides when the source should be revisited.
-10. The admin API exposes the operational and analytical view of the system.
+1. Operators register or enable managed crawl sources and assign categories such as `tv`, `monitor`, and `laptop`.
+2. Each source carries a discovery profile with category entry pages, sitemap hints, allow or deny path rules, URL patterns, depth limits, and per-run budgets.
+3. A category crawl job now seeds deterministic discovery from eligible managed sources instead of relying only on pre-known targets.
+4. The discovery worker fetches sitemaps and listing pages while respecting robots rules, source throttling, depth limits, and URL budgets.
+5. Discovered URLs are classified, persisted, and promoted into crawl targets only when they look like valid product candidates.
+6. The crawl worker fetches confirmed product pages and extracts structured product evidence.
+7. A source product is built from extracted data and normalised into the canonical schema.
+8. Identity resolution decides whether the source product matches an existing canonical product.
+9. Merge logic computes evidence-weighted attribute winners, while conflicts, change events, trust snapshots, disagreement analytics, and discovery progress are persisted.
+10. Related-link expansion can feed nearby product and listing links back into discovery after successful product fetches.
+11. The admin API and Razor Pages console expose the operational and analytical view of source setup, discovery progress, product crawl progress, and catalogue quality.
 
 ## Current capabilities
 
@@ -98,19 +99,33 @@ The solution currently includes:
 - structured data extraction from HTML and JSON-LD
 - MongoDB persistence for source and canonical records
 - MongoDB persistence for managed crawl sources and per-source throttling policy
+- source discovery profiles with category entry pages, sitemap hints, allow or deny rules, URL patterns, depth limits, and run budgets
+- MongoDB persistence for discovered URLs and the discovery queue
+- deterministic discovery infrastructure for sitemap parsing, listing traversal, product-page confirmation, and discovery link policy evaluation
 - identity resolution across sources
 - explainable merge weighting and conflict detection
 - semantic delta detection for product changes
-- worker orchestration with retry and skip/fail handling
+- worker orchestration with dedicated discovery and crawl workers, retry handling, and related-link expansion after successful product fetches
 - admin endpoints for operational observability
 - admin endpoints for category catalog management and crawl-source management
 - admin endpoints for crawl job launch and tracking
 - admin endpoints for product list, product detail, and product history inspection
+- discovery-aware job, source, and dashboard views showing queue depth, discovered URL counts, confirmed product counts, failures, and per-category or source coverage
 - quality analytics for coverage, unmapped attributes, source quality, and merge insights
 - temporal intelligence for source trust history, attribute stability, and product change timelines
 - adaptive crawl scheduling based on volatility, stability, freshness, and source behavior
 - per-source disagreement tracking that feeds back into trust and merge decisions
-- a Razor Pages operator console with category selection, quick crawl launch, crawl-job monitoring, product exploration, product detail explainability, quality dashboards, and source management
+- a Razor Pages operator console with source registration, category selection, seeded crawl launch, discovery-progress monitoring, product exploration, product detail explainability, quality dashboards, and source management
+
+## Operator workflow
+
+The current Milestone 1 flow is intentionally "boot and populate":
+
+1. boot the API, web host, and worker against MongoDB
+2. register or enable sources from the source registry
+3. choose the active categories in the operator console
+4. launch a seeded category crawl
+5. watch discovery queue depth, discovered URL counts, confirmed product targets, crawl failures, and canonical product counts update in the dashboard and crawl-job detail views
 
 ## Prerequisites
 
@@ -151,7 +166,7 @@ Admin API configuration lives in [ProductNormaliser.AdminApi/appsettings.json](P
 
 ## Running the worker
 
-The worker is the engine that consumes the crawl queue and updates the database.
+The worker is the engine that runs both deterministic discovery and product crawling.
 
 ```bash
 dotnet run --project ProductNormaliser.Worker
@@ -159,12 +174,14 @@ dotnet run --project ProductNormaliser.Worker
 
 The worker:
 
-- dequeues pending crawl items from MongoDB
-- fetches and extracts source data
+- scans eligible managed sources for discovery work
+- expands sitemaps and listing pages into bounded discovery queues
+- promotes confirmed product URLs into crawl targets
+- fetches and extracts source data from product pages
 - builds or updates source products
 - merges into canonical products
-- records crawl logs, conflicts, trust signals, change events, and disagreement data
-- reschedules future attempts using adaptive backoff rules
+- records crawl logs, conflicts, trust signals, change events, disagreement data, and discovery progress
+- reschedules future attempts using adaptive backoff and discovery budgets
 
 ## Observability
 
@@ -292,11 +309,12 @@ The quality endpoints default to the `tv` category, which remains the current fi
 
 ## Why the project structure matters
 
-The separation between Core, Infrastructure, Worker, and AdminApi is deliberate:
+The separation between Domain, Application, Infrastructure, Worker, and AdminApi is deliberate:
 
-- Core stays focused on product intelligence rules and contracts
+- Domain stays focused on product intelligence rules, contracts, and shared models
+- Application owns orchestration and workflow validation
 - Infrastructure implements persistence and external-system adapters
-- Worker owns the write-side pipeline
+- Worker owns the write-side discovery and crawl pipeline
 - AdminApi owns the read-side operational and analytical experience
 
 That split keeps the domain logic explainable and testable while still allowing the runtime services to evolve independently.

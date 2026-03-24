@@ -11,6 +11,7 @@ This project is important because ProductNormaliser is not just a CRUD system. I
 - validate Mongo-backed repositories and integration flows
 - validate merge, conflict, and identity decisions
 - validate worker orchestration behavior
+- validate deterministic discovery and crawl seeding behavior
 - validate admin API read models and observability responses
 - validate temporal intelligence, adaptive backoff, and disagreement tracking
 
@@ -24,6 +25,7 @@ Representative test areas include:
 - category-aware metadata, completeness, and source-management validation
 - JSON-LD and HTML extraction
 - source-product building
+- source discovery profile defaults, discovery promotion, and discovery-progress accounting
 - Mongo repository integration, including the managed crawl-source registry
 - identity and merge scenarios
 - delta processing and semantic change detection

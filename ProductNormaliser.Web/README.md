@@ -1,6 +1,6 @@
 # ProductNormaliser.Web
 
-ProductNormaliser.Web is the operator-facing Razor Pages host for Milestone 1. It consumes the Admin API over HTTP and gives operators one consistent workflow surface for category context, crawl launch, job monitoring, product inspection, quality review, and source management.
+ProductNormaliser.Web is the operator-facing Razor Pages host for Milestone 1. It consumes the Admin API over HTTP and gives operators one consistent workflow surface for category context, source setup, seeded crawl launch, discovery monitoring, product inspection, quality review, and source management.
 
 ## Milestone 1 scope
 
@@ -8,12 +8,13 @@ The web host currently delivers:
 
 - an operator landing page that keeps the active category context visible
 - an operator landing page operational health panel for queue depth, retry backlog, recent failures, at-risk sources, and category pressure
+- an operator landing page boot-and-populate panel showing boot-ready sources, categories in context, estimated discovery seeds, and recent confirmed-product throughput
 - category selection for the rollout set: TVs, Monitors, and Laptops
-- quick crawl launch and crawl-job monitoring
+- seeded crawl launch and crawl-job monitoring with discovery and product progress shown together
 - canonical product exploration with quality-aware filters and paging
 - product detail pages with source comparison, evidence, conflicts, and history
 - a quality dashboard for schema coverage, unmapped attributes, stability, and disagreements
-- source registry and source detail pages with readiness, health, last-activity, enable or disable, category assignment, and throttling controls
+- source registry and source detail pages with readiness, health, last-activity, source registration, discovery profile editing, enable or disable, category assignment, and throttling controls
 
 ## Architectural role
 
@@ -29,6 +30,14 @@ The web host calls the Admin API for:
 - quality dashboards and analytics
 - source registry, source detail, and source management actions
 - high-level stats and operational summary used by the operator landing page
+
+The web experience is now intentionally optimized for a simple startup path:
+
+1. boot the app
+2. register or enable sources
+3. choose category context
+4. launch a seeded category crawl
+5. watch discovery queue depth, confirmed product targets, and downstream product progress update from the same console
 
 ## Observability surface
 

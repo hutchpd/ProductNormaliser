@@ -8,6 +8,8 @@ It is intended to hold tests for:
 - page and component behavior
 - HTTP client integration boundaries to backend APIs
 - frontend-specific view and interaction logic as the dashboard grows
+- source registration and source-management flows
+- category-seeded crawl launch validation and operator boot-and-populate workflow rendering
 
 ## Build
 

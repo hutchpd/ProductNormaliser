@@ -8,6 +8,8 @@ It is intended to hold tests for:
 - API composition and DI wiring
 - endpoint contract behavior
 - read-model projection behavior close to the API boundary
+- management authorization over category, source, and crawl-job endpoints
+- discovery-aware source and crawl-job contract projections
 
 ## Build
 
