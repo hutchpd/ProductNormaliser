@@ -153,6 +153,30 @@ public sealed class CrawlJobsPageTests
     }
 
     [Test]
+    public async Task CrawlJobsIndex_OnPostLaunchAsync_RejectsWhenNoSourcesAreRegistered()
+    {
+        var client = CreateClient();
+        client.Sources = [];
+
+        var model = new ProductNormaliser.Web.Pages.CrawlJobs.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.CrawlJobs.IndexModel>.Instance)
+        {
+            Launch = new ProductNormaliser.Web.Pages.CrawlJobs.IndexModel.LaunchCrawlJobInput
+            {
+                SelectedCategoryKeys = ["tv"]
+            }
+        };
+
+        var result = await model.OnPostLaunchAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<PageResult>());
+            Assert.That(client.LastCreatedJobRequest, Is.Null);
+            Assert.That(model.ModelState[$"{nameof(model.Launch)}.{nameof(model.Launch.SelectedCategoryKeys)}"]?.Errors.Select(error => error.ErrorMessage), Does.Contain("No crawl sources are registered yet. Register and enable at least one source with discovery seeds before launching."));
+        });
+    }
+
+    [Test]
     public async Task CrawlJobsIndex_OnGetAsync_GroupsProgressStatesAndEnablesPollingForActiveJobs()
     {
         var client = CreateClient();

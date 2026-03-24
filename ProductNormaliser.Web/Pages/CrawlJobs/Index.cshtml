@@ -36,6 +36,15 @@
                     <p class="subtle-copy">Choose categories, optionally narrow to specific sources, and use the launch plan below to confirm that the current selection is ready to populate.</p>
                 </div>
 
+                @if (Model.Sources.Count == 0)
+                {
+                    <div class="notice error" role="alert">
+                        <strong>No crawl sources are registered yet.</strong>
+                        Register and enable at least one source before launching a seeded crawl.
+                        <a class="btn btn-outline-dark btn-sm ms-2" asp-page="/Sources/Index" asp-route-category="@Model.CategoryKey">Open source registry</a>
+                    </div>
+                }
+
                 <div>
                     <partial name="_CategorySelector" model="Model.CategorySelector" />
                     <span asp-validation-for="Launch.SelectedCategoryKeys" class="text-danger small"></span>
@@ -52,7 +61,7 @@
                     @if (Model.Sources.Count == 0)
                     {
                         <div class="empty-panel">
-                            <p class="empty-state">No sources are registered yet. Launching without a source filter will use every crawlable source for the selected categories.</p>
+                            <p class="empty-state">No sources are registered yet. Leaving the source filter empty only uses registered crawlable sources for the selected categories; it does not discover new source websites automatically.</p>
                         </div>
                     }
                     else
@@ -113,6 +122,10 @@
                     @if (Model.CurrentLaunchPlan.SelectedCategoryCount == 0)
                     {
                         <p class="subtle-copy mt-3">Pick at least one category to estimate how many entry pages and sitemaps will seed discovery.</p>
+                    }
+                    else if (Model.Sources.Count == 0)
+                    {
+                        <p class="subtle-copy mt-3">Register at least one source and add discovery entry pages or sitemap hints before launching a seeded crawl.</p>
                     }
                     else if (Model.CurrentLaunchPlan.EstimatedSeedCount == 0)
                     {

@@ -147,6 +147,31 @@ public sealed class CategoryContextWorkflowTests
         });
     }
 
+    [Test]
+    public async Task CrawlJobsPage_WhenNoSourcesExist_ShowsSourceRegistryCallToAction()
+    {
+        var fakeAdminApiClient = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            Sources = []
+        };
+
+        await using var factory = new ProductWebApplicationFactory(fakeAdminApiClient);
+        using var client = await factory.CreateOperatorClientAsync();
+
+        var seedResponse = await client.GetAsync("/Categories/Index?selectedCategory=tv");
+        seedResponse.EnsureSuccessStatusCode();
+
+        var crawlHtml = await client.GetStringAsync("/CrawlJobs/Index");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(crawlHtml, Does.Contain("No crawl sources are registered yet."));
+            Assert.That(crawlHtml, Does.Contain("Open source registry"));
+            Assert.That(crawlHtml, Does.Contain("/Sources?category=tv"));
+        });
+    }
+
     private static PageContext CreatePageContext(string persistedSelection)
     {
         var httpContext = new DefaultHttpContext();

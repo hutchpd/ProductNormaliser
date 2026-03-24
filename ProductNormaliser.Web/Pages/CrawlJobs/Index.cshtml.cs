@@ -333,6 +333,12 @@ public sealed class IndexModel(
         }
 
         var launchPlan = BuildLaunchPlan(categories, sources);
+        if (Sources.Count == 0)
+        {
+            ModelState.AddModelError($"{nameof(Launch)}.{nameof(Launch.SelectedCategoryKeys)}", "No crawl sources are registered yet. Register and enable at least one source with discovery seeds before launching.");
+            return false;
+        }
+
         if (launchPlan.EnabledSourceCount == 0)
         {
             ModelState.AddModelError($"{nameof(Launch)}.{nameof(Launch.SelectedCategoryKeys)}", "No enabled sources match the selected categories.");
