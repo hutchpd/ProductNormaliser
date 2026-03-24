@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Infrastructure.Crawling;
+using ProductNormaliser.Infrastructure.Discovery;
 using ProductNormaliser.Infrastructure.Mongo.Repositories;
 using ProductNormaliser.Infrastructure.StructuredData;
 using ProductNormaliser.Worker;
@@ -52,9 +53,36 @@ public sealed class CrawlOrchestratorTests
                 "canonical-products.upsert",
                 "offers.upsert",
                 "detect-conflicts",
-                "conflicts.upsert"
+                "conflicts.upsert",
+                "expand-related-links"
             }));
         });
+    }
+
+    [Test]
+    public async Task ProcessAsync_CompletesWhenRelatedLinkExpansionFails()
+    {
+        var calls = new List<string>();
+        var orchestrator = CreateOrchestrator(
+            calls,
+            new FakeRobotsPolicyService(calls, allowed: true),
+            new FakeHttpFetcher(calls, success: true, html: "<html>tv</html>"),
+            new FakeDeltaProcessor(calls, unchanged: false),
+            new FakeStructuredDataExtractor(calls, [CreateExtractedProduct("https://example.com/products/1")]),
+            new FakeSourceProductBuilder(calls, CreateSourceProduct("source-1", "https://example.com/products/1")),
+            new FakeAttributeNormaliser(calls),
+            new FakeSourceProductStore(calls),
+            new FakeCanonicalProductStore(calls),
+            new FakeProductIdentityResolver(calls),
+            new FakeCanonicalMergeService(calls),
+            new FakeProductOfferStore(calls),
+            new FakeConflictDetector(calls),
+            new FakeMergeConflictStore(calls),
+            new ThrowingRelatedLinkExpansionService());
+
+        var result = await orchestrator.ProcessAsync(CreateTarget(), CancellationToken.None);
+
+        Assert.That(result.Status, Is.EqualTo("completed"));
     }
 
     [Test]
@@ -203,7 +231,8 @@ public sealed class CrawlOrchestratorTests
         ICanonicalMergeService canonicalMergeService,
         IProductOfferStore productOfferStore,
         IConflictDetector conflictDetector,
-        IMergeConflictStore mergeConflictStore)
+        IMergeConflictStore mergeConflictStore,
+        IRelatedLinkExpansionService? relatedLinkExpansionService = null)
     {
         return new CrawlOrchestrator(
             robotsPolicyService,
@@ -223,6 +252,7 @@ public sealed class CrawlOrchestratorTests
             productOfferStore,
             conflictDetector,
             mergeConflictStore,
+                relatedLinkExpansionService ?? new FakeRelatedLinkExpansionService(calls),
             new FakeCrawlLogStore(),
             new TestLogger<CrawlOrchestrator>());
     }
@@ -488,5 +518,20 @@ public sealed class CrawlOrchestratorTests
         public void RefreshForProduct(CanonicalProduct product)
         {
         }
+    }
+
+    private sealed class FakeRelatedLinkExpansionService(List<string> calls) : IRelatedLinkExpansionService
+    {
+        public Task<RelatedLinkExpansionResult> ExpandAsync(CrawlTarget target, string html, CancellationToken cancellationToken)
+        {
+            calls.Add("expand-related-links");
+            return Task.FromResult(new RelatedLinkExpansionResult(1, 2, 1));
+        }
+    }
+
+    private sealed class ThrowingRelatedLinkExpansionService : IRelatedLinkExpansionService
+    {
+        public Task<RelatedLinkExpansionResult> ExpandAsync(CrawlTarget target, string html, CancellationToken cancellationToken)
+            => throw new InvalidOperationException("related link expansion failed");
     }
 }

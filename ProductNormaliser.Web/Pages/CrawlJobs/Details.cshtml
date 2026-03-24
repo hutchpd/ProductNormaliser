@@ -47,34 +47,50 @@
 
                 <div class="progress-shell">
                     <div class="progress-bar-shell">
-                        <div class="progress-bar-fill" style="width: @Model.ProgressPercent%"></div>
+                        <div class="progress-bar-fill" style="width: @Model.DiscoveryProgressPercent%"></div>
                     </div>
-                    <div class="subtle-copy">@Model.Job.ProcessedTargets of @Model.Job.TotalTargets targets processed</div>
+                    <div class="subtle-copy">Discovery @Model.Job.ProcessedTargets of @Model.Job.TotalTargets frontier targets processed</div>
                 </div>
 
                 <dl class="detail-grid">
                     <div>
-                        <dt>Total targets</dt>
+                        <dt>Discovered URLs</dt>
+                        <dd>@Model.Job.DiscoveredUrlCount</dd>
+                    </div>
+                    <div>
+                        <dt>Confirmed product targets</dt>
+                        <dd>@Model.Job.ConfirmedProductTargetCount</dd>
+                    </div>
+                    <div>
+                        <dt>Discovery queue depth</dt>
+                        <dd>@Model.Job.DiscoveryQueueDepth</dd>
+                    </div>
+                    <div>
+                        <dt>Active source coverage</dt>
+                        <dd>@Model.Job.ActiveSourceCoverage (@Model.Job.SourceCoveragePercent.ToString("0.#")%)</dd>
+                    </div>
+                    <div>
+                        <dt>Total discovery targets</dt>
                         <dd>@Model.Job.TotalTargets</dd>
                     </div>
                     <div>
-                        <dt>Processed</dt>
+                        <dt>Processed discovery targets</dt>
                         <dd>@Model.Job.ProcessedTargets</dd>
                     </div>
                     <div>
-                        <dt>Success</dt>
+                        <dt>Successful discovery pages</dt>
                         <dd>@Model.Job.SuccessCount</dd>
                     </div>
                     <div>
-                        <dt>Skipped</dt>
+                        <dt>Skipped or blocked</dt>
                         <dd>@Model.Job.SkippedCount</dd>
                     </div>
                     <div>
-                        <dt>Failed</dt>
+                        <dt>Rejected pages</dt>
                         <dd>@Model.Job.FailedCount</dd>
                     </div>
                     <div>
-                        <dt>Cancelled</dt>
+                        <dt>Cancelled discovery work</dt>
                         <dd>@Model.Job.CancelledCount</dd>
                     </div>
                     <div>
@@ -94,6 +110,37 @@
                         <dd>@Model.Job.LastUpdatedAt.ToString("u")</dd>
                     </div>
                 </dl>
+
+                <div class="panel panel-muted mt-3">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">Product Crawl Progress</p>
+                            <h2>Downstream crawl execution</h2>
+                        </div>
+                    </div>
+
+                    <div class="progress-shell">
+                        <div class="progress-bar-shell">
+                            <div class="progress-bar-fill" style="width: @Model.ProductProgressPercent%"></div>
+                        </div>
+                        <div class="subtle-copy">@Model.Job.CrawledProductUrlCount of @Model.Job.ConfirmedProductTargetCount confirmed product targets crawled</div>
+                    </div>
+
+                    <dl class="detail-grid">
+                        <div>
+                            <dt>Crawled product URLs</dt>
+                            <dd>@Model.Job.CrawledProductUrlCount</dd>
+                        </div>
+                        <div>
+                            <dt>Product queue depth</dt>
+                            <dd>@Model.Job.ProductQueueDepth</dd>
+                        </div>
+                        <div>
+                            <dt>Product failures</dt>
+                            <dd>@Model.Job.ProductFailureCount</dd>
+                        </div>
+                    </dl>
+                </div>
 
                 <div class="actions-bar inline-actions">
                     <a href="@Model.BackToJobsUrl" class="btn btn-outline-dark">Back to crawl jobs</a>
@@ -163,7 +210,9 @@
                 {
                     <article>
                         <strong>@breakdown.CategoryKey</strong>
-                        <div class="subtle-copy">Processed @breakdown.ProcessedTargets / @breakdown.TotalTargets</div>
+                        <div class="subtle-copy">Discovery @breakdown.ProcessedTargets / @breakdown.TotalTargets, queue @breakdown.DiscoveryQueueDepth, completion @breakdown.DiscoveryCompletionPercent.ToString("0.#")%</div>
+                        <div class="subtle-copy">Discovered @breakdown.DiscoveredUrlCount, confirmed @breakdown.ConfirmedProductTargetCount, crawled @breakdown.CrawledProductUrlCount</div>
+                        <div class="subtle-copy">Product queue @breakdown.ProductQueueDepth, product failures @breakdown.ProductFailureCount, source coverage @breakdown.ActiveSourceCoverage (@breakdown.SourceCoveragePercent.ToString("0.#")%)</div>
                         <div class="subtle-copy">Success @breakdown.SuccessCount, skipped @breakdown.SkippedCount, failed @breakdown.FailedCount, cancelled @breakdown.CancelledCount</div>
                     </article>
                 }

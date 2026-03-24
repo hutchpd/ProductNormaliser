@@ -70,8 +70,8 @@
                 <strong>@Model.Sources.Count(source => source.IsEnabled)</strong>
             </article>
             <article>
-                <span>Disabled in view</span>
-                <strong>@Model.Sources.Count(source => !source.IsEnabled)</strong>
+                <span>Discovery backlog</span>
+                <strong>@Model.DiscoveryBacklogSources</strong>
             </article>
         </div>
     </section>
@@ -98,6 +98,8 @@
                         <tr>
                             <th>Source</th>
                             <th>Categories</th>
+                            <th>Discovery posture</th>
+                            <th>Discovery 24h</th>
                             <th>Throttling</th>
                             <th>Crawl readiness</th>
                             <th>Health</th>
@@ -122,6 +124,14 @@
                                     <span class="chip">@categoryLabel</span>
                                 }
                                 </div>
+                            </td>
+                            <td>
+                                <div>Queue @source.DiscoveryQueueDepth</div>
+                                <div class="text-muted small">sitemap @(source.SitemapReachable ? "reachable" : "unverified"), robots @(source.ThrottlingPolicy.RespectRobotsTxt ? "on" : "off")</div>
+                            </td>
+                            <td>
+                                <div>@source.ConfirmedProductUrlsLast24Hours confirmed products</div>
+                                <div class="text-muted small">@source.ListingPagesVisitedLast24Hours listings, @source.SitemapUrlsProcessedLast24Hours sitemaps</div>
                             </td>
                             <td>
                                 <div>@ProductNormaliser.Web.Models.SourceManagementPresentation.FormatThrottlingProfile(source.ThrottlingPolicy)</div>

@@ -179,6 +179,92 @@
                 </dl>
             </section>
 
+            <section class="panel panel-muted">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Discovery Posture</p>
+                        <h2>Deterministic discovery coverage</h2>
+                    </div>
+                </div>
+
+                <div class="metric-strip">
+                    <article>
+                        <span>Profile configured</span>
+                        <strong>@(Model.HasDiscoveryProfileConfigured ? "Yes" : "No")</strong>
+                    </article>
+                    <article>
+                        <span>Sitemap reachable</span>
+                        <strong>@(Model.CurrentSource.SitemapReachable ? "Yes" : "No")</strong>
+                    </article>
+                    <article>
+                        <span>Discovery queue</span>
+                        <strong>@Model.CurrentSource.DiscoveryQueueDepth</strong>
+                    </article>
+                    <article>
+                        <span>Last discovery</span>
+                        <strong>@(Model.CurrentSource.LastDiscoveryUtc?.ToString("u") ?? "No activity")</strong>
+                    </article>
+                </div>
+
+                <dl class="detail-grid">
+                    <div>
+                        <dt>Entry pages configured</dt>
+                        <dd>@Model.ConfiguredEntryPageCount</dd>
+                    </div>
+                    <div>
+                        <dt>Sitemap hints</dt>
+                        <dd>@Model.CurrentSource.DiscoveryProfile.SitemapHints.Count</dd>
+                    </div>
+                    <div>
+                        <dt>Listing pages visited 24h</dt>
+                        <dd>@Model.CurrentSource.ListingPagesVisitedLast24Hours</dd>
+                    </div>
+                    <div>
+                        <dt>Sitemaps processed 24h</dt>
+                        <dd>@Model.CurrentSource.SitemapUrlsProcessedLast24Hours</dd>
+                    </div>
+                    <div>
+                        <dt>Confirmed product URLs 24h</dt>
+                        <dd>@Model.CurrentSource.ConfirmedProductUrlsLast24Hours</dd>
+                    </div>
+                    <div>
+                        <dt>Robots respected</dt>
+                        <dd>@(Model.CurrentSource.ThrottlingPolicy.RespectRobotsTxt ? "Yes" : "No")</dd>
+                    </div>
+                </dl>
+
+                @if (Model.DiscoveryCoverageRows.Count == 0)
+                {
+                    <div class="empty-panel mt-3">
+                        <p class="empty-state">No discovery coverage has been recorded for this source yet.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-wrap mt-3">
+                        <table class="table dashboard-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Category</th>
+                                    <th>Discovery completion</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            @foreach (var coverage in Model.DiscoveryCoverageRows)
+                            {
+                                <tr>
+                                    <td>
+                                        <strong class="mono">@coverage.Key</strong>
+                                    </td>
+                                    <td>@coverage.Value.ToString("0.#")%</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+
             <section class="panel">
                 <div class="panel-heading">
                     <div>

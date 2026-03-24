@@ -29,6 +29,12 @@ public sealed class DetailsModel(
 
     public int ProgressPercent => Job is null ? 0 : CrawlJobPresentation.GetProgressPercent(Job);
 
+    public decimal DiscoveryProgressPercent => Job?.DiscoveryCompletionPercent ?? 0m;
+
+    public decimal ProductProgressPercent => Job is null || Job.ConfirmedProductTargetCount == 0
+        ? 0m
+        : decimal.Round((decimal)Job.CrawledProductUrlCount / Job.ConfirmedProductTargetCount * 100m, 2, MidpointRounding.AwayFromZero);
+
     public IReadOnlyList<string> EffectiveSelectedCategoryKeys { get; private set; } = [];
 
     public string BackToJobsUrl => BuildBackToJobsUrl(EffectiveSelectedCategoryKeys);
@@ -48,7 +54,8 @@ public sealed class DetailsModel(
             Description = "This page tracks aggregate crawl-job progress rather than raw queue records, including current status, outcome counts, and per-category breakdowns.",
             Metrics =
             [
-                new HeroMetricModel { Label = "Progress", Value = $"{ProgressPercent}%" },
+                new HeroMetricModel { Label = "Discovery", Value = $"{DiscoveryProgressPercent:0.#}%" },
+                new HeroMetricModel { Label = "Products", Value = $"{ProductProgressPercent:0.#}%" },
                 new HeroMetricModel { Label = "Processed", Value = $"{Job.ProcessedTargets}/{Job.TotalTargets}" },
                 new HeroMetricModel { Label = "Status", Value = StatusBadge.Text }
             ]

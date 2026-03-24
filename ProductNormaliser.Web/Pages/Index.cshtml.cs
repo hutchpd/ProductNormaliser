@@ -76,6 +76,15 @@ public sealed class IndexModel(
         ? decimal.Round(score * 100m, 0, MidpointRounding.AwayFromZero)
         : 0m;
 
+    public IReadOnlyList<CategoryOperationalMetricDto> SelectedCategoryOperationalMetrics => HasCategoryContext
+        ? Stats.Operational.Categories
+            .Where(metric => CurrentCategoryContext!.SelectedCategoryKeys.Contains(metric.CategoryKey, StringComparer.OrdinalIgnoreCase))
+            .OrderByDescending(metric => metric.DiscoveryQueueDepth)
+            .ThenByDescending(metric => metric.QueueDepth)
+            .ThenBy(metric => metric.CategoryKey, StringComparer.OrdinalIgnoreCase)
+            .ToArray()
+        : [];
+
     public string ConflictRateSummary => $"{Stats.PercentProductsWithConflicts:0.#}%";
 
     public string MissingKeySummary => $"{Stats.PercentProductsMissingKeyAttributes:0.#}%";
@@ -168,6 +177,38 @@ public sealed class IndexModel(
         }
     ];
 
+    public IReadOnlyList<OperatorSummaryCardModel> DiscoverySummaryCards =>
+    [
+        new OperatorSummaryCardModel
+        {
+            Title = "Discovery queue",
+            Value = Stats.DiscoveryQueueDepth.ToString(),
+            Description = "Queued or processing discovery frontier items across all sources.",
+            Tone = Stats.DiscoveryQueueDepth >= 50 ? "warning" : "neutral"
+        },
+        new OperatorSummaryCardModel
+        {
+            Title = "Processed per hour",
+            Value = Stats.DiscoveryProcessingRateLast24Hours.ToString("0.##"),
+            Description = $"{Stats.DiscoveredUrlCountLast24Hours} newly seen URLs, {Stats.RejectedUrlCountLast24Hours} rejected, {Stats.RobotsBlockedCountLast24Hours} blocked in 24h.",
+            Tone = Stats.DiscoveryProcessingRateLast24Hours == 0 ? "warning" : "completed"
+        },
+        new OperatorSummaryCardModel
+        {
+            Title = "Confirmed products 24h",
+            Value = Stats.ConfirmedProductUrlCountLast24Hours.ToString(),
+            Description = "Discovered product URLs promoted into the product crawl queue in the trailing 24 hours.",
+            Tone = Stats.ConfirmedProductUrlCountLast24Hours == 0 ? "warning" : "completed"
+        },
+        new OperatorSummaryCardModel
+        {
+            Title = "Active discovery sources",
+            Value = Stats.ActiveDiscoverySourceCount.ToString(),
+            Description = "Sources with current discovery backlog or recent discovery activity.",
+            Tone = Stats.ActiveDiscoverySourceCount == 0 ? "warning" : "neutral"
+        }
+    ];
+
     public IReadOnlyList<OperatorSummaryCardModel> OperationalHealthCards =>
     [
         new OperatorSummaryCardModel
@@ -212,8 +253,9 @@ public sealed class IndexModel(
         .ToArray();
 
     public IReadOnlyList<CategoryOperationalMetricDto> BusyOperationalCategories => Stats.Operational.Categories
-        .Where(metric => metric.QueueDepth > 0 || metric.FailedCrawlsLast24Hours > 0 || metric.ActiveJobCount > 0)
-        .OrderByDescending(metric => metric.QueueDepth)
+        .Where(metric => metric.QueueDepth > 0 || metric.DiscoveryQueueDepth > 0 || metric.FailedCrawlsLast24Hours > 0 || metric.ActiveJobCount > 0)
+        .OrderByDescending(metric => metric.DiscoveryQueueDepth)
+        .ThenByDescending(metric => metric.QueueDepth)
         .ThenByDescending(metric => metric.FailedCrawlsLast24Hours)
         .ThenBy(metric => metric.CategoryKey, StringComparer.OrdinalIgnoreCase)
         .Take(5)
@@ -302,7 +344,7 @@ public sealed class IndexModel(
         [
             new HeroMetricModel { Label = "Context", Value = HasCategoryContext ? CurrentCategoryContext!.SelectionSummary : "No category" },
             new HeroMetricModel { Label = "Active jobs", Value = ActiveJobs.Count.ToString() },
-            new HeroMetricModel { Label = "Queue depth", Value = Stats.Operational.QueueDepth.ToString() },
+            new HeroMetricModel { Label = "Discovery queue", Value = Stats.DiscoveryQueueDepth.ToString() },
             new HeroMetricModel { Label = "Sources in scope", Value = CategorySources.Count.ToString() }
         ]
     };

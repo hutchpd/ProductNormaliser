@@ -222,6 +222,13 @@ public sealed class SourcesController(
             Readiness = operationalInsights.Readiness,
             Health = operationalInsights.Health,
             LastActivity = operationalInsights.LastActivity,
+            DiscoveryQueueDepth = operationalInsights.DiscoveryQueueDepth,
+            ListingPagesVisitedLast24Hours = operationalInsights.ListingPagesVisitedLast24Hours,
+            SitemapUrlsProcessedLast24Hours = operationalInsights.SitemapUrlsProcessedLast24Hours,
+            ConfirmedProductUrlsLast24Hours = operationalInsights.ConfirmedProductUrlsLast24Hours,
+            DiscoveryCoverageByCategory = operationalInsights.DiscoveryCoverageByCategory,
+            LastDiscoveryUtc = operationalInsights.LastDiscoveryUtc,
+            SitemapReachable = operationalInsights.SitemapReachable,
             CreatedUtc = source.CreatedUtc,
             UpdatedUtc = source.UpdatedUtc
         };

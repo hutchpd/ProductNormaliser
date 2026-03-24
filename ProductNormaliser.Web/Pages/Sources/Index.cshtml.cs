@@ -34,6 +34,10 @@ public sealed class IndexModel(
 
     public int AttentionSources => Sources.Count(source => string.Equals(source.Health.Status, "Attention", StringComparison.OrdinalIgnoreCase));
 
+    public int DiscoveryBacklogSources => Sources.Count(source => source.DiscoveryQueueDepth > 0);
+
+    public int ActiveDiscoverySources => Sources.Count(source => source.LastDiscoveryUtc is not null || source.ConfirmedProductUrlsLast24Hours > 0);
+
     public PageHeroModel Hero => new()
     {
         Eyebrow = "Source Registry",
@@ -44,7 +48,7 @@ public sealed class IndexModel(
             new HeroMetricModel { Label = "Filtered", Value = Sources.Count.ToString() },
             new HeroMetricModel { Label = "Total", Value = TotalSources.ToString() },
             new HeroMetricModel { Label = "Enabled", Value = Sources.Count(source => source.IsEnabled).ToString() },
-            new HeroMetricModel { Label = "Ready", Value = ReadySources.ToString() }
+            new HeroMetricModel { Label = "Discovery active", Value = ActiveDiscoverySources.ToString() }
         ]
     };
 

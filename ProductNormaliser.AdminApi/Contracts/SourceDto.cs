@@ -14,6 +14,13 @@ public sealed class SourceDto
     public SourceReadinessDto Readiness { get; init; } = default!;
     public SourceHealthSummaryDto Health { get; init; } = default!;
     public SourceLastActivityDto? LastActivity { get; init; }
+    public int DiscoveryQueueDepth { get; init; }
+    public int ListingPagesVisitedLast24Hours { get; init; }
+    public int SitemapUrlsProcessedLast24Hours { get; init; }
+    public int ConfirmedProductUrlsLast24Hours { get; init; }
+    public IReadOnlyDictionary<string, decimal> DiscoveryCoverageByCategory { get; init; } = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+    public DateTime? LastDiscoveryUtc { get; init; }
+    public bool SitemapReachable { get; init; }
     public DateTime CreatedUtc { get; init; }
     public DateTime UpdatedUtc { get; init; }
 }

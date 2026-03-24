@@ -484,6 +484,13 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
                 MeaningfulChangeSummary = source.LastActivity.MeaningfulChangeSummary,
                 ErrorMessage = source.LastActivity.ErrorMessage
             },
+            DiscoveryQueueDepth = source.DiscoveryQueueDepth,
+            ListingPagesVisitedLast24Hours = source.ListingPagesVisitedLast24Hours,
+            SitemapUrlsProcessedLast24Hours = source.SitemapUrlsProcessedLast24Hours,
+            ConfirmedProductUrlsLast24Hours = source.ConfirmedProductUrlsLast24Hours,
+            DiscoveryCoverageByCategory = new Dictionary<string, decimal>(source.DiscoveryCoverageByCategory, StringComparer.OrdinalIgnoreCase),
+            LastDiscoveryUtc = source.LastDiscoveryUtc,
+            SitemapReachable = source.SitemapReachable,
             CreatedUtc = source.CreatedUtc,
             UpdatedUtc = updatedUtc
         };

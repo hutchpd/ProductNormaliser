@@ -128,6 +128,8 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<ProductLinkExtractor>();
         services.AddSingleton<ProductPageClassifier>();
         services.AddSingleton<ListingPageClassifier>();
+        services.AddSingleton<RelatedLinkExpansionService>();
+        services.AddSingleton<IRelatedLinkExpansionService>(serviceProvider => serviceProvider.GetRequiredService<RelatedLinkExpansionService>());
         services.AddSingleton<DiscoveryQueueService>();
         services.AddSingleton<IDiscoveryQueueService>(serviceProvider => serviceProvider.GetRequiredService<DiscoveryQueueService>());
         services.AddSingleton<IDiscoverySeedWriter>(serviceProvider => serviceProvider.GetRequiredService<DiscoveryQueueService>());

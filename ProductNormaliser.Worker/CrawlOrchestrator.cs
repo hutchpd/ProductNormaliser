@@ -2,6 +2,7 @@ using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Application.Observability;
 using ProductNormaliser.Infrastructure.Crawling;
+using ProductNormaliser.Infrastructure.Discovery;
 using ProductNormaliser.Infrastructure.Mongo.Repositories;
 using ProductNormaliser.Infrastructure.StructuredData;
 using System.Diagnostics;
@@ -26,6 +27,7 @@ public sealed class CrawlOrchestrator(
     IProductOfferStore productOfferStore,
     IConflictDetector conflictDetector,
     IMergeConflictStore mergeConflictStore,
+    IRelatedLinkExpansionService relatedLinkExpansionService,
     ICrawlLogStore crawlLogStore,
     ILogger<CrawlOrchestrator> logger)
 {
@@ -140,6 +142,7 @@ public sealed class CrawlOrchestrator(
 
             if (processedProductCount > 0)
             {
+                await ExpandRelatedLinksSafelyAsync(target, fetchResult.Html!, cancellationToken);
                 sourceTrustService.CaptureSnapshot(sourceName, target.CategoryKey);
             }
 
@@ -233,6 +236,26 @@ public sealed class CrawlOrchestrator(
             ContentType = "text/html",
             FetchedUtc = fetchResult.FetchedUtc
         };
+    }
+
+    private async Task ExpandRelatedLinksSafelyAsync(CrawlTarget target, string html, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var expansion = await relatedLinkExpansionService.ExpandAsync(target, html, cancellationToken);
+            if (expansion.TotalEnqueued > 0)
+            {
+                logger.LogInformation(
+                    "Expanded related discovery links for {Url}; enqueuedProducts={EnqueuedProducts}, enqueuedListings={EnqueuedListings}",
+                    target.Url,
+                    expansion.EnqueuedProductUrls,
+                    expansion.EnqueuedListingUrls);
+            }
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Related link expansion failed for {Url}", target.Url);
+        }
     }
 
     private async Task WriteCrawlLogAsync(string sourceName, string url, CrawlProcessResult result, long durationMs, CancellationToken cancellationToken)

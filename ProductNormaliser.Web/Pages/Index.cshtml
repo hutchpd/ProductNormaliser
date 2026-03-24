@@ -112,6 +112,22 @@
                     }
                 </div>
 
+                <div class="panel panel-muted mt-3">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">Discovery Health</p>
+                            <h2>Frontier activity and promotion posture</h2>
+                        </div>
+                    </div>
+
+                    <div class="operator-summary-grid compact">
+                        @foreach (var summaryCard in Model.DiscoverySummaryCards)
+                        {
+                            <partial name="_OperatorSummaryCard" model="summaryCard" />
+                        }
+                    </div>
+                </div>
+
                 <div class="operator-landing-grid mt-3">
                     <section class="panel panel-muted">
                         <div class="panel-heading">
@@ -183,8 +199,10 @@
                                     <thead>
                                         <tr>
                                             <th>Category</th>
+                                            <th>Discovery</th>
+                                            <th>Confirmed</th>
                                             <th>Active jobs</th>
-                                            <th>Queue</th>
+                                            <th>Queues</th>
                                             <th>Retries</th>
                                             <th>Failures 24h</th>
                                         </tr>
@@ -195,10 +213,12 @@
                                         <tr>
                                             <td>
                                                 <strong class="mono">@category.CategoryKey</strong>
-                                                <div class="subtle-copy">@category.DistinctSourceCount distinct sources, @category.ThroughputLast24Hours crawls in 24h</div>
+                                                <div class="subtle-copy">@category.ActiveSourceCoverage of @category.DistinctSourceCount active sources, @category.CrawledProductUrlCountLast24Hours crawled products in 24h</div>
                                             </td>
+                                            <td>@category.DiscoveredUrlCount</td>
+                                            <td>@category.ConfirmedProductTargetCount</td>
                                             <td>@category.ActiveJobCount</td>
-                                            <td>@category.QueueDepth</td>
+                                            <td>@category.DiscoveryQueueDepth / @category.QueueDepth</td>
                                             <td>@category.RetryQueueDepth</td>
                                             <td>@category.FailedCrawlsLast24Hours (@category.FailureRateLast24Hours.ToString("0.#")%)</td>
                                         </tr>
@@ -226,6 +246,66 @@
                         <partial name="_OperatorSummaryCard" model="summaryCard" />
                     }
                 </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Category Discovery</p>
+                        <h2>Selected category progress cards</h2>
+                    </div>
+                </div>
+
+                @if (Model.SelectedCategoryOperationalMetrics.Count == 0)
+                {
+                    <div class="empty-panel">
+                        <p class="empty-state">No discovery metrics are available for the current category selection yet.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="job-card-grid">
+                        @foreach (var category in Model.SelectedCategoryOperationalMetrics)
+                        {
+                            <article class="job-card">
+                                <div class="job-card-header">
+                                    <div>
+                                        <strong class="mono">@category.CategoryKey</strong>
+                                        <div class="subtle-copy">@category.ActiveSourceCoverage active of @category.DistinctSourceCount participating sources</div>
+                                    </div>
+                                    <span class="status-pill @(category.DiscoveryQueueDepth == 0 ? "completed" : "warning")">@category.DiscoveryCompletionPercent.ToString("0.#")% complete</span>
+                                </div>
+
+                                <dl class="detail-grid compact-grid mt-3">
+                                    <div>
+                                        <dt>Discovered URLs</dt>
+                                        <dd>@category.DiscoveredUrlCount</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Confirmed products</dt>
+                                        <dd>@category.ConfirmedProductTargetCount</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Crawled products</dt>
+                                        <dd>@category.CrawledProductUrlCountLast24Hours</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Discovery queue</dt>
+                                        <dd>@category.DiscoveryQueueDepth</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Product queue</dt>
+                                        <dd>@category.QueueDepth</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Failures 24h</dt>
+                                        <dd>@category.FailedCrawlsLast24Hours</dd>
+                                    </div>
+                                </dl>
+                            </article>
+                        }
+                    </div>
+                }
             </section>
 
             <section class="panel">
@@ -259,9 +339,9 @@
 
                                 <div class="progress-shell">
                                     <div class="progress-bar-shell">
-                                        <div class="progress-bar-fill" style="width: @ProductNormaliser.Web.Models.CrawlJobPresentation.GetProgressPercent(job)%"></div>
+                                        <div class="progress-bar-fill" style="width: @job.DiscoveryCompletionPercent%"></div>
                                     </div>
-                                    <div class="subtle-copy">@job.ProcessedTargets of @job.TotalTargets targets processed</div>
+                                    <div class="subtle-copy">Discovery @job.ProcessedTargets of @job.TotalTargets processed, @job.ProductQueueDepth product targets still queued</div>
                                 </div>
                             </article>
                         }

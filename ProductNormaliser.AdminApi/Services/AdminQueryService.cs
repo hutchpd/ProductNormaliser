@@ -269,8 +269,10 @@ public sealed class AdminQueryService(
             .ToListAsync(cancellationToken);
         var sourceSnapshotsTask = mongoDbContext.SourceQualitySnapshots.Find(Builders<SourceQualitySnapshot>.Filter.Empty).ToListAsync(cancellationToken);
         var crawlSourcesTask = mongoDbContext.CrawlSources.Find(Builders<CrawlSource>.Filter.Empty).ToListAsync(cancellationToken);
+        var discoveryQueueItemsTask = mongoDbContext.DiscoveryQueueItems.Find(Builders<DiscoveryQueueItem>.Filter.Empty).ToListAsync(cancellationToken);
+        var discoveredUrlsTask = mongoDbContext.DiscoveredUrls.Find(Builders<DiscoveredUrl>.Filter.Empty).ToListAsync(cancellationToken);
 
-        await Task.WhenAll(crawlQueueItemsTask, crawlJobsTask, recentLogsTask, sourceSnapshotsTask, crawlSourcesTask);
+        await Task.WhenAll(crawlQueueItemsTask, crawlJobsTask, recentLogsTask, sourceSnapshotsTask, crawlSourcesTask, discoveryQueueItemsTask, discoveredUrlsTask);
 
         var totalCanonicalProducts = canonicalProducts.Count;
         var totalSourceProducts = sourceProducts.Count;
@@ -280,6 +282,19 @@ public sealed class AdminQueryService(
         var productsWithConflicts = canonicalProducts.Count(product => product.Attributes.Values.Any(attribute => attribute.HasConflict));
         var productsMissingKeyAttributes = canonicalProducts.Count(IsMissingKeyAttributes);
 
+        var discoveryQueueItems = discoveryQueueItemsTask.Result;
+        var discoveredUrls = discoveredUrlsTask.Result;
+        var discoveryProcessedLast24Hours = discoveredUrls.Count(url => url.LastProcessedUtc is not null && url.LastProcessedUtc.Value >= throughputWindowStartUtc);
+        var activeDiscoverySourceCount = discoveryQueueItems
+            .Where(IsDiscoveryQueuedOrProcessing)
+            .Select(item => item.SourceId)
+            .Concat(discoveredUrls
+                .Where(url => IsDiscoveryActiveWithinWindow(url, throughputWindowStartUtc))
+                .Select(url => url.SourceId))
+            .Where(sourceId => !string.IsNullOrWhiteSpace(sourceId))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
         return new StatsResponse
         {
             TotalCanonicalProducts = totalCanonicalProducts,
@@ -287,12 +302,29 @@ public sealed class AdminQueryService(
             AverageAttributesPerProduct = averageAttributesPerProduct,
             PercentProductsWithConflicts = ToPercent(productsWithConflicts, totalCanonicalProducts),
             PercentProductsMissingKeyAttributes = ToPercent(productsMissingKeyAttributes, totalCanonicalProducts),
+            DiscoveryQueueDepth = discoveryQueueItems.Count(IsDiscoveryQueuedOrProcessing),
+            DiscoveryProcessingRateLast24Hours = decimal.Round(discoveryProcessedLast24Hours / 24m, 2, MidpointRounding.AwayFromZero),
+            DiscoveredUrlCountLast24Hours = discoveredUrls.Count(url => url.FirstSeenUtc >= throughputWindowStartUtc),
+            ConfirmedProductUrlCountLast24Hours = discoveredUrls.Count(url => IsProductClassification(url.Classification)
+                && url.PromotedToCrawlUtc is not null
+                && url.PromotedToCrawlUtc.Value >= throughputWindowStartUtc),
+            RejectedUrlCountLast24Hours = discoveredUrls.Count(url => string.Equals(url.State, "rejected", StringComparison.OrdinalIgnoreCase)
+                && url.LastProcessedUtc is not null
+                && url.LastProcessedUtc.Value >= throughputWindowStartUtc),
+            RobotsBlockedCountLast24Hours = discoveredUrls.Count(url => string.Equals(url.State, "blocked", StringComparison.OrdinalIgnoreCase)
+                && url.LastProcessedUtc is not null
+                && url.LastProcessedUtc.Value >= throughputWindowStartUtc),
+            ActiveDiscoverySourceCount = activeDiscoverySourceCount,
             Operational = BuildOperationalSummary(
                 crawlQueueItemsTask.Result,
                 crawlJobsTask.Result,
                 recentLogsTask.Result,
                 sourceSnapshotsTask.Result,
-                crawlSourcesTask.Result)
+                crawlSourcesTask.Result,
+                sourceProducts,
+                discoveryQueueItems,
+                discoveredUrls,
+                throughputWindowStartUtc)
         };
     }
 
@@ -301,21 +333,21 @@ public sealed class AdminQueryService(
         IReadOnlyList<CrawlJob> crawlJobs,
         IReadOnlyList<CrawlLog> recentLogs,
         IReadOnlyList<SourceQualitySnapshot> sourceSnapshots,
-        IReadOnlyList<CrawlSource> crawlSources)
+        IReadOnlyList<CrawlSource> crawlSources,
+        IReadOnlyList<SourceProduct> sourceProducts,
+        IReadOnlyList<DiscoveryQueueItem> discoveryQueueItems,
+        IReadOnlyList<DiscoveredUrl> discoveredUrls,
+        DateTime throughputWindowStartUtc)
     {
         var latestSnapshotsBySourceCategory = sourceSnapshots
             .GroupBy(snapshot => $"{snapshot.SourceName}|{snapshot.CategoryKey}", StringComparer.OrdinalIgnoreCase)
             .Select(group => group.OrderByDescending(snapshot => snapshot.TimestampUtc).First())
             .ToArray();
 
-        var sourceMetrics = crawlSources.Select(source => source.DisplayName)
-            .Concat(queueItems.Select(item => item.SourceName))
-            .Concat(recentLogs.Select(log => log.SourceName))
-            .Concat(latestSnapshotsBySourceCategory.Select(snapshot => snapshot.SourceName))
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(sourceName => BuildSourceOperationalMetric(sourceName, queueItems, recentLogs, latestSnapshotsBySourceCategory))
+        var sourceMetrics = crawlSources
+            .Select(source => BuildSourceOperationalMetric(source, queueItems, recentLogs, latestSnapshotsBySourceCategory, discoveryQueueItems, discoveredUrls, throughputWindowStartUtc))
             .OrderByDescending(metric => metric.FailureRateLast24Hours)
+            .ThenByDescending(metric => metric.DiscoveryQueueDepth)
             .ThenByDescending(metric => metric.RetryQueueDepth)
             .ThenByDescending(metric => metric.QueueDepth)
             .ThenBy(metric => metric.SourceName, StringComparer.OrdinalIgnoreCase)
@@ -324,10 +356,15 @@ public sealed class AdminQueryService(
         var categoryMetrics = crawlJobs.SelectMany(job => job.PerCategoryBreakdown.Select(item => item.CategoryKey))
             .Concat(queueItems.Select(item => item.CategoryKey))
             .Concat(latestSnapshotsBySourceCategory.Select(snapshot => snapshot.CategoryKey))
+            .Concat(crawlSources.SelectMany(source => source.SupportedCategoryKeys))
+            .Concat(discoveryQueueItems.Select(item => item.CategoryKey))
+            .Concat(discoveredUrls.Select(item => item.CategoryKey))
+            .Concat(sourceProducts.Select(product => product.CategoryKey))
             .Where(categoryKey => !string.IsNullOrWhiteSpace(categoryKey))
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(categoryKey => BuildCategoryOperationalMetric(categoryKey, queueItems, crawlJobs, recentLogs, latestSnapshotsBySourceCategory))
-            .OrderByDescending(metric => metric.QueueDepth)
+            .Select(categoryKey => BuildCategoryOperationalMetric(categoryKey, queueItems, crawlJobs, recentLogs, latestSnapshotsBySourceCategory, crawlSources, sourceProducts, discoveryQueueItems, discoveredUrls, throughputWindowStartUtc))
+            .OrderByDescending(metric => metric.DiscoveryQueueDepth)
+            .ThenByDescending(metric => metric.QueueDepth)
             .ThenByDescending(metric => metric.FailedCrawlsLast24Hours)
             .ThenBy(metric => metric.CategoryKey, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -350,34 +387,62 @@ public sealed class AdminQueryService(
     }
 
     private static SourceOperationalMetricDto BuildSourceOperationalMetric(
-        string sourceName,
+        CrawlSource source,
         IReadOnlyList<CrawlQueueItem> queueItems,
         IReadOnlyList<CrawlLog> recentLogs,
-        IReadOnlyList<SourceQualitySnapshot> latestSnapshotsBySourceCategory)
+        IReadOnlyList<SourceQualitySnapshot> latestSnapshotsBySourceCategory,
+        IReadOnlyList<DiscoveryQueueItem> discoveryQueueItems,
+        IReadOnlyList<DiscoveredUrl> discoveredUrls,
+        DateTime throughputWindowStartUtc)
     {
+        var sourceName = source.DisplayName;
         var sourceQueueItems = queueItems.Where(item => string.Equals(item.SourceName, sourceName, StringComparison.OrdinalIgnoreCase)).ToArray();
         var sourceLogs = recentLogs.Where(log => string.Equals(log.SourceName, sourceName, StringComparison.OrdinalIgnoreCase)).ToArray();
         var sourceSnapshots = latestSnapshotsBySourceCategory.Where(snapshot => string.Equals(snapshot.SourceName, sourceName, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var sourceDiscoveryQueueItems = discoveryQueueItems.Where(item => string.Equals(item.SourceId, source.Id, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var sourceDiscoveredUrls = discoveredUrls.Where(item => string.Equals(item.SourceId, source.Id, StringComparison.OrdinalIgnoreCase)).ToArray();
         var failedCrawls = sourceLogs.Count(log => string.Equals(log.Status, "failed", StringComparison.OrdinalIgnoreCase));
         var trustScore = sourceSnapshots.Length == 0 ? 0m : decimal.Round(sourceSnapshots.Average(snapshot => snapshot.HistoricalTrustScore), 2, MidpointRounding.AwayFromZero);
         var coveragePercent = sourceSnapshots.Length == 0 ? 0m : decimal.Round(sourceSnapshots.Average(snapshot => snapshot.AttributeCoverage), 2, MidpointRounding.AwayFromZero);
         var successfulCrawlRate = sourceSnapshots.Length == 0 ? 0m : decimal.Round(sourceSnapshots.Average(snapshot => snapshot.SuccessfulCrawlRate), 2, MidpointRounding.AwayFromZero);
+        var discoveryCoverageByCategory = source.SupportedCategoryKeys
+            .Concat(sourceDiscoveredUrls.Select(item => item.CategoryKey))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                categoryKey => categoryKey,
+                categoryKey => CalculateDiscoveryCompletionPercent(sourceDiscoveredUrls.Where(item => string.Equals(item.CategoryKey, categoryKey, StringComparison.OrdinalIgnoreCase))),
+                StringComparer.OrdinalIgnoreCase);
 
         return new SourceOperationalMetricDto
         {
             SourceName = sourceName,
             HealthStatus = sourceSnapshots.Length == 0 ? "Unknown" : DetermineHealthStatus(trustScore, successfulCrawlRate),
             QueueDepth = sourceQueueItems.Count(IsQueuedOrProcessing),
+            DiscoveryQueueDepth = sourceDiscoveryQueueItems.Count(IsDiscoveryQueuedOrProcessing),
             RetryQueueDepth = sourceQueueItems.Count(item => IsQueuedOrProcessing(item) && item.AttemptCount > 0),
             FailedQueueDepth = sourceQueueItems.Count(item => string.Equals(item.Status, "failed", StringComparison.OrdinalIgnoreCase)),
             TotalCrawlsLast24Hours = sourceLogs.Length,
             FailedCrawlsLast24Hours = failedCrawls,
             FailureRateLast24Hours = ToPercent(failedCrawls, sourceLogs.Length),
+            ListingPagesVisitedLast24Hours = sourceDiscoveredUrls.Count(item => string.Equals(item.Classification, "listing", StringComparison.OrdinalIgnoreCase)
+                && item.LastProcessedUtc is not null
+                && item.LastProcessedUtc.Value >= throughputWindowStartUtc),
+            SitemapUrlsProcessedLast24Hours = sourceDiscoveredUrls.Count(item => string.Equals(item.Classification, "sitemap", StringComparison.OrdinalIgnoreCase)
+                && item.LastProcessedUtc is not null
+                && item.LastProcessedUtc.Value >= throughputWindowStartUtc),
+            ConfirmedProductUrlsLast24Hours = sourceDiscoveredUrls.Count(item => IsProductClassification(item.Classification)
+                && item.PromotedToCrawlUtc is not null
+                && item.PromotedToCrawlUtc.Value >= throughputWindowStartUtc),
+            DiscoveryCoverageByCategory = discoveryCoverageByCategory,
             TrustScore = trustScore,
             CoveragePercent = coveragePercent,
             SuccessfulCrawlRate = successfulCrawlRate,
             SnapshotUtc = sourceSnapshots.OrderByDescending(snapshot => snapshot.TimestampUtc).FirstOrDefault()?.TimestampUtc,
-            LastCrawlUtc = sourceLogs.OrderByDescending(log => log.TimestampUtc).FirstOrDefault()?.TimestampUtc
+            LastCrawlUtc = sourceLogs.OrderByDescending(log => log.TimestampUtc).FirstOrDefault()?.TimestampUtc,
+            LastDiscoveryUtc = sourceDiscoveredUrls
+                .Select(GetDiscoveryActivityUtc)
+                .Where(timestamp => timestamp is not null)
+                .Max()
         };
     }
 
@@ -386,12 +451,30 @@ public sealed class AdminQueryService(
         IReadOnlyList<CrawlQueueItem> queueItems,
         IReadOnlyList<CrawlJob> crawlJobs,
         IReadOnlyList<CrawlLog> recentLogs,
-        IReadOnlyList<SourceQualitySnapshot> latestSnapshotsBySourceCategory)
+        IReadOnlyList<SourceQualitySnapshot> latestSnapshotsBySourceCategory,
+        IReadOnlyList<CrawlSource> crawlSources,
+        IReadOnlyList<SourceProduct> sourceProducts,
+        IReadOnlyList<DiscoveryQueueItem> discoveryQueueItems,
+        IReadOnlyList<DiscoveredUrl> discoveredUrls,
+        DateTime throughputWindowStartUtc)
     {
         var categoryQueueItems = queueItems.Where(item => string.Equals(item.CategoryKey, categoryKey, StringComparison.OrdinalIgnoreCase)).ToArray();
-        var categoryLogs = recentLogs.Where(log => categoryQueueItems.Any(item => string.Equals(item.SourceName, log.SourceName, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(item.SourceUrl, log.Url, StringComparison.OrdinalIgnoreCase))).ToArray();
+        var supportedSourceNames = crawlSources
+            .Where(source => source.SupportedCategoryKeys.Any(item => string.Equals(item, categoryKey, StringComparison.OrdinalIgnoreCase)))
+            .Select(source => source.DisplayName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var categoryLogs = recentLogs.Where(log => supportedSourceNames.Contains(log.SourceName)).ToArray();
+        var categoryDiscoveryQueueItems = discoveryQueueItems.Where(item => string.Equals(item.CategoryKey, categoryKey, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var categoryDiscoveredUrls = discoveredUrls.Where(item => string.Equals(item.CategoryKey, categoryKey, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var categorySourceProductsLast24Hours = sourceProducts.Count(product => string.Equals(product.CategoryKey, categoryKey, StringComparison.OrdinalIgnoreCase)
+            && product.FetchedUtc >= throughputWindowStartUtc);
         var failedCrawls = categoryLogs.Count(log => string.Equals(log.Status, "failed", StringComparison.OrdinalIgnoreCase));
+        var activeSourceCoverage = categoryDiscoveryQueueItems.Select(item => item.SourceId)
+            .Concat(categoryDiscoveredUrls.Select(item => item.SourceId))
+            .Where(sourceId => !string.IsNullOrWhiteSpace(sourceId))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+        var eligibleSourceCount = crawlSources.Count(source => source.SupportedCategoryKeys.Any(item => string.Equals(item, categoryKey, StringComparison.OrdinalIgnoreCase)));
 
         return new CategoryOperationalMetricDto
         {
@@ -401,6 +484,7 @@ public sealed class AdminQueryService(
             QueueDepth = categoryQueueItems.Count(IsQueuedOrProcessing),
             RetryQueueDepth = categoryQueueItems.Count(item => IsQueuedOrProcessing(item) && item.AttemptCount > 0),
             ThroughputLast24Hours = categoryLogs.Length,
+            CrawledProductUrlCountLast24Hours = categorySourceProductsLast24Hours,
             FailedCrawlsLast24Hours = failedCrawls,
             FailureRateLast24Hours = ToPercent(failedCrawls, categoryLogs.Length),
             DistinctSourceCount = latestSnapshotsBySourceCategory
@@ -409,7 +493,13 @@ public sealed class AdminQueryService(
                 .Concat(categoryQueueItems.Select(item => item.SourceName))
                 .Concat(categoryLogs.Select(log => log.SourceName))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Count()
+                .Count(),
+            DiscoveredUrlCount = categoryDiscoveredUrls.Length,
+            ConfirmedProductTargetCount = categoryDiscoveredUrls.Count(item => IsProductClassification(item.Classification) && item.PromotedToCrawlUtc is not null),
+            DiscoveryQueueDepth = categoryDiscoveryQueueItems.Count(IsDiscoveryQueuedOrProcessing),
+            ActiveSourceCoverage = activeSourceCoverage,
+            SourceCoveragePercent = ToPercent(activeSourceCoverage, eligibleSourceCount),
+            DiscoveryCompletionPercent = CalculateDiscoveryCompletionPercent(categoryDiscoveredUrls)
         };
     }
 
@@ -417,6 +507,49 @@ public sealed class AdminQueryService(
     {
         return string.Equals(queueItem.Status, "queued", StringComparison.OrdinalIgnoreCase)
             || string.Equals(queueItem.Status, "processing", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDiscoveryQueuedOrProcessing(DiscoveryQueueItem queueItem)
+    {
+        return string.Equals(queueItem.State, "queued", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(queueItem.State, "processing", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsProductClassification(string classification)
+    {
+        return string.Equals(classification, "product", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDiscoveryActiveWithinWindow(DiscoveredUrl discoveredUrl, DateTime windowStartUtc)
+    {
+        return discoveredUrl.FirstSeenUtc >= windowStartUtc
+            || discoveredUrl.LastSeenUtc >= windowStartUtc
+            || (discoveredUrl.LastProcessedUtc is not null && discoveredUrl.LastProcessedUtc.Value >= windowStartUtc)
+            || (discoveredUrl.PromotedToCrawlUtc is not null && discoveredUrl.PromotedToCrawlUtc.Value >= windowStartUtc);
+    }
+
+    private static DateTime? GetDiscoveryActivityUtc(DiscoveredUrl discoveredUrl)
+    {
+        var lastProcessedUtc = discoveredUrl.LastProcessedUtc;
+        var promotedToCrawlUtc = discoveredUrl.PromotedToCrawlUtc;
+        var lastSeenUtc = discoveredUrl.LastSeenUtc;
+
+        return new[] { lastProcessedUtc, promotedToCrawlUtc, lastSeenUtc }
+            .Where(timestamp => timestamp is not null)
+            .Max();
+    }
+
+    private static decimal CalculateDiscoveryCompletionPercent(IEnumerable<DiscoveredUrl> discoveredUrls)
+    {
+        var materialized = discoveredUrls.ToArray();
+        var totalCount = materialized.Length;
+        if (totalCount == 0)
+        {
+            return 0m;
+        }
+
+        var processedCount = materialized.Count(item => item.LastProcessedUtc is not null || item.PromotedToCrawlUtc is not null);
+        return ToPercent(processedCount, totalCount);
     }
 
     private static bool IsActiveJobStatus(string status)

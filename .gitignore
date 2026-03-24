@@ -1,0 +1,50 @@
+# Build results
+bin/
+obj/
+
+# .NET user-specific files
+*.user
+*.rsuser
+*.suo
+
+# Visual Studio Code
+.vscode/
+
+# Visual Studio
+.vs/
+
+# Rider
+.idea/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test results
+TestResults/
+
+# NuGet
+*.nupkg
+.nuget/
+packages/
+
+# Coverage reports
+coverage/
+*.coverage
+*.coveragexml
+
+# Publish output
+publish/
+
+# Azure / local settings
+appsettings.*.local.json
+
+# Node (if any frontend creeps in later)
+node_modules/
+
+# Temporary files
+*.tmp
+*.temp

@@ -3,10 +3,13 @@ using ProductNormaliser.Application.Categories;
 using ProductNormaliser.Application.Crawls;
 using ProductNormaliser.Application.Governance;
 using ProductNormaliser.Application.Sources;
+using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.AdminApi.Services;
 using ProductNormaliser.AdminApi.OpenApi;
 using ProductNormaliser.AdminApi.Security;
+using ProductNormaliser.Infrastructure.Crawling;
 using ProductNormaliser.Infrastructure.Mongo;
+using ProductNormaliser.Infrastructure.StructuredData;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,6 +32,8 @@ builder.Services.AddOpenApi(options =>
     options.AddOperationTransformer(SourceEndpointOpenApiTransformer.ApplyAsync);
 });
 builder.Services.AddProductNormaliserMongo(builder.Configuration);
+builder.Services.AddSingleton<IStructuredDataExtractor, SchemaOrgJsonLdExtractor>();
+builder.Services.AddHttpClient<IHttpFetcher, HttpFetcher>();
 builder.Services.AddSingleton<ICategoryMetadataService, CategoryMetadataService>();
 builder.Services.AddSingleton<ICategoryManagementService, CategoryManagementService>();
 builder.Services.AddSingleton<ICrawlJobService, CrawlJobService>();

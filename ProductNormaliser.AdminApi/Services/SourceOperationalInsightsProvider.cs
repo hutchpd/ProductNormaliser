@@ -51,6 +51,26 @@ public sealed class SourceOperationalInsightsProvider(
                     .Limit(1000)
                     .ToListAsync(insightCancellationToken);
 
+            var sourceIds = sources
+                .Select(source => source.Id)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            var discoveryQueueItems = sourceIds.Length == 0
+                ? []
+                : await mongoDbContext.DiscoveryQueueItems
+                    .Find(Builders<DiscoveryQueueItem>.Filter.In(item => item.SourceId, sourceIds))
+                    .ToListAsync(insightCancellationToken);
+
+            var discoveredUrls = sourceIds.Length == 0
+                ? []
+                : await mongoDbContext.DiscoveredUrls
+                    .Find(Builders<DiscoveredUrl>.Filter.In(item => item.SourceId, sourceIds))
+                    .SortByDescending(item => item.LastSeenUtc)
+                    .Limit(10000)
+                    .ToListAsync(insightCancellationToken);
+
             var latestSnapshotsBySourceAndCategory = snapshots
                 .GroupBy(snapshot => BuildSourceCategoryKey(snapshot.SourceName, snapshot.CategoryKey), StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
@@ -61,7 +81,7 @@ public sealed class SourceOperationalInsightsProvider(
 
             return sources.ToDictionary(
                 source => source.Id,
-                source => BuildInsights(source, categoriesByKey, latestSnapshotsBySourceAndCategory, latestActivityBySource),
+                source => BuildInsights(source, categoriesByKey, latestSnapshotsBySourceAndCategory, latestActivityBySource, discoveryQueueItems, discoveredUrls),
                 StringComparer.OrdinalIgnoreCase);
         }
         catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -78,8 +98,11 @@ public sealed class SourceOperationalInsightsProvider(
         CrawlSource source,
         IReadOnlyDictionary<string, CategoryMetadata> categoriesByKey,
         IReadOnlyDictionary<string, SourceQualitySnapshot> latestSnapshotsBySourceAndCategory,
-        IReadOnlyDictionary<string, CrawlLog> latestActivityBySource)
+        IReadOnlyDictionary<string, CrawlLog> latestActivityBySource,
+        IReadOnlyList<DiscoveryQueueItem> discoveryQueueItems,
+        IReadOnlyList<DiscoveredUrl> discoveredUrls)
     {
+        var throughputWindowStartUtc = DateTime.UtcNow.AddHours(-24);
         var assignedCategories = source.SupportedCategoryKeys
             .Select(categoryKey => categoriesByKey.TryGetValue(categoryKey, out var category) ? category : null)
             .Where(category => category is not null)
@@ -94,6 +117,16 @@ public sealed class SourceOperationalInsightsProvider(
 
         latestActivityBySource.TryGetValue(source.DisplayName, out var latestActivity);
 
+        var sourceDiscoveryQueueItems = discoveryQueueItems.Where(item => string.Equals(item.SourceId, source.Id, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var sourceDiscoveredUrls = discoveredUrls.Where(item => string.Equals(item.SourceId, source.Id, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var discoveryCoverageByCategory = source.SupportedCategoryKeys
+            .Concat(sourceDiscoveredUrls.Select(item => item.CategoryKey))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                categoryKey => categoryKey,
+                categoryKey => CalculateDiscoveryCompletionPercent(sourceDiscoveredUrls.Where(item => string.Equals(item.CategoryKey, categoryKey, StringComparison.OrdinalIgnoreCase))),
+                StringComparer.OrdinalIgnoreCase);
+
         return new SourceOperationalInsights
         {
             Readiness = BuildReadiness(source, assignedCategories),
@@ -107,7 +140,24 @@ public sealed class SourceOperationalInsightsProvider(
                 HadMeaningfulChange = latestActivity.HadMeaningfulChange,
                 MeaningfulChangeSummary = latestActivity.MeaningfulChangeSummary,
                 ErrorMessage = latestActivity.ErrorMessage
-            }
+            },
+            DiscoveryQueueDepth = sourceDiscoveryQueueItems.Count(IsDiscoveryQueuedOrProcessing),
+            ListingPagesVisitedLast24Hours = sourceDiscoveredUrls.Count(item => string.Equals(item.Classification, "listing", StringComparison.OrdinalIgnoreCase)
+                && item.LastProcessedUtc is not null
+                && item.LastProcessedUtc.Value >= throughputWindowStartUtc),
+            SitemapUrlsProcessedLast24Hours = sourceDiscoveredUrls.Count(item => string.Equals(item.Classification, "sitemap", StringComparison.OrdinalIgnoreCase)
+                && item.LastProcessedUtc is not null
+                && item.LastProcessedUtc.Value >= throughputWindowStartUtc),
+            ConfirmedProductUrlsLast24Hours = sourceDiscoveredUrls.Count(item => string.Equals(item.Classification, "product", StringComparison.OrdinalIgnoreCase)
+                && item.PromotedToCrawlUtc is not null
+                && item.PromotedToCrawlUtc.Value >= throughputWindowStartUtc),
+            DiscoveryCoverageByCategory = discoveryCoverageByCategory,
+            LastDiscoveryUtc = sourceDiscoveredUrls
+                .Select(GetDiscoveryActivityUtc)
+                .Where(timestamp => timestamp is not null)
+                .Max(),
+            SitemapReachable = sourceDiscoveredUrls.Any(item => string.Equals(item.Classification, "sitemap", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(item.State, "processed", StringComparison.OrdinalIgnoreCase))
         };
     }
 
@@ -129,7 +179,8 @@ public sealed class SourceOperationalInsightsProvider(
             {
                 Status = "Unknown"
             },
-            LastActivity = null
+            LastActivity = null,
+            DiscoveryCoverageByCategory = source.SupportedCategoryKeys.ToDictionary(categoryKey => categoryKey, _ => 0m, StringComparer.OrdinalIgnoreCase)
         };
     }
 
@@ -227,5 +278,31 @@ public sealed class SourceOperationalInsightsProvider(
     private static string BuildSourceCategoryKey(string sourceName, string categoryKey)
     {
         return $"{sourceName.Trim().ToLowerInvariant()}::{categoryKey.Trim().ToLowerInvariant()}";
+    }
+
+    private static bool IsDiscoveryQueuedOrProcessing(DiscoveryQueueItem queueItem)
+    {
+        return string.Equals(queueItem.State, "queued", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(queueItem.State, "processing", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static decimal CalculateDiscoveryCompletionPercent(IEnumerable<DiscoveredUrl> discoveredUrls)
+    {
+        var materialized = discoveredUrls.ToArray();
+        var totalCount = materialized.Length;
+        if (totalCount == 0)
+        {
+            return 0m;
+        }
+
+        var processedCount = materialized.Count(item => item.LastProcessedUtc is not null || item.PromotedToCrawlUtc is not null);
+        return decimal.Round((decimal)processedCount / totalCount * 100m, 2, MidpointRounding.AwayFromZero);
+    }
+
+    private static DateTime? GetDiscoveryActivityUtc(DiscoveredUrl discoveredUrl)
+    {
+        return new[] { discoveredUrl.LastProcessedUtc, discoveredUrl.PromotedToCrawlUtc, discoveredUrl.LastSeenUtc }
+            .Where(timestamp => timestamp is not null)
+            .Max();
     }
 }

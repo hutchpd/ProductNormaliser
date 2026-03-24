@@ -46,6 +46,19 @@ public sealed class DetailsModel(
             .Select(categoryKey => CategoryLookup.TryGetValue(categoryKey, out var category) ? category.DisplayName : categoryKey)
             .ToArray();
 
+    public bool HasDiscoveryProfileConfigured => CurrentSource is not null
+        && (CurrentSource.DiscoveryProfile.CategoryEntryPages.Count > 0
+            || CurrentSource.DiscoveryProfile.SitemapHints.Count > 0
+            || CurrentSource.DiscoveryProfile.ProductUrlPatterns.Count > 0
+            || CurrentSource.DiscoveryProfile.ListingUrlPatterns.Count > 0);
+
+    public int ConfiguredEntryPageCount => CurrentSource?.DiscoveryProfile.CategoryEntryPages.Sum(entry => entry.Value.Count) ?? 0;
+
+    public IReadOnlyList<KeyValuePair<string, decimal>> DiscoveryCoverageRows => CurrentSource?.DiscoveryCoverageByCategory
+        .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+        .ToArray()
+        ?? [];
+
     public string IntelligenceUrl => CurrentSource is null || CurrentSource.SupportedCategoryKeys.Count == 0
         ? "/Sources/Intelligence"
         : $"/Sources/Intelligence?category={Uri.EscapeDataString(CurrentSource.SupportedCategoryKeys[0])}&source={Uri.EscapeDataString(CurrentSource.DisplayName)}";

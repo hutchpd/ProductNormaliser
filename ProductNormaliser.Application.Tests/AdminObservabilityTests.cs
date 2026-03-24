@@ -1,5 +1,6 @@
 using ProductNormaliser.AdminApi.Services;
 using ProductNormaliser.Core.Models;
+using ProductNormaliser.Infrastructure.Discovery;
 using ProductNormaliser.Infrastructure.Mongo;
 using ProductNormaliser.Infrastructure.Mongo.Repositories;
 using ProductNormaliser.Worker;
@@ -45,6 +46,7 @@ public sealed class AdminObservabilityTests
             new ProductOfferRepository(MongoIntegrationTestFixture.Context),
             new FakeConflictDetector(),
             new MergeConflictRepository(MongoIntegrationTestFixture.Context),
+            new NoOpRelatedLinkExpansionService(),
             crawlLogStore,
             new TestLogger<CrawlOrchestrator>());
 
@@ -440,4 +442,10 @@ public sealed class AdminObservabilityTests
     {
         public List<MergeConflict> Detect(CanonicalProduct product) => [];
     }
+}
+
+file sealed class NoOpRelatedLinkExpansionService : IRelatedLinkExpansionService
+{
+    public Task<RelatedLinkExpansionResult> ExpandAsync(CrawlTarget target, string html, CancellationToken cancellationToken)
+        => Task.FromResult(RelatedLinkExpansionResult.Empty);
 }

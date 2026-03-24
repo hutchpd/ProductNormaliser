@@ -51,7 +51,7 @@ public sealed class MilestoneHappyPathWorkflowTests
             Assert.That(detailsHtml, Does.Contain("This job is active."));
             Assert.That(detailsHtml, Does.Contain("job_tv_20260323"));
             Assert.That(detailsHtml, Does.Contain("Running"));
-            Assert.That(detailsHtml, Does.Contain("4 of 10 targets processed"));
+            Assert.That(detailsHtml, Does.Contain("Discovery 4 of 10 frontier targets processed"));
             Assert.That(detailsHtml, Does.Contain("tv"));
             Assert.That(detailsHtml, Does.Contain("ao_uk"));
         });
@@ -114,6 +114,15 @@ public sealed class MilestoneHappyPathWorkflowTests
             SkippedCount = 1,
             FailedCount = 0,
             CancelledCount = 0,
+            DiscoveredUrlCount = 10,
+            ConfirmedProductTargetCount = 3,
+            DiscoveryQueueDepth = 6,
+            ActiveSourceCoverage = 1,
+            SourceCoveragePercent = 100m,
+            DiscoveryCompletionPercent = 40m,
+            CrawledProductUrlCount = 1,
+            ProductQueueDepth = 2,
+            ProductFailureCount = 0,
             StartedAt = new DateTime(2026, 03, 23, 10, 00, 00, DateTimeKind.Utc),
             LastUpdatedAt = new DateTime(2026, 03, 23, 10, 08, 00, DateTimeKind.Utc),
             EstimatedCompletion = new DateTime(2026, 03, 23, 10, 20, 00, DateTimeKind.Utc),
@@ -128,7 +137,16 @@ public sealed class MilestoneHappyPathWorkflowTests
                     SuccessCount = 3,
                     SkippedCount = 1,
                     FailedCount = 0,
-                    CancelledCount = 0
+                    CancelledCount = 0,
+                    DiscoveredUrlCount = 10,
+                    ConfirmedProductTargetCount = 3,
+                    DiscoveryQueueDepth = 6,
+                    ActiveSourceCoverage = 1,
+                    SourceCoveragePercent = 100m,
+                    DiscoveryCompletionPercent = 40m,
+                    CrawledProductUrlCount = 1,
+                    ProductQueueDepth = 2,
+                    ProductFailureCount = 0
                 }
             ]
         };

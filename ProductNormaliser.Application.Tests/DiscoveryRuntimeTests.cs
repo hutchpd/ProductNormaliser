@@ -247,6 +247,60 @@ public sealed class DiscoveryRuntimeTests
         });
     }
 
+    [Test]
+    public async Task RelatedLinkExpansionService_EnqueuesProductBreadcrumbAndListingLinks()
+    {
+        const string html = """
+            <html>
+              <body>
+                <nav aria-label="breadcrumb">
+                  <a href="/category/tv">TV</a>
+                  <a href="/category/tv/oled">OLED</a>
+                </nav>
+                <section class="related-products">
+                  <a class="product-card" href="/product/oled-2">OLED 2</a>
+                </section>
+                <a rel="next" href="/category/tv?page=2">Next</a>
+              </body>
+            </html>
+            """;
+
+        var source = CreateSource();
+        var queueService = new RecordingDiscoveryQueueService();
+        var linkPolicy = new DiscoveryLinkPolicy();
+        var sut = new RelatedLinkExpansionService(
+            new FakeCrawlSourceStore(source),
+            new ProductLinkExtractor(linkPolicy),
+            new ProductPageClassifier(new SchemaOrgJsonLdExtractor(), linkPolicy),
+            new ListingPageClassifier(new ProductLinkExtractor(linkPolicy), linkPolicy),
+            linkPolicy,
+            queueService,
+            new TestLogger<RelatedLinkExpansionService>());
+
+        var result = await sut.ExpandAsync(new CrawlTarget
+        {
+            Url = "https://alpha.example/product/oled-1",
+            CategoryKey = "tv",
+            Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["sourceName"] = source.Id
+            }
+        }, html, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.EnqueuedProductUrls, Is.EqualTo(1));
+            Assert.That(result.EnqueuedListingUrls, Is.EqualTo(3));
+            Assert.That(queueService.Enqueued.Select(item => (item.ItemType, item.Url)), Is.EqualTo(new[]
+            {
+                ("product", "https://alpha.example/product/oled-2"),
+                ("listing", "https://alpha.example/category/tv?page=2"),
+                ("listing", "https://alpha.example/category/tv"),
+                ("listing", "https://alpha.example/category/tv/oled")
+            }));
+        });
+    }
+
     private static CrawlSource CreateSource()
     {
         return new CrawlSource
@@ -308,5 +362,31 @@ public sealed class DiscoveryRuntimeTests
         {
             throw new NotSupportedException();
         }
+    }
+
+    private sealed class RecordingDiscoveryQueueService : IDiscoveryQueueService
+    {
+        public List<(string ItemType, string Url)> Enqueued { get; } = [];
+
+        public Task<DiscoveryQueueLease?> DequeueAsync(CancellationToken cancellationToken)
+            => Task.FromResult<DiscoveryQueueLease?>(null);
+
+        public Task<bool> EnqueueAsync(CrawlSource source, string categoryKey, string url, string itemType, int depth, string? parentUrl, string? jobId, CancellationToken cancellationToken)
+        {
+            Enqueued.Add((itemType, url));
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> EnqueueProductAsync(CrawlSource source, string categoryKey, string url, int depth, string? parentUrl, string? jobId, CancellationToken cancellationToken)
+            => Task.FromResult(false);
+
+        public Task MarkCompletedAsync(string queueItemId, CancellationToken cancellationToken)
+            => Task.CompletedTask;
+
+        public Task MarkSkippedAsync(string queueItemId, string reason, CancellationToken cancellationToken)
+            => Task.CompletedTask;
+
+        public Task MarkFailedAsync(string queueItemId, string reason, CancellationToken cancellationToken)
+            => Task.CompletedTask;
     }
 }
