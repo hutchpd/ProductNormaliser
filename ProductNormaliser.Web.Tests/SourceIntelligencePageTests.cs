@@ -47,6 +47,8 @@ public sealed class SourceIntelligencePageTests
                     AgreementRate = 80m,
                     ConflictRate = 20m,
                     SuccessfulCrawlRate = 93m,
+                    ExtractabilityRate = 86m,
+                    NoProductRate = 14m,
                     SpecStabilityScore = 76m,
                     HistoricalTrustScore = 81m
                 },
@@ -59,6 +61,8 @@ public sealed class SourceIntelligencePageTests
                     AgreementRate = 74m,
                     ConflictRate = 26m,
                     SuccessfulCrawlRate = 91m,
+                    ExtractabilityRate = 32m,
+                    NoProductRate = 68m,
                     SpecStabilityScore = 63m,
                     HistoricalTrustScore = 72m
                 }
@@ -115,6 +119,8 @@ public sealed class SourceIntelligencePageTests
             Assert.That(model.SourceMetrics, Has.Count.EqualTo(2));
             Assert.That(model.HighValueSources[0].SourceName, Is.EqualTo("Northwind"));
             Assert.That(model.WeakSources[0].SourceName, Is.EqualTo("Contoso"));
+            Assert.That(model.SourceMetrics.Single(metric => metric.SourceName == "Northwind").LatestExtractabilityRate, Is.EqualTo(86m));
+            Assert.That(model.SourceMetrics.Single(metric => metric.SourceName == "Contoso").LatestNoProductRate, Is.EqualTo(68m));
             Assert.That(model.SupportMatrixRows, Has.Count.EqualTo(2));
         });
     }
@@ -158,6 +164,8 @@ public sealed class SourceIntelligencePageTests
                     AgreementRate = 89m,
                     ConflictRate = 11m,
                     SuccessfulCrawlRate = 95m,
+                    ExtractabilityRate = 92m,
+                    NoProductRate = 8m,
                     SpecStabilityScore = 82m,
                     HistoricalTrustScore = 92m
                 }

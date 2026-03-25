@@ -184,12 +184,15 @@ public sealed class OperatorLandingPageTests
                         TrustScore = 91m,
                         CoveragePercent = 86m,
                         SuccessfulCrawlRate = 97m,
+                        ExtractabilityRate = 88m,
+                        NoProductRate = 12m,
                         SnapshotUtc = new DateTime(2026, 3, 23, 8, 0, 0, DateTimeKind.Utc)
                     },
                     LastActivity = new SourceLastActivityDto
                     {
                         TimestampUtc = new DateTime(2026, 3, 23, 9, 0, 0, DateTimeKind.Utc),
                         Status = "succeeded",
+                        ExtractionOutcome = "products_extracted",
                         DurationMs = 1100,
                         ExtractedProductCount = 18,
                         HadMeaningfulChange = true,
@@ -216,12 +219,15 @@ public sealed class OperatorLandingPageTests
                         TrustScore = 63m,
                         CoveragePercent = 58m,
                         SuccessfulCrawlRate = 71m,
+                        ExtractabilityRate = 29m,
+                        NoProductRate = 71m,
                         SnapshotUtc = new DateTime(2026, 3, 23, 8, 30, 0, DateTimeKind.Utc)
                     },
                     LastActivity = new SourceLastActivityDto
                     {
                         TimestampUtc = new DateTime(2026, 3, 23, 9, 15, 0, DateTimeKind.Utc),
                         Status = "failed",
+                        ExtractionOutcome = "not_attempted",
                         DurationMs = 950,
                         ExtractedProductCount = 0,
                         HadMeaningfulChange = false,

@@ -9,6 +9,8 @@ public sealed class SourceQualitySnapshotDto
     public decimal ConflictRate { get; init; }
     public decimal AgreementRate { get; init; }
     public decimal SuccessfulCrawlRate { get; init; }
+    public decimal ExtractabilityRate { get; init; }
+    public decimal NoProductRate { get; init; }
     public decimal PriceVolatilityScore { get; init; }
     public decimal SpecStabilityScore { get; init; }
     public decimal HistoricalTrustScore { get; init; }

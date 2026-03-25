@@ -6,5 +6,7 @@ public sealed class SourceHealthSummaryDto
     public decimal TrustScore { get; init; }
     public decimal CoveragePercent { get; init; }
     public decimal SuccessfulCrawlRate { get; init; }
+    public decimal ExtractabilityRate { get; init; }
+    public decimal NoProductRate { get; init; }
     public DateTime? SnapshotUtc { get; init; }
 }

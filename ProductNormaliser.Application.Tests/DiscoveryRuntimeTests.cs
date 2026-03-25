@@ -199,7 +199,7 @@ public sealed class DiscoveryRuntimeTests
         {
             Assert.That(result.IsProductPage, Is.True);
             Assert.That(result.StructuredProductCount, Is.EqualTo(1));
-            Assert.That(result.Reason, Does.Contain("JSON-LD"));
+            Assert.That(result.Reason, Does.Contain("Structured product data"));
         });
     }
 

@@ -149,6 +149,48 @@ public sealed class CrawlOrchestratorTests
         });
     }
 
+    [Test]
+    public async Task ProcessAsync_CompletesWithNoProductOutcomeWhenFetchSucceedsButExtractionReturnsNothing()
+    {
+        var calls = new List<string>();
+        var crawlLogStore = new FakeCrawlLogStore();
+        var orchestrator = CreateOrchestrator(
+            calls,
+            new FakeRobotsPolicyService(calls, allowed: true),
+            new FakeHttpFetcher(calls, success: true, html: "<html>product page</html>"),
+            new FakeDeltaProcessor(calls, unchanged: false),
+            new FakeStructuredDataExtractor(calls, []),
+            new FakeSourceProductBuilder(calls, CreateSourceProduct("source-1", "https://example.com/products/1")),
+            new FakeAttributeNormaliser(calls),
+            new FakeSourceProductStore(calls),
+            new FakeCanonicalProductStore(calls),
+            new FakeProductIdentityResolver(calls),
+            new FakeCanonicalMergeService(calls),
+            new FakeProductOfferStore(calls),
+            new FakeConflictDetector(calls),
+            new FakeMergeConflictStore(calls),
+            crawlLogStore: crawlLogStore);
+
+        var result = await orchestrator.ProcessAsync(CreateTarget(), CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Status, Is.EqualTo("completed"));
+            Assert.That(result.ExtractionOutcome, Is.EqualTo("no_products"));
+            Assert.That(result.ExtractedProductCount, Is.EqualTo(0));
+            Assert.That(calls, Is.EqualTo(new[]
+            {
+                "robots",
+                "fetch",
+                "delta",
+                "raw-pages.upsert",
+                "extract"
+            }));
+            Assert.That(crawlLogStore.InsertedLogs, Has.Count.EqualTo(1));
+            Assert.That(crawlLogStore.InsertedLogs[0].ExtractionOutcome, Is.EqualTo("no_products"));
+        });
+    }
+
     private static CrawlTarget CreateTarget()
     {
         return new CrawlTarget
@@ -232,7 +274,8 @@ public sealed class CrawlOrchestratorTests
         IProductOfferStore productOfferStore,
         IConflictDetector conflictDetector,
         IMergeConflictStore mergeConflictStore,
-        IRelatedLinkExpansionService? relatedLinkExpansionService = null)
+        IRelatedLinkExpansionService? relatedLinkExpansionService = null,
+        ICrawlLogStore? crawlLogStore = null)
     {
         return new CrawlOrchestrator(
             robotsPolicyService,
@@ -252,8 +295,8 @@ public sealed class CrawlOrchestratorTests
             productOfferStore,
             conflictDetector,
             mergeConflictStore,
-                relatedLinkExpansionService ?? new FakeRelatedLinkExpansionService(calls),
-            new FakeCrawlLogStore(),
+            relatedLinkExpansionService ?? new FakeRelatedLinkExpansionService(calls),
+            crawlLogStore ?? new FakeCrawlLogStore(),
             new TestLogger<CrawlOrchestrator>());
     }
 
@@ -476,6 +519,8 @@ public sealed class CrawlOrchestratorTests
 
     private sealed class FakeCrawlLogStore : ICrawlLogStore
     {
+        public List<CrawlLog> InsertedLogs { get; } = [];
+
         public Task<CrawlLog?> GetByIdAsync(string id, CancellationToken cancellationToken = default) => Task.FromResult<CrawlLog?>(null);
 
         public Task<IReadOnlyList<CrawlLog>> ListAsync(int limit = 100, CancellationToken cancellationToken = default)
@@ -483,6 +528,7 @@ public sealed class CrawlOrchestratorTests
 
         public Task InsertAsync(CrawlLog log, CancellationToken cancellationToken = default)
         {
+            InsertedLogs.Add(log);
             return Task.CompletedTask;
         }
     }

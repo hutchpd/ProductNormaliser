@@ -203,6 +203,8 @@ public sealed class DataIntelligenceService(
                 ConflictRate = snapshot.ConflictRate,
                 AgreementRate = snapshot.AgreementRate,
                 SuccessfulCrawlRate = snapshot.SuccessfulCrawlRate,
+                ExtractabilityRate = snapshot.ExtractabilityRate,
+                NoProductRate = snapshot.NoProductRate,
                 PriceVolatilityScore = snapshot.PriceVolatilityScore,
                 SpecStabilityScore = snapshot.SpecStabilityScore,
                 HistoricalTrustScore = snapshot.HistoricalTrustScore

@@ -154,8 +154,16 @@
                         <strong>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(Model.CurrentSource.Health.TrustScore)</strong>
                     </article>
                     <article>
-                        <span>Crawl success</span>
+                        <span>Fetch success</span>
                         <strong>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(Model.CurrentSource.Health.SuccessfulCrawlRate)</strong>
+                    </article>
+                    <article>
+                        <span>Extractability</span>
+                        <strong>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(Model.CurrentSource.Health.ExtractabilityRate)</strong>
+                    </article>
+                    <article>
+                        <span>No-product rate</span>
+                        <strong>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(Model.CurrentSource.Health.NoProductRate)</strong>
                     </article>
                 </div>
 
@@ -175,6 +183,10 @@
                     <div>
                         <dt>Last crawl activity</dt>
                         <dd>@ProductNormaliser.Web.Models.SourceManagementPresentation.FormatLastActivity(Model.CurrentSource.LastActivity)</dd>
+                    </div>
+                    <div>
+                        <dt>Last extraction outcome</dt>
+                        <dd>@(Model.CurrentSource.LastActivity is null ? "No crawl recorded" : Model.CurrentSource.LastActivity.ExtractionOutcome.Replace('_', ' '))</dd>
                     </div>
                 </dl>
             </section>

@@ -94,8 +94,12 @@ public sealed class CrawlOrchestrator(
             extractedProductCount = extractedProducts.Count;
             if (extractedProducts.Count == 0)
             {
-                logger.LogInformation("No structured products found for {Url}", target.Url);
-                var result = CrawlProcessResult.Completed("No structured products found.", contentHash);
+                logger.LogInformation("Fetch succeeded but no products were extracted for {Url}", target.Url);
+                var result = CrawlProcessResult.Completed(
+                    "Fetch succeeded but no products were extracted.",
+                    contentHash,
+                    extractedProductCount,
+                    CrawlProcessResult.ExtractionOutcomeNoProducts);
                 await WriteCrawlLogAsync(sourceName, target.Url, result, stopwatch.ElapsedMilliseconds, cancellationToken);
                 RecordTelemetry(result, sourceName, target.CategoryKey, stopwatch.ElapsedMilliseconds);
                 return result;
@@ -154,7 +158,11 @@ public sealed class CrawlOrchestrator(
                 processedProductCount,
                 extractedProductCount,
                 semanticDelta?.HasMeaningfulChanges ?? false);
-            var completedResult = CrawlProcessResult.Completed($"Processed {processedProductCount} product(s).", contentHash, extractedProductCount);
+            var completedResult = CrawlProcessResult.Completed(
+                $"Processed {processedProductCount} product(s).",
+                contentHash,
+                extractedProductCount,
+                CrawlProcessResult.ExtractionOutcomeExtracted);
             await WriteCrawlLogAsync(sourceName, target.Url, completedResult, stopwatch.ElapsedMilliseconds, semanticDelta, cancellationToken);
             RecordTelemetry(completedResult, sourceName, target.CategoryKey, stopwatch.ElapsedMilliseconds);
             return completedResult;
@@ -271,6 +279,7 @@ public sealed class CrawlOrchestrator(
             SourceName = sourceName,
             Url = url,
             Status = result.Status,
+            ExtractionOutcome = result.ExtractionOutcome,
             DurationMs = durationMs,
             ContentHash = result.ContentHash,
             ExtractedProductCount = result.ExtractedProductCount,

@@ -19,7 +19,7 @@ public sealed partial class ProductPageClassifier(IStructuredDataExtractor struc
             return new ProductPageClassificationResult(
                 IsProductPage: true,
                 Confidence: 1.0m,
-                Reason: "JSON-LD Product data detected.",
+                Reason: "Structured product data detected.",
                 StructuredProductCount: structuredProducts.Count);
         }
 

@@ -309,12 +309,15 @@ public sealed class SourcesControllerTests
                         TrustScore = 90m,
                         CoveragePercent = 85m,
                         SuccessfulCrawlRate = 95m,
+                        ExtractabilityRate = 82m,
+                        NoProductRate = 18m,
                         SnapshotUtc = new DateTime(2026, 03, 23, 08, 00, 00, DateTimeKind.Utc)
                     },
                     LastActivity = new SourceLastActivityDto
                     {
                         TimestampUtc = new DateTime(2026, 03, 23, 09, 00, 00, DateTimeKind.Utc),
                         Status = "succeeded",
+                        ExtractionOutcome = "products_extracted",
                         DurationMs = 1200,
                         ExtractedProductCount = 10,
                         HadMeaningfulChange = true,

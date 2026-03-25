@@ -4,6 +4,7 @@ public sealed class SourceLastActivityDto
 {
     public DateTime TimestampUtc { get; init; }
     public string Status { get; init; } = default!;
+    public string ExtractionOutcome { get; init; } = default!;
     public long DurationMs { get; init; }
     public int ExtractedProductCount { get; init; }
     public bool HadMeaningfulChange { get; init; }

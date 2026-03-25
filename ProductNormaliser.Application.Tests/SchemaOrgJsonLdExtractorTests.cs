@@ -113,4 +113,45 @@ public sealed class SchemaOrgJsonLdExtractorTests
             Assert.That(products[0].Brand, Is.EqualTo("Hisense"));
         });
     }
+
+    [Test]
+    public void ExtractProducts_ParsesProductMicrodataWhenJsonLdIsMissing()
+    {
+        var html = EmbeddedHtmlFixtureLoader.Load("microdata-product.html");
+        var sut = new SchemaOrgJsonLdExtractor();
+
+        var product = sut.ExtractProducts(html, SourceUrl).Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(product.Name, Is.EqualTo("LG OLED55C4 55 Inch OLED evo TV"));
+            Assert.That(product.Brand, Is.EqualTo("LG"));
+            Assert.That(product.ModelNumber, Is.EqualTo("OLED55C4"));
+            Assert.That(product.Attributes["Screen Size"], Is.EqualTo("55 in"));
+            Assert.That(product.Offers, Has.Count.EqualTo(1));
+            Assert.That(product.Offers[0].Price, Is.EqualTo(1499.99m));
+            Assert.That(product.Offers[0].Currency, Is.EqualTo("GBP"));
+        });
+    }
+
+    [Test]
+    public void ExtractProducts_FallsBackToSpecTableExtractionForProductPages()
+    {
+        var html = EmbeddedHtmlFixtureLoader.Load("spec-table-product.html");
+        var sut = new SchemaOrgJsonLdExtractor();
+
+        var product = sut.ExtractProducts(html, SourceUrl).Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(product.Name, Is.EqualTo("Samsung QE55S90D OLED TV"));
+            Assert.That(product.Brand, Is.EqualTo("Samsung"));
+            Assert.That(product.ModelNumber, Is.EqualTo("QE55S90D"));
+            Assert.That(product.Attributes["Screen Size"], Is.EqualTo("55 in"));
+            Assert.That(product.Attributes["HDMI Ports"], Is.EqualTo("4"));
+            Assert.That(product.Offers, Has.Count.EqualTo(1));
+            Assert.That(product.Offers[0].Price, Is.EqualTo(1299.00m));
+            Assert.That(product.Offers[0].Currency, Is.EqualTo("GBP"));
+        });
+    }
 }

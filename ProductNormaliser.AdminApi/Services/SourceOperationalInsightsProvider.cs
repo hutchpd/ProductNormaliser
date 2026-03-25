@@ -12,6 +12,8 @@ public sealed class SourceOperationalInsightsProvider(
     ILogger<SourceOperationalInsightsProvider> logger) : ISourceOperationalInsightsProvider
 {
     private static readonly TimeSpan InsightLoadTimeout = TimeSpan.FromSeconds(2);
+    private const string ExtractionOutcomeExtracted = "products_extracted";
+    private const string ExtractionOutcomeNoProducts = "no_products";
 
     public async Task<IReadOnlyDictionary<string, SourceOperationalInsights>> BuildAsync(IReadOnlyList<CrawlSource> sources, CancellationToken cancellationToken)
     {
@@ -135,6 +137,9 @@ public sealed class SourceOperationalInsightsProvider(
             {
                 TimestampUtc = latestActivity.TimestampUtc,
                 Status = string.IsNullOrWhiteSpace(latestActivity.Status) ? "unknown" : latestActivity.Status,
+                ExtractionOutcome = string.IsNullOrWhiteSpace(latestActivity.ExtractionOutcome)
+                    ? (latestActivity.ExtractedProductCount > 0 ? ExtractionOutcomeExtracted : ExtractionOutcomeNoProducts)
+                    : latestActivity.ExtractionOutcome,
                 DurationMs = latestActivity.DurationMs,
                 ExtractedProductCount = latestActivity.ExtractedProductCount,
                 HadMeaningfulChange = latestActivity.HadMeaningfulChange,
@@ -244,25 +249,29 @@ public sealed class SourceOperationalInsightsProvider(
         var trustScore = decimal.Round(snapshots.Average(snapshot => ToPercent(snapshot.HistoricalTrustScore)), 2, MidpointRounding.AwayFromZero);
         var coveragePercent = decimal.Round(snapshots.Average(snapshot => ToPercent(snapshot.AttributeCoverage)), 2, MidpointRounding.AwayFromZero);
         var successfulCrawlRate = decimal.Round(snapshots.Average(snapshot => ToPercent(snapshot.SuccessfulCrawlRate)), 2, MidpointRounding.AwayFromZero);
+        var extractabilityRate = decimal.Round(snapshots.Average(snapshot => ToPercent(snapshot.ExtractabilityRate)), 2, MidpointRounding.AwayFromZero);
+        var noProductRate = decimal.Round(snapshots.Average(snapshot => ToPercent(snapshot.NoProductRate)), 2, MidpointRounding.AwayFromZero);
 
         return new SourceHealthSummaryDto
         {
-            Status = DetermineHealthStatus(trustScore, successfulCrawlRate),
+            Status = DetermineHealthStatus(trustScore, successfulCrawlRate, extractabilityRate, noProductRate),
             TrustScore = trustScore,
             CoveragePercent = coveragePercent,
             SuccessfulCrawlRate = successfulCrawlRate,
+            ExtractabilityRate = extractabilityRate,
+            NoProductRate = noProductRate,
             SnapshotUtc = snapshots.Max(snapshot => snapshot.TimestampUtc)
         };
     }
 
-    private static string DetermineHealthStatus(decimal trustScore, decimal successfulCrawlRate)
+    private static string DetermineHealthStatus(decimal trustScore, decimal successfulCrawlRate, decimal extractabilityRate, decimal noProductRate)
     {
-        if (trustScore >= 85m && successfulCrawlRate >= 85m)
+        if (trustScore >= 85m && successfulCrawlRate >= 85m && extractabilityRate >= 60m && noProductRate <= 35m)
         {
             return "Healthy";
         }
 
-        if (trustScore >= 60m && successfulCrawlRate >= 70m)
+        if (trustScore >= 60m && successfulCrawlRate >= 70m && extractabilityRate >= 35m && noProductRate <= 65m)
         {
             return "Watch";
         }

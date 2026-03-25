@@ -199,6 +199,8 @@ public sealed class SourceHealthSummaryDto
     public decimal TrustScore { get; init; }
     public decimal CoveragePercent { get; init; }
     public decimal SuccessfulCrawlRate { get; init; }
+    public decimal ExtractabilityRate { get; init; }
+    public decimal NoProductRate { get; init; }
     public DateTime? SnapshotUtc { get; init; }
 }
 
@@ -206,6 +208,7 @@ public sealed class SourceLastActivityDto
 {
     public DateTime TimestampUtc { get; init; }
     public string Status { get; init; } = string.Empty;
+    public string ExtractionOutcome { get; init; } = string.Empty;
     public long DurationMs { get; init; }
     public int ExtractedProductCount { get; init; }
     public bool HadMeaningfulChange { get; init; }
@@ -651,6 +654,8 @@ public sealed class SourceQualitySnapshotDto
     public decimal ConflictRate { get; init; }
     public decimal AgreementRate { get; init; }
     public decimal SuccessfulCrawlRate { get; init; }
+    public decimal ExtractabilityRate { get; init; }
+    public decimal NoProductRate { get; init; }
     public decimal PriceVolatilityScore { get; init; }
     public decimal SpecStabilityScore { get; init; }
     public decimal HistoricalTrustScore { get; init; }

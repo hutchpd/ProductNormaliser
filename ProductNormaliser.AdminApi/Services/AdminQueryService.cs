@@ -17,6 +17,9 @@ public sealed class AdminQueryService(
     ICategorySchemaRegistry? categorySchemaRegistry = null,
     ICategoryAttributeNormaliserRegistry? categoryAttributeNormaliserRegistry = null) : IAdminQueryService
 {
+    private const string ExtractionOutcomeExtracted = "products_extracted";
+    private const string ExtractionOutcomeNoProducts = "no_products";
+
     private readonly ICategorySchemaRegistry categorySchemaRegistry = categorySchemaRegistry ?? DefaultCategoryRegistries.CreateSchemaRegistry();
     private readonly ICategoryAttributeNormaliserRegistry categoryAttributeNormaliserRegistry = categoryAttributeNormaliserRegistry ?? DefaultCategoryRegistries.CreateAttributeNormaliserRegistry();
 
@@ -405,6 +408,8 @@ public sealed class AdminQueryService(
         var trustScore = sourceSnapshots.Length == 0 ? 0m : decimal.Round(sourceSnapshots.Average(snapshot => snapshot.HistoricalTrustScore), 2, MidpointRounding.AwayFromZero);
         var coveragePercent = sourceSnapshots.Length == 0 ? 0m : decimal.Round(sourceSnapshots.Average(snapshot => snapshot.AttributeCoverage), 2, MidpointRounding.AwayFromZero);
         var successfulCrawlRate = sourceSnapshots.Length == 0 ? 0m : decimal.Round(sourceSnapshots.Average(snapshot => snapshot.SuccessfulCrawlRate), 2, MidpointRounding.AwayFromZero);
+        var extractabilityRate = sourceSnapshots.Length == 0 ? 0m : decimal.Round(sourceSnapshots.Average(snapshot => snapshot.ExtractabilityRate), 2, MidpointRounding.AwayFromZero);
+        var noProductRate = sourceSnapshots.Length == 0 ? 0m : decimal.Round(sourceSnapshots.Average(snapshot => snapshot.NoProductRate), 2, MidpointRounding.AwayFromZero);
         var discoveryCoverageByCategory = source.SupportedCategoryKeys
             .Concat(sourceDiscoveredUrls.Select(item => item.CategoryKey))
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -416,7 +421,7 @@ public sealed class AdminQueryService(
         return new SourceOperationalMetricDto
         {
             SourceName = sourceName,
-            HealthStatus = sourceSnapshots.Length == 0 ? "Unknown" : DetermineHealthStatus(trustScore, successfulCrawlRate),
+            HealthStatus = sourceSnapshots.Length == 0 ? "Unknown" : DetermineHealthStatus(trustScore, successfulCrawlRate, extractabilityRate, noProductRate),
             QueueDepth = sourceQueueItems.Count(IsQueuedOrProcessing),
             DiscoveryQueueDepth = sourceDiscoveryQueueItems.Count(IsDiscoveryQueuedOrProcessing),
             RetryQueueDepth = sourceQueueItems.Count(item => IsQueuedOrProcessing(item) && item.AttemptCount > 0),
@@ -559,14 +564,14 @@ public sealed class AdminQueryService(
             || string.Equals(status, CrawlJobStatuses.CancelRequested, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string DetermineHealthStatus(decimal trustScore, decimal successfulCrawlRate)
+    private static string DetermineHealthStatus(decimal trustScore, decimal successfulCrawlRate, decimal extractabilityRate, decimal noProductRate)
     {
-        if (trustScore >= 80m && successfulCrawlRate >= 90m)
+        if (trustScore >= 80m && successfulCrawlRate >= 90m && extractabilityRate >= 60m && noProductRate <= 35m)
         {
             return "Healthy";
         }
 
-        if (trustScore >= 60m && successfulCrawlRate >= 75m)
+        if (trustScore >= 60m && successfulCrawlRate >= 75m && extractabilityRate >= 35m && noProductRate <= 65m)
         {
             return "Watch";
         }
@@ -582,6 +587,9 @@ public sealed class AdminQueryService(
             SourceName = log.SourceName,
             Url = log.Url,
             Status = log.Status,
+            ExtractionOutcome = string.IsNullOrWhiteSpace(log.ExtractionOutcome)
+                ? (log.ExtractedProductCount > 0 ? ExtractionOutcomeExtracted : ExtractionOutcomeNoProducts)
+                : log.ExtractionOutcome,
             DurationMs = log.DurationMs,
             ContentHash = log.ContentHash,
             ExtractedProductCount = log.ExtractedProductCount,

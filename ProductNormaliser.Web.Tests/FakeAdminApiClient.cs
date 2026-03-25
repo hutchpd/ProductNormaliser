@@ -534,12 +534,15 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
                 TrustScore = source.Health.TrustScore,
                 CoveragePercent = source.Health.CoveragePercent,
                 SuccessfulCrawlRate = source.Health.SuccessfulCrawlRate,
+                ExtractabilityRate = source.Health.ExtractabilityRate,
+                NoProductRate = source.Health.NoProductRate,
                 SnapshotUtc = source.Health.SnapshotUtc
             },
             LastActivity = source.LastActivity is null ? null : new SourceLastActivityDto
             {
                 TimestampUtc = source.LastActivity.TimestampUtc,
                 Status = source.LastActivity.Status,
+                ExtractionOutcome = source.LastActivity.ExtractionOutcome,
                 DurationMs = source.LastActivity.DurationMs,
                 ExtractedProductCount = source.LastActivity.ExtractedProductCount,
                 HadMeaningfulChange = source.LastActivity.HadMeaningfulChange,

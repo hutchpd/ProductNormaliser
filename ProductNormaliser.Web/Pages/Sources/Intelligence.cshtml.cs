@@ -433,6 +433,8 @@ public sealed class IntelligenceModel(
             var latestAgreementPercent = score?.AgreementPercent ?? latestSnapshot?.AgreementRate ?? 0m;
             var latestConflictRate = latestSnapshot?.ConflictRate ?? 0m;
             var latestSuccessfulCrawlRate = latestSnapshot?.SuccessfulCrawlRate ?? source?.Health.SuccessfulCrawlRate ?? 0m;
+            var latestExtractabilityRate = latestSnapshot?.ExtractabilityRate ?? source?.Health.ExtractabilityRate ?? 0m;
+            var latestNoProductRate = latestSnapshot?.NoProductRate ?? source?.Health.NoProductRate ?? 0m;
             var latestChangeActivity = latestSnapshot is null ? 0m : AnalyticsPresentation.GetChangeActivity(latestSnapshot);
             var disagreementRate = disagreements.Length == 0 ? 0m : decimal.Round(disagreements.Average(item => item.DisagreementRate), 1, MidpointRounding.AwayFromZero);
             var hotspotCount = disagreements.Count(item => item.DisagreementRate >= 25m);
@@ -442,17 +444,20 @@ public sealed class IntelligenceModel(
                 ? 0m
                 : decimal.Round(latestSnapshot.HistoricalTrustScore - earliestSnapshot.HistoricalTrustScore, 1, MidpointRounding.AwayFromZero);
             var valueScore = decimal.Clamp(decimal.Round(
-                qualityScore * 0.45m
+                qualityScore * 0.40m
                 + latestTrustScore * 0.20m
-                + latestCoveragePercent * 0.20m
-                + supportBreadth * 0.15m,
+                + latestCoveragePercent * 0.15m
+                + latestExtractabilityRate * 0.15m
+                + supportBreadth * 0.10m,
                 1,
                 MidpointRounding.AwayFromZero), 0m, 100m);
             var riskScore = decimal.Clamp(decimal.Round(
-                (100m - latestTrustScore) * 0.30m
-                + latestChangeActivity * 0.30m
-                + disagreementRate * 0.25m
-                + (100m - latestCoveragePercent) * 0.15m,
+                (100m - latestTrustScore) * 0.25m
+                + latestChangeActivity * 0.20m
+                + disagreementRate * 0.20m
+                + (100m - latestCoveragePercent) * 0.10m
+                + (100m - latestExtractabilityRate) * 0.15m
+                + latestNoProductRate * 0.10m,
                 1,
                 MidpointRounding.AwayFromZero), 0m, 100m);
 
@@ -469,6 +474,8 @@ public sealed class IntelligenceModel(
                 latestChangeActivity,
                 latestConflictRate,
                 latestSuccessfulCrawlRate,
+                latestExtractabilityRate,
+                latestNoProductRate,
                 disagreementRate,
                 hotspotCount,
                 supportedCategoryCount,
@@ -576,6 +583,8 @@ public sealed record SourceIntelligenceMetricModel(
     decimal LatestChangeActivity,
     decimal LatestConflictRate,
     decimal LatestSuccessfulCrawlRate,
+    decimal LatestExtractabilityRate,
+    decimal LatestNoProductRate,
     decimal LatestDisagreementRate,
     int HotspotCount,
     int SupportedCategoryCount,

@@ -45,6 +45,11 @@ public static class SourceManagementPresentation
             return new StatusBadgeModel { Text = "No recent crawl", Tone = "neutral" };
         }
 
+        if (string.Equals(activity.ExtractionOutcome, "no_products", StringComparison.OrdinalIgnoreCase))
+        {
+            return new StatusBadgeModel { Text = "Last crawl fetched but found no products", Tone = "warning" };
+        }
+
         var normalized = Normalize(activity.Status);
         return normalized switch
         {
@@ -68,7 +73,7 @@ public static class SourceManagementPresentation
             return "No recent quality snapshot.";
         }
 
-        return $"Trust {AnalyticsPresentation.FormatPercent(health.TrustScore)}, coverage {AnalyticsPresentation.FormatPercent(health.CoveragePercent)}, crawl success {AnalyticsPresentation.FormatPercent(health.SuccessfulCrawlRate)}";
+        return $"Trust {AnalyticsPresentation.FormatPercent(health.TrustScore)}, coverage {AnalyticsPresentation.FormatPercent(health.CoveragePercent)}, fetch success {AnalyticsPresentation.FormatPercent(health.SuccessfulCrawlRate)}, extractability {AnalyticsPresentation.FormatPercent(health.ExtractabilityRate)}, no-product {AnalyticsPresentation.FormatPercent(health.NoProductRate)}";
     }
 
     public static string FormatLastActivity(SourceLastActivityDto? activity)
@@ -79,7 +84,10 @@ public static class SourceManagementPresentation
         }
 
         var changeLabel = activity.HadMeaningfulChange ? "meaningful change detected" : "no meaningful change";
-        return $"{activity.TimestampUtc:u}, {activity.DurationMs} ms, {activity.ExtractedProductCount} products, {changeLabel}";
+        var extractionLabel = string.Equals(activity.ExtractionOutcome, "no_products", StringComparison.OrdinalIgnoreCase)
+            ? "fetch succeeded but no products were extracted"
+            : $"{activity.ExtractedProductCount} products extracted";
+        return $"{activity.TimestampUtc:u}, {activity.DurationMs} ms, {extractionLabel}, {changeLabel}";
     }
 
     private static string Normalize(string? value)

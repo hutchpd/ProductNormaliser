@@ -62,9 +62,11 @@ public sealed class AdminObservabilityTests
         Assert.Multiple(() =>
         {
             Assert.That(result.Status, Is.EqualTo("completed"));
+            Assert.That(result.ExtractionOutcome, Is.EqualTo("products_extracted"));
             Assert.That(logs, Has.Count.EqualTo(1));
             Assert.That(logs[0].SourceName, Is.EqualTo("example-retailer"));
             Assert.That(logs[0].Status, Is.EqualTo("completed"));
+            Assert.That(logs[0].ExtractionOutcome, Is.EqualTo("products_extracted"));
             Assert.That(logs[0].ExtractedProductCount, Is.EqualTo(1));
         });
     }
@@ -202,6 +204,8 @@ public sealed class AdminObservabilityTests
                 TimestampUtc = DateTime.UtcNow.AddMinutes(-40),
                 AttributeCoverage = 84m,
                 SuccessfulCrawlRate = 95m,
+                ExtractabilityRate = 88m,
+                NoProductRate = 12m,
                 HistoricalTrustScore = 90m
             },
             new SourceQualitySnapshot
@@ -212,6 +216,8 @@ public sealed class AdminObservabilityTests
                 TimestampUtc = DateTime.UtcNow.AddMinutes(-40),
                 AttributeCoverage = 61m,
                 SuccessfulCrawlRate = 68m,
+                ExtractabilityRate = 34m,
+                NoProductRate = 66m,
                 HistoricalTrustScore = 59m
             }
         ]);

@@ -11,6 +11,13 @@ internal static class AdminApiContractValidator
         "do_not_accept"
     };
 
+    private static readonly IReadOnlySet<string> ExtractionOutcomes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "products_extracted",
+        "no_products",
+        "not_attempted"
+    };
+
     private static readonly HashSet<string> CrawlSupportStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
         "Planned",
@@ -233,6 +240,10 @@ internal static class AdminApiContractValidator
         ValidateSourceDiscoveryProfile(payload.DiscoveryProfile, $"{path}.discoveryProfile");
         ValidateSourceThrottlingPolicy(payload.ThrottlingPolicy, $"{path}.throttlingPolicy");
         ValidateStringItems(payload.SupportedCategoryKeys, $"{path}.supportedCategoryKeys");
+        if (payload.LastActivity is not null)
+        {
+            ValidateSourceLastActivity(payload.LastActivity, $"{path}.lastActivity");
+        }
     }
 
     private static void ValidateSourceDiscoveryProfile(SourceDiscoveryProfileDto payload, string path)
@@ -286,6 +297,12 @@ internal static class AdminApiContractValidator
     private static void ValidateSourceThrottlingPolicy(SourceThrottlingPolicyDto payload, string path)
     {
         ArgumentNullException.ThrowIfNull(payload);
+    }
+
+    private static void ValidateSourceLastActivity(SourceLastActivityDto payload, string path)
+    {
+        ValidateRequiredString(payload.Status, $"{path}.status");
+        ValidateEnumValue(payload.ExtractionOutcome, ExtractionOutcomes, $"{path}.extractionOutcome", value => value);
     }
 
     private static void ValidateCrawlJob(CrawlJobDto payload, string path)

@@ -9,6 +9,9 @@ namespace ProductNormaliser.Infrastructure.Intelligence;
 
 public sealed class SourceTrustService : ISourceTrustService
 {
+    private const string ExtractionOutcomeExtracted = "products_extracted";
+    private const string ExtractionOutcomeNoProducts = "no_products";
+
     private readonly MongoDbContext mongoDbContext;
     private readonly ISourceDisagreementService? sourceDisagreementService;
     private readonly ICategorySchemaRegistry categorySchemaRegistry;
@@ -101,16 +104,20 @@ public sealed class SourceTrustService : ISourceTrustService
         var conflictRate = CalculateConflictRate(relatedCanonicalProducts, sourceName);
         var agreementRate = CalculateAgreementRate(relatedCanonicalProducts, sourceName);
         var successfulCrawlRate = CalculateSuccessfulCrawlRate(crawlLogs);
+        var extractabilityRate = CalculateExtractabilityRate(crawlLogs);
+        var noProductRate = CalculateNoProductRate(crawlLogs);
         var priceVolatilityScore = CalculatePriceVolatility(changeEvents);
         var specStabilityScore = CalculateSpecStability(changeEvents);
         var disagreementPenalty = CalculateDisagreementPenalty(categoryKey, sourceName);
         var historicalTrustScore = Clamp(decimal.Round(
-            attributeCoverage * 0.22m
-            + (1m - conflictRate) * 0.18m
-            + agreementRate * 0.25m
-            + successfulCrawlRate * 0.20m
+            attributeCoverage * 0.20m
+            + (1m - conflictRate) * 0.15m
+            + agreementRate * 0.20m
+            + successfulCrawlRate * 0.15m
+            + extractabilityRate * 0.15m
+            + (1m - noProductRate) * 0.05m
             + (1m - priceVolatilityScore) * 0.05m
-            + specStabilityScore * 0.10m,
+            + specStabilityScore * 0.05m,
             4,
             MidpointRounding.AwayFromZero) - disagreementPenalty);
 
@@ -124,6 +131,8 @@ public sealed class SourceTrustService : ISourceTrustService
             ConflictRate = conflictRate,
             AgreementRate = agreementRate,
             SuccessfulCrawlRate = successfulCrawlRate,
+            ExtractabilityRate = extractabilityRate,
+            NoProductRate = noProductRate,
             PriceVolatilityScore = priceVolatilityScore,
             SpecStabilityScore = specStabilityScore,
             HistoricalTrustScore = historicalTrustScore
@@ -230,6 +239,42 @@ public sealed class SourceTrustService : ISourceTrustService
 
         var successfulCount = crawlLogs.Count(log => string.Equals(log.Status, "completed", StringComparison.OrdinalIgnoreCase));
         return Clamp(decimal.Round((decimal)successfulCount / crawlLogs.Count, 4, MidpointRounding.AwayFromZero));
+    }
+
+    private static decimal CalculateExtractabilityRate(IReadOnlyCollection<CrawlLog> crawlLogs)
+    {
+        var completedLogs = crawlLogs.Where(log => string.Equals(log.Status, "completed", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (completedLogs.Length == 0)
+        {
+            return 0.5m;
+        }
+
+        var extractedCount = completedLogs.Count(log => string.Equals(GetExtractionOutcome(log), ExtractionOutcomeExtracted, StringComparison.OrdinalIgnoreCase));
+        return Clamp(decimal.Round((decimal)extractedCount / completedLogs.Length, 4, MidpointRounding.AwayFromZero));
+    }
+
+    private static decimal CalculateNoProductRate(IReadOnlyCollection<CrawlLog> crawlLogs)
+    {
+        var completedLogs = crawlLogs.Where(log => string.Equals(log.Status, "completed", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (completedLogs.Length == 0)
+        {
+            return 0.5m;
+        }
+
+        var noProductCount = completedLogs.Count(log => string.Equals(GetExtractionOutcome(log), ExtractionOutcomeNoProducts, StringComparison.OrdinalIgnoreCase));
+        return Clamp(decimal.Round((decimal)noProductCount / completedLogs.Length, 4, MidpointRounding.AwayFromZero));
+    }
+
+    private static string GetExtractionOutcome(CrawlLog log)
+    {
+        if (!string.IsNullOrWhiteSpace(log.ExtractionOutcome))
+        {
+            return log.ExtractionOutcome;
+        }
+
+        return log.ExtractedProductCount > 0
+            ? ExtractionOutcomeExtracted
+            : ExtractionOutcomeNoProducts;
     }
 
     private static decimal CalculatePriceVolatility(IReadOnlyCollection<ProductChangeEvent> changeEvents)

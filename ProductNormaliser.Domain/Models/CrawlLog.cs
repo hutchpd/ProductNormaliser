@@ -6,6 +6,7 @@ public sealed class CrawlLog
     public string SourceName { get; set; } = default!;
     public string Url { get; set; } = default!;
     public string Status { get; set; } = default!;
+    public string ExtractionOutcome { get; set; } = "not_attempted";
     public long DurationMs { get; set; }
     public string? ContentHash { get; set; }
     public int ExtractedProductCount { get; set; }

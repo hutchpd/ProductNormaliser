@@ -6,6 +6,7 @@ public sealed class CrawlLogDto
     public string SourceName { get; init; } = default!;
     public string Url { get; init; } = default!;
     public string Status { get; init; } = default!;
+    public string ExtractionOutcome { get; init; } = default!;
     public long DurationMs { get; init; }
     public string? ContentHash { get; init; }
     public int ExtractedProductCount { get; init; }

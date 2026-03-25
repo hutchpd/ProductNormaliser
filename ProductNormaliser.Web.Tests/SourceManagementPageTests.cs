@@ -702,12 +702,15 @@ public sealed class SourceManagementPageTests
                 TrustScore = healthStatus == "Healthy" ? 91m : 48m,
                 CoveragePercent = healthStatus == "Healthy" ? 87m : 42m,
                 SuccessfulCrawlRate = healthStatus == "Healthy" ? 93m : 55m,
+                ExtractabilityRate = healthStatus == "Healthy" ? 81m : 24m,
+                NoProductRate = healthStatus == "Healthy" ? 19m : 76m,
                 SnapshotUtc = new DateTime(2026, 03, 23, 08, 00, 00, DateTimeKind.Utc)
             },
             LastActivity = new SourceLastActivityDto
             {
                 TimestampUtc = new DateTime(2026, 03, 23, 09, 00, 00, DateTimeKind.Utc),
                 Status = healthStatus == "Healthy" ? "succeeded" : "failed",
+                ExtractionOutcome = healthStatus == "Healthy" ? "products_extracted" : "not_attempted",
                 DurationMs = 1830,
                 ExtractedProductCount = 12,
                 HadMeaningfulChange = healthStatus == "Healthy",

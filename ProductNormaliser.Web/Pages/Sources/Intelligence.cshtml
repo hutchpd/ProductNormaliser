@@ -222,6 +222,10 @@
                                         <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestCoveragePercent)</dd>
                                     </div>
                                     <div>
+                                        <dt>Extractability</dt>
+                                        <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestExtractabilityRate)</dd>
+                                    </div>
+                                    <div>
                                         <dt>Trend</dt>
                                         <dd><span class="status-pill @Model.GetTrendDeltaTone(metric)">@Model.GetTrendDeltaText(metric)</span></dd>
                                     </div>
@@ -262,6 +266,10 @@
                                     <div>
                                         <dt>Coverage</dt>
                                         <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestCoveragePercent)</dd>
+                                    </div>
+                                    <div>
+                                        <dt>No product</dt>
+                                        <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestNoProductRate)</dd>
                                     </div>
                                     <div>
                                         <dt>Risk</dt>
@@ -308,6 +316,14 @@
                                 <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestCoveragePercent)</dd>
                             </div>
                             <div>
+                                <dt>Extractability</dt>
+                                <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestExtractabilityRate)</dd>
+                            </div>
+                            <div>
+                                <dt>No product</dt>
+                                <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestNoProductRate)</dd>
+                            </div>
+                            <div>
                                 <dt>Risk</dt>
                                 <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.RiskScore)</dd>
                             </div>
@@ -350,7 +366,8 @@
                                 <th>Change activity</th>
                                 <th>Trust drift</th>
                                 <th>Conflict</th>
-                                <th>Crawl success</th>
+                                <th>Fetch success</th>
+                                <th>No product</th>
                                 <th>Hotspots</th>
                             </tr>
                         </thead>
@@ -363,6 +380,7 @@
                                     <td><span class="status-pill @Model.GetTrendDeltaTone(metric)">@Model.GetTrendDeltaText(metric)</span></td>
                                     <td>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestConflictRate)</td>
                                     <td>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestSuccessfulCrawlRate)</td>
+                                    <td>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(metric.LatestNoProductRate)</td>
                                     <td>@metric.HotspotCount</td>
                                 </tr>
                             }
@@ -467,6 +485,14 @@
                                 <div>
                                     <dt>Crawl success</dt>
                                     <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(snapshot.SuccessfulCrawlRate)</dd>
+                                </div>
+                                <div>
+                                    <dt>Extractability</dt>
+                                    <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(snapshot.ExtractabilityRate)</dd>
+                                </div>
+                                <div>
+                                    <dt>No product</dt>
+                                    <dd>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(snapshot.NoProductRate)</dd>
                                 </div>
                                 <div>
                                     <dt>Spec stability</dt>
