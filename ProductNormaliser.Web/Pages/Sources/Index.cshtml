@@ -86,6 +86,15 @@
                         <label asp-for="Registration.PreferredLocale" class="form-label"></label>
                         <input asp-for="Registration.PreferredLocale" class="form-control" placeholder="en-GB" />
                     </div>
+                    <div>
+                        <label asp-for="Registration.AutomationMode" class="form-label"></label>
+                        <select asp-for="Registration.AutomationMode" class="form-control">
+                            <option value="operator_assisted">Operator-assisted</option>
+                            <option value="suggest_accept">Suggest accept</option>
+                            <option value="auto_accept_and_seed">Auto-accept and seed</option>
+                        </select>
+                        <span class="subtle-copy">Stored as the source's visible onboarding policy. Defaults to operator-assisted.</span>
+                    </div>
                 </div>
 
                 <div>
@@ -161,7 +170,7 @@
 
         <div class="empty-panel mt-3">
             <p class="empty-state">Discover likely retailer or manufacturer hosts for the selected categories, review their probe signals, then move promising candidates into the registration form.</p>
-            <p class="subtle-copy">This MVP is intentionally stateless: results are ephemeral, stay separate from the registry, and do not create or modify registered sources until you use the existing registration flow.</p>
+            <p class="subtle-copy">Automation stays opt-in. Operator-assisted remains the default, suggestion mode only labels safe candidates, and guarded auto-accept plus seeding only runs when the visible thresholds and guardrails pass.</p>
         </div>
 
         @if (!string.IsNullOrWhiteSpace(Model.CandidateDiscoveryErrorMessage))
@@ -211,10 +220,37 @@
                     <input asp-for="CandidateDiscovery.MaxCandidates" class="form-control" min="1" max="25" />
                     <span asp-validation-for="CandidateDiscovery.MaxCandidates" class="text-danger small"></span>
                 </div>
+                <div>
+                    <label asp-for="CandidateDiscovery.AutomationMode" class="form-label"></label>
+                    <select asp-for="CandidateDiscovery.AutomationMode" class="form-control">
+                        <option value="operator_assisted">Operator-assisted only</option>
+                        <option value="suggest_accept">Suggest safe candidates</option>
+                        <option value="auto_accept_and_seed">Guarded auto-accept and seed</option>
+                    </select>
+                </div>
                 <div class="wide">
                     <label asp-for="CandidateDiscovery.BrandHints" class="form-label"></label>
                     <textarea asp-for="CandidateDiscovery.BrandHints" rows="2" class="form-control" placeholder="Samsung, LG, Sony"></textarea>
                     <span class="subtle-copy">Optional hints only. They do not create any sources or change crawl launch behavior.</span>
+                </div>
+            </div>
+
+            <div class="detail-grid mt-3">
+                <div>
+                    <dt>Current mode</dt>
+                    <dd>@Model.GetAutomationModeLabel(Model.CandidateDiscovery.AutomationMode)</dd>
+                </div>
+                <div>
+                    <dt>Suggestion threshold</dt>
+                    <dd>@Model.AutomationSettings.SuggestMinConfidenceScore.ToString("0.#") confidence</dd>
+                </div>
+                <div>
+                    <dt>Auto-accept threshold</dt>
+                    <dd>@Model.AutomationSettings.AutoAcceptMinConfidenceScore.ToString("0.#") confidence</dd>
+                </div>
+                <div>
+                    <dt>Auto cap per run</dt>
+                    <dd>@Model.AutomationSettings.MaxAutoAcceptedCandidatesPerRun</dd>
                 </div>
             </div>
 
@@ -274,6 +310,7 @@
                             </div>
                             <div class="d-flex flex-column align-items-end gap-2">
                                 <partial name="_StatusBadge" model='new ProductNormaliser.Web.Models.StatusBadgeModel { Text = Model.GetCandidateRecommendationLabel(candidate), Tone = Model.GetCandidateRecommendationTone(candidate) }' />
+                                <partial name="_StatusBadge" model='new ProductNormaliser.Web.Models.StatusBadgeModel { Text = Model.GetAutomationDecisionLabel(candidate), Tone = Model.GetAutomationDecisionTone(candidate) }' />
                                 <partial name="_StatusBadge" model='new ProductNormaliser.Web.Models.StatusBadgeModel { Text = $"{candidate.ConfidenceScore:0.#}% confidence", Tone = candidate.AllowedByGovernance ? "completed" : "warning" }' />
                             </div>
                         </div>
@@ -288,6 +325,8 @@
                             {
                                 <span class="chip">@candidate.PreferredLocale</span>
                             }
+                            <span class="chip">market: @candidate.MarketEvidence</span>
+                            <span class="chip">locale: @candidate.LocaleEvidence</span>
                             @foreach (var categoryKey in candidate.MatchedCategoryKeys)
                             {
                                 <span class="chip">@categoryKey</span>
@@ -317,6 +356,18 @@
                             <div><dt>Catalog fit</dt><dd>@candidate.Probe.CatalogLikelihoodScore.ToString("0.#")</dd></div>
                             <div><dt>Duplicate risk</dt><dd>@candidate.DuplicateRiskScore.ToString("0.#")</dd></div>
                         </dl>
+
+                        <div class="subtle-copy mt-3">Automation assessment</div>
+                        <ul class="small mb-0">
+                            @foreach (var reason in candidate.AutomationAssessment.SupportingReasons)
+                            {
+                                <li>@reason</li>
+                            }
+                            @foreach (var reason in candidate.AutomationAssessment.BlockingReasons)
+                            {
+                                <li>@reason</li>
+                            }
+                        </ul>
 
                         @if (candidate.Probe.RepresentativeCategoryPageReachable || candidate.Probe.RepresentativeProductPageReachable || candidate.Probe.StructuredProductEvidenceDetected || candidate.Probe.TechnicalAttributeEvidenceDetected)
                         {

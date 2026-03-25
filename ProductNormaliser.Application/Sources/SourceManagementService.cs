@@ -38,6 +38,7 @@ public sealed class SourceManagementService(
         var supportedCategoryKeys = await ValidateCategoryKeysAsync(registration.SupportedCategoryKeys, cancellationToken);
         var allowedMarkets = NormalizeAllowedMarkets(registration.AllowedMarkets);
         var preferredLocale = NormalizePreferredLocale(registration.PreferredLocale);
+        var automationPolicy = NormalizeAutomationPolicy(registration.AutomationPolicy);
         var source = new CrawlSource
         {
             Id = sourceId,
@@ -48,6 +49,7 @@ public sealed class SourceManagementService(
             IsEnabled = registration.IsEnabled,
             AllowedMarkets = allowedMarkets,
             PreferredLocale = preferredLocale,
+            AutomationPolicy = automationPolicy,
             SupportedCategoryKeys = supportedCategoryKeys,
             DiscoveryProfile = await NormaliseDiscoveryProfileAsync(registration.DiscoveryProfile, supportedCategoryKeys, baseUrl, host, allowedMarkets, preferredLocale, cancellationToken),
             ThrottlingPolicy = NormaliseThrottlingPolicy(registration.ThrottlingPolicy),
@@ -70,6 +72,7 @@ public sealed class SourceManagementService(
         existing.Description = NormaliseOptionalText(update.Description);
         existing.AllowedMarkets = update.AllowedMarkets is null ? existing.AllowedMarkets : NormalizeAllowedMarkets(update.AllowedMarkets);
         existing.PreferredLocale = string.IsNullOrWhiteSpace(update.PreferredLocale) ? existing.PreferredLocale : NormalizePreferredLocale(update.PreferredLocale);
+        existing.AutomationPolicy = update.AutomationPolicy is null ? existing.AutomationPolicy : NormalizeAutomationPolicy(update.AutomationPolicy);
         existing.DiscoveryProfile = update.DiscoveryProfile is null
             ? existing.DiscoveryProfile
             : await NormaliseDiscoveryProfileAsync(update.DiscoveryProfile, existing.SupportedCategoryKeys, existing.BaseUrl, host, existing.AllowedMarkets, existing.PreferredLocale, cancellationToken);
@@ -347,6 +350,14 @@ public sealed class SourceManagementService(
         }
 
         return locale.Trim();
+    }
+
+    private static SourceAutomationPolicy NormalizeAutomationPolicy(SourceAutomationPolicy? policy)
+    {
+        return new SourceAutomationPolicy
+        {
+            Mode = SourceAutomationModes.Normalize(policy?.Mode)
+        };
     }
 
     private static List<string> BuildDefaultEntryPages(string categoryKey)

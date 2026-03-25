@@ -9,5 +9,6 @@ public sealed class CrawlSourceUpdate
     public string? Description { get; init; }
     public IReadOnlyCollection<string>? AllowedMarkets { get; init; }
     public string? PreferredLocale { get; init; }
+    public SourceAutomationPolicy? AutomationPolicy { get; init; }
     public SourceDiscoveryProfile? DiscoveryProfile { get; init; }
 }

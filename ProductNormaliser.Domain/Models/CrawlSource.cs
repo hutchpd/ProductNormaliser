@@ -10,6 +10,7 @@ public sealed class CrawlSource
     public bool IsEnabled { get; set; }
     public List<string> AllowedMarkets { get; set; } = ["UK"];
     public string PreferredLocale { get; set; } = "en-GB";
+    public SourceAutomationPolicy AutomationPolicy { get; set; } = new();
     public List<string> SupportedCategoryKeys { get; set; } = [];
     public SourceDiscoveryProfile DiscoveryProfile { get; set; } = new();
     public SourceThrottlingPolicy ThrottlingPolicy { get; set; } = new();

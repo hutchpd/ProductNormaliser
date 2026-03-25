@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using ProductNormaliser.AdminApi.Contracts;
 using ProductNormaliser.AdminApi.Services;
 using ProductNormaliser.Application.Sources;
@@ -11,7 +12,8 @@ namespace ProductNormaliser.AdminApi.Controllers;
 [Route("api/sources")]
 public sealed class SourcesController(
     ISourceManagementService sourceManagementService,
-    ISourceOperationalInsightsProvider sourceOperationalInsightsProvider) : ControllerBase
+    ISourceOperationalInsightsProvider sourceOperationalInsightsProvider,
+    IOptions<SourceOnboardingAutomationOptions> onboardingAutomationOptions) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(SourceDto[]), StatusCodes.Status200OK)]
@@ -37,6 +39,26 @@ public sealed class SourcesController(
         return Ok(Map(source, insights));
     }
 
+    [HttpGet("automation-settings")]
+    [ProducesResponseType(typeof(SourceOnboardingAutomationSettingsDto), StatusCodes.Status200OK)]
+    public IActionResult GetAutomationSettings()
+    {
+        var settings = onboardingAutomationOptions.Value;
+        return Ok(new SourceOnboardingAutomationSettingsDto
+        {
+            DefaultMode = settings.DefaultMode,
+            MaxAutoAcceptedCandidatesPerRun = settings.MaxAutoAcceptedCandidatesPerRun,
+            SuggestMinConfidenceScore = settings.SuggestMinConfidenceScore,
+            AutoAcceptMinConfidenceScore = settings.AutoAcceptMinConfidenceScore,
+            MinCrawlabilityScore = settings.MinCrawlabilityScore,
+            MinCategoryRelevanceScore = settings.MinCategoryRelevanceScore,
+            MinExtractabilityScore = settings.MinExtractabilityScore,
+            MinCatalogLikelihoodScore = settings.MinCatalogLikelihoodScore,
+            MaxDuplicateRiskScore = settings.MaxDuplicateRiskScore,
+            MinYieldConfidenceScore = settings.MinYieldConfidenceScore
+        });
+    }
+
     [HttpPost]
     [Consumes("application/json")]
     [ProducesResponseType(typeof(SourceDto), StatusCodes.Status201Created)]
@@ -54,6 +76,7 @@ public sealed class SourcesController(
                 IsEnabled = request.IsEnabled,
                 AllowedMarkets = request.AllowedMarkets,
                 PreferredLocale = request.PreferredLocale,
+                AutomationPolicy = request.AutomationPolicy is null ? null : new SourceAutomationPolicy { Mode = request.AutomationPolicy.Mode },
                 SupportedCategoryKeys = request.SupportedCategoryKeys,
                 DiscoveryProfile = request.DiscoveryProfile is null ? null : Map(request.DiscoveryProfile),
                 ThrottlingPolicy = request.ThrottlingPolicy is null ? null : Map(request.ThrottlingPolicy)
@@ -84,6 +107,7 @@ public sealed class SourcesController(
                 Description = request.Description,
                 AllowedMarkets = request.AllowedMarkets,
                 PreferredLocale = request.PreferredLocale,
+                AutomationPolicy = request.AutomationPolicy is null ? null : new SourceAutomationPolicy { Mode = request.AutomationPolicy.Mode },
                 DiscoveryProfile = request.DiscoveryProfile is null ? null : Map(request.DiscoveryProfile)
             }, cancellationToken);
 
@@ -202,6 +226,10 @@ public sealed class SourcesController(
             IsEnabled = source.IsEnabled,
             AllowedMarkets = source.AllowedMarkets.ToArray(),
             PreferredLocale = source.PreferredLocale,
+            AutomationPolicy = new SourceAutomationPolicyDto
+            {
+                Mode = source.AutomationPolicy.Mode
+            },
             SupportedCategoryKeys = source.SupportedCategoryKeys.ToArray(),
             DiscoveryProfile = new SourceDiscoveryProfileDto
             {

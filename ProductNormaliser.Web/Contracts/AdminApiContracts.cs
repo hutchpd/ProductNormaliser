@@ -170,6 +170,7 @@ public sealed class SourceDto
     public bool IsEnabled { get; init; }
     public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
     public string PreferredLocale { get; init; } = string.Empty;
+    public SourceAutomationPolicyDto AutomationPolicy { get; init; } = new();
     public IReadOnlyList<string> SupportedCategoryKeys { get; init; } = [];
     public SourceDiscoveryProfileDto DiscoveryProfile { get; init; } = new();
     public SourceThrottlingPolicyDto ThrottlingPolicy { get; init; } = new();
@@ -185,6 +186,11 @@ public sealed class SourceDto
     public bool SitemapReachable { get; init; }
     public DateTime CreatedUtc { get; init; }
     public DateTime UpdatedUtc { get; init; }
+}
+
+public sealed class SourceAutomationPolicyDto
+{
+    public string Mode { get; init; } = string.Empty;
 }
 
 public sealed class SourceReadinessDto
@@ -254,6 +260,7 @@ public sealed class RegisterSourceRequest
     public bool IsEnabled { get; init; } = true;
     public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
     public string? PreferredLocale { get; init; }
+    public SourceAutomationPolicyDto? AutomationPolicy { get; init; }
     public IReadOnlyList<string> SupportedCategoryKeys { get; init; } = [];
     public SourceDiscoveryProfileDto? DiscoveryProfile { get; init; }
     public SourceThrottlingPolicyDto? ThrottlingPolicy { get; init; }
@@ -266,6 +273,7 @@ public sealed class UpdateSourceRequest
     public string? Description { get; init; }
     public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
     public string? PreferredLocale { get; init; }
+    public SourceAutomationPolicyDto? AutomationPolicy { get; init; }
     public SourceDiscoveryProfileDto? DiscoveryProfile { get; init; }
 }
 
@@ -288,6 +296,7 @@ public sealed class DiscoverSourceCandidatesRequest
     public IReadOnlyList<string> CategoryKeys { get; init; } = [];
     public string? Locale { get; init; }
     public string? Market { get; init; }
+    public string? AutomationMode { get; init; }
     public IReadOnlyList<string> BrandHints { get; init; } = [];
     public int MaxCandidates { get; init; } = 10;
 }
@@ -297,6 +306,7 @@ public sealed class SourceCandidateDiscoveryResponseDto
     public IReadOnlyList<string> RequestedCategoryKeys { get; init; } = [];
     public string? Locale { get; init; }
     public string? Market { get; init; }
+    public string AutomationMode { get; init; } = string.Empty;
     public IReadOnlyList<string> BrandHints { get; init; } = [];
     public DateTime GeneratedUtc { get; init; }
     public IReadOnlyList<SourceCandidateDto> Candidates { get; init; } = [];
@@ -311,6 +321,8 @@ public sealed class SourceCandidateDto
     public string CandidateType { get; init; } = string.Empty;
     public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
     public string? PreferredLocale { get; init; }
+    public string MarketEvidence { get; init; } = string.Empty;
+    public string LocaleEvidence { get; init; } = string.Empty;
     public decimal ConfidenceScore { get; init; }
     public decimal CrawlabilityScore { get; init; }
     public decimal ExtractabilityScore { get; init; }
@@ -324,7 +336,42 @@ public sealed class SourceCandidateDto
     public bool AllowedByGovernance { get; init; }
     public string? GovernanceWarning { get; init; }
     public SourceCandidateProbeDto Probe { get; init; } = new();
+    public SourceCandidateAutomationAssessmentDto AutomationAssessment { get; init; } = new();
     public IReadOnlyList<SourceCandidateReasonDto> Reasons { get; init; } = [];
+}
+
+public sealed class SourceCandidateAutomationAssessmentDto
+{
+    public string RequestedMode { get; init; } = string.Empty;
+    public string Decision { get; init; } = string.Empty;
+    public bool MarketMatchApproved { get; init; }
+    public bool MarketEvidenceStrongEnough { get; init; }
+    public bool GovernancePassed { get; init; }
+    public bool DuplicateRiskAccepted { get; init; }
+    public bool RepresentativeValidationPassed { get; init; }
+    public bool ExtractabilityConfidencePassed { get; init; }
+    public bool YieldConfidencePassed { get; init; }
+    public bool EligibleForSuggestion { get; init; }
+    public bool EligibleForAutoAccept { get; init; }
+    public bool EligibleForAutoSeed { get; init; }
+    public string MarketEvidence { get; init; } = string.Empty;
+    public string LocaleEvidence { get; init; } = string.Empty;
+    public IReadOnlyList<string> SupportingReasons { get; init; } = [];
+    public IReadOnlyList<string> BlockingReasons { get; init; } = [];
+}
+
+public sealed class SourceOnboardingAutomationSettingsDto
+{
+    public string DefaultMode { get; init; } = string.Empty;
+    public int MaxAutoAcceptedCandidatesPerRun { get; init; }
+    public decimal SuggestMinConfidenceScore { get; init; }
+    public decimal AutoAcceptMinConfidenceScore { get; init; }
+    public decimal MinCrawlabilityScore { get; init; }
+    public decimal MinCategoryRelevanceScore { get; init; }
+    public decimal MinExtractabilityScore { get; init; }
+    public decimal MinCatalogLikelihoodScore { get; init; }
+    public decimal MaxDuplicateRiskScore { get; init; }
+    public decimal MinYieldConfidenceScore { get; init; }
 }
 
 public sealed class SourceCandidateProbeDto

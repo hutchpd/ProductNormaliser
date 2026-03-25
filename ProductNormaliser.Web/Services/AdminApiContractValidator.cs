@@ -11,6 +11,20 @@ internal static class AdminApiContractValidator
         "do_not_accept"
     };
 
+    private static readonly IReadOnlySet<string> SourceAutomationModes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "operator_assisted",
+        "suggest_accept",
+        "auto_accept_and_seed"
+    };
+
+    private static readonly IReadOnlySet<string> SourceAutomationDecisions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "manual_only",
+        "suggest_accept",
+        "auto_accept_and_seed"
+    };
+
     private static readonly IReadOnlySet<string> ExtractionOutcomes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "products_extracted",
@@ -114,8 +128,15 @@ internal static class AdminApiContractValidator
     public static void ValidateSourceCandidateDiscoveryResponse(SourceCandidateDiscoveryResponseDto payload)
     {
         ValidateStringItems(payload.RequestedCategoryKeys, "sourceCandidateDiscovery.requestedCategoryKeys");
+        ValidateEnumValue(payload.AutomationMode, SourceAutomationModes, "sourceCandidateDiscovery.automationMode", value => value);
         ValidateStringItems(payload.BrandHints, "sourceCandidateDiscovery.brandHints");
         ValidateItems(payload.Candidates, "sourceCandidateDiscovery.candidates", ValidateSourceCandidate);
+    }
+
+    public static void ValidateSourceOnboardingAutomationSettings(SourceOnboardingAutomationSettingsDto payload)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        ValidateEnumValue(payload.DefaultMode, SourceAutomationModes, "sourceOnboardingAutomation.defaultMode", value => value);
     }
 
     public static void ValidateCrawlJobList(CrawlJobListResponseDto payload)
@@ -239,6 +260,7 @@ internal static class AdminApiContractValidator
         ValidateRequiredString(payload.Host, $"{path}.host");
         ValidateStringItems(payload.AllowedMarkets, $"{path}.allowedMarkets");
         ValidateRequiredString(payload.PreferredLocale, $"{path}.preferredLocale");
+        ValidateEnumValue(payload.AutomationPolicy.Mode, SourceAutomationModes, $"{path}.automationPolicy.mode", value => value);
         ValidateSourceDiscoveryProfile(payload.DiscoveryProfile, $"{path}.discoveryProfile");
         ValidateSourceThrottlingPolicy(payload.ThrottlingPolicy, $"{path}.throttlingPolicy");
         ValidateStringItems(payload.SupportedCategoryKeys, $"{path}.supportedCategoryKeys");
@@ -275,13 +297,27 @@ internal static class AdminApiContractValidator
         ValidateRequiredString(payload.Host, $"{path}.host");
         ValidateRequiredString(payload.CandidateType, $"{path}.candidateType");
         ValidateStringItems(payload.AllowedMarkets, $"{path}.allowedMarkets");
+        ValidateRequiredString(payload.MarketEvidence, $"{path}.marketEvidence");
+        ValidateRequiredString(payload.LocaleEvidence, $"{path}.localeEvidence");
         ValidateEnumValue(payload.RecommendationStatus, CandidateRecommendationStatuses, $"{path}.recommendationStatus", value => value);
         ValidateStringItems(payload.MatchedCategoryKeys, $"{path}.matchedCategoryKeys");
         ValidateStringItems(payload.MatchedBrandHints, $"{path}.matchedBrandHints");
         ValidateStringItems(payload.DuplicateSourceIds, $"{path}.duplicateSourceIds");
         ValidateStringItems(payload.DuplicateSourceDisplayNames, $"{path}.duplicateSourceDisplayNames");
         ValidateSourceCandidateProbe(payload.Probe, $"{path}.probe");
+        ValidateSourceCandidateAutomationAssessment(payload.AutomationAssessment, $"{path}.automationAssessment");
         ValidateItems(payload.Reasons, $"{path}.reasons", ValidateSourceCandidateReason);
+    }
+
+    private static void ValidateSourceCandidateAutomationAssessment(SourceCandidateAutomationAssessmentDto payload, string path)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        ValidateEnumValue(payload.RequestedMode, SourceAutomationModes, $"{path}.requestedMode", value => value);
+        ValidateEnumValue(payload.Decision, SourceAutomationDecisions, $"{path}.decision", value => value);
+        ValidateRequiredString(payload.MarketEvidence, $"{path}.marketEvidence");
+        ValidateRequiredString(payload.LocaleEvidence, $"{path}.localeEvidence");
+        ValidateStringItems(payload.SupportingReasons, $"{path}.supportingReasons");
+        ValidateStringItems(payload.BlockingReasons, $"{path}.blockingReasons");
     }
 
     private static void ValidateSourceCandidateProbe(SourceCandidateProbeDto payload, string path)

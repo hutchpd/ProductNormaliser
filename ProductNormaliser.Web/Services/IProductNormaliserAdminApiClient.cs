@@ -30,6 +30,8 @@ public interface IProductNormaliserAdminApiClient
 
     Task<IReadOnlyList<SourceDto>> GetSourcesAsync(CancellationToken cancellationToken = default);
 
+    Task<SourceOnboardingAutomationSettingsDto> GetSourceOnboardingAutomationSettingsAsync(CancellationToken cancellationToken = default);
+
     Task<SourceDto?> GetSourceAsync(string sourceId, CancellationToken cancellationToken = default);
 
     Task<SourceDto> RegisterSourceAsync(RegisterSourceRequest request, CancellationToken cancellationToken = default);

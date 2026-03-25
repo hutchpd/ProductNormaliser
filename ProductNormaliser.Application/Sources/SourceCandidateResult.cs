@@ -13,6 +13,8 @@ public sealed class SourceCandidateResult
     public string CandidateType { get; init; } = string.Empty;
     public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
     public string? PreferredLocale { get; init; }
+    public string MarketEvidence { get; init; } = "missing";
+    public string LocaleEvidence { get; init; } = "missing";
     public decimal ConfidenceScore { get; init; }
     public decimal CrawlabilityScore { get; init; }
     public decimal ExtractabilityScore { get; init; }
@@ -26,5 +28,6 @@ public sealed class SourceCandidateResult
     public bool AllowedByGovernance { get; init; }
     public string? GovernanceWarning { get; init; }
     public SourceCandidateProbeResult Probe { get; init; } = new();
+    public SourceCandidateAutomationAssessment AutomationAssessment { get; init; } = new();
     public IReadOnlyList<SourceCandidateReason> Reasons { get; init; } = [];
 }

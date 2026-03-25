@@ -19,6 +19,19 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public CategoryDetailDto? CategoryDetail { get; set; }
     public IReadOnlyList<SourceDto> Sources { get; set; } = [];
     public SourceDto? Source { get; set; }
+    public SourceOnboardingAutomationSettingsDto AutomationSettings { get; set; } = new()
+    {
+        DefaultMode = "operator_assisted",
+        MaxAutoAcceptedCandidatesPerRun = 1,
+        SuggestMinConfidenceScore = 78m,
+        AutoAcceptMinConfidenceScore = 90m,
+        MinCrawlabilityScore = 60m,
+        MinCategoryRelevanceScore = 40m,
+        MinExtractabilityScore = 65m,
+        MinCatalogLikelihoodScore = 55m,
+        MaxDuplicateRiskScore = 15m,
+        MinYieldConfidenceScore = 70m
+    };
     public SourceCandidateDiscoveryResponseDto SourceCandidateDiscoveryResponse { get; set; } = new();
     public RegisterSourceRequest? LastRegisteredSourceRequest { get; private set; }
     public DiscoverSourceCandidatesRequest? LastSourceCandidateDiscoveryRequest { get; private set; }
@@ -212,6 +225,8 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
 
     public Task<IReadOnlyList<SourceDto>> GetSourcesAsync(CancellationToken cancellationToken = default)
         => SourcesException is null ? Task.FromResult(Sources) : Task.FromException<IReadOnlyList<SourceDto>>(SourcesException);
+    public Task<SourceOnboardingAutomationSettingsDto> GetSourceOnboardingAutomationSettingsAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(AutomationSettings);
     public Task<SourceDto?> GetSourceAsync(string sourceId, CancellationToken cancellationToken = default)
         => Task.FromResult(Source ?? Sources.FirstOrDefault(item => string.Equals(item.SourceId, sourceId, StringComparison.OrdinalIgnoreCase)));
     public Task<SourceDto> RegisterSourceAsync(RegisterSourceRequest request, CancellationToken cancellationToken = default)
@@ -233,6 +248,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             IsEnabled = request.IsEnabled,
             AllowedMarkets = request.AllowedMarkets.ToArray(),
             PreferredLocale = request.PreferredLocale ?? "en-GB",
+            AutomationPolicy = request.AutomationPolicy ?? new SourceAutomationPolicyDto { Mode = "operator_assisted" },
             SupportedCategoryKeys = request.SupportedCategoryKeys.ToArray(),
             DiscoveryProfile = request.DiscoveryProfile ?? new SourceDiscoveryProfileDto
             {
@@ -272,7 +288,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         LastUpdatedSourceId = sourceId;
         LastUpdatedSourceRequest = request;
         var source = RequireSource(sourceId);
-        var updated = Clone(source, request.DisplayName, request.BaseUrl, new Uri(request.BaseUrl).Host, request.Description, source.IsEnabled, request.AllowedMarkets.Count == 0 ? source.AllowedMarkets : request.AllowedMarkets, request.PreferredLocale ?? source.PreferredLocale, source.SupportedCategoryKeys, request.DiscoveryProfile ?? source.DiscoveryProfile, source.ThrottlingPolicy, DateTime.UtcNow);
+        var updated = Clone(source, request.DisplayName, request.BaseUrl, new Uri(request.BaseUrl).Host, request.Description, source.IsEnabled, request.AllowedMarkets.Count == 0 ? source.AllowedMarkets : request.AllowedMarkets, request.PreferredLocale ?? source.PreferredLocale, request.AutomationPolicy ?? source.AutomationPolicy, source.SupportedCategoryKeys, request.DiscoveryProfile ?? source.DiscoveryProfile, source.ThrottlingPolicy, DateTime.UtcNow);
         UpsertSource(updated);
         return Task.FromResult(updated);
     }
@@ -281,7 +297,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     {
         LastEnabledSourceId = sourceId;
         var source = RequireSource(sourceId);
-        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, true, source.AllowedMarkets, source.PreferredLocale, source.SupportedCategoryKeys, source.DiscoveryProfile, source.ThrottlingPolicy, DateTime.UtcNow);
+        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, true, source.AllowedMarkets, source.PreferredLocale, source.AutomationPolicy, source.SupportedCategoryKeys, source.DiscoveryProfile, source.ThrottlingPolicy, DateTime.UtcNow);
         UpsertSource(updated);
         return Task.FromResult(updated);
     }
@@ -290,7 +306,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     {
         LastDisabledSourceId = sourceId;
         var source = RequireSource(sourceId);
-        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, false, source.AllowedMarkets, source.PreferredLocale, source.SupportedCategoryKeys, source.DiscoveryProfile, source.ThrottlingPolicy, DateTime.UtcNow);
+        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, false, source.AllowedMarkets, source.PreferredLocale, source.AutomationPolicy, source.SupportedCategoryKeys, source.DiscoveryProfile, source.ThrottlingPolicy, DateTime.UtcNow);
         UpsertSource(updated);
         return Task.FromResult(updated);
     }
@@ -305,7 +321,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, source.IsEnabled, source.AllowedMarkets, source.PreferredLocale, categoryKeys, source.DiscoveryProfile, source.ThrottlingPolicy, DateTime.UtcNow);
+        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, source.IsEnabled, source.AllowedMarkets, source.PreferredLocale, source.AutomationPolicy, categoryKeys, source.DiscoveryProfile, source.ThrottlingPolicy, DateTime.UtcNow);
         UpsertSource(updated);
         return Task.FromResult(updated);
     }
@@ -323,7 +339,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             RequestsPerMinute = request.RequestsPerMinute,
             RespectRobotsTxt = request.RespectRobotsTxt
         };
-        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, source.IsEnabled, source.AllowedMarkets, source.PreferredLocale, source.SupportedCategoryKeys, source.DiscoveryProfile, throttling, DateTime.UtcNow);
+        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, source.IsEnabled, source.AllowedMarkets, source.PreferredLocale, source.AutomationPolicy, source.SupportedCategoryKeys, source.DiscoveryProfile, throttling, DateTime.UtcNow);
         UpsertSource(updated);
         return Task.FromResult(updated);
     }
@@ -489,6 +505,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         bool isEnabled,
         IReadOnlyList<string> allowedMarkets,
         string preferredLocale,
+        SourceAutomationPolicyDto automationPolicy,
         IReadOnlyList<string> supportedCategoryKeys,
         SourceDiscoveryProfileDto discoveryProfile,
         SourceThrottlingPolicyDto throttlingPolicy,
@@ -504,6 +521,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             IsEnabled = isEnabled,
             AllowedMarkets = allowedMarkets.ToArray(),
             PreferredLocale = preferredLocale,
+            AutomationPolicy = automationPolicy,
             SupportedCategoryKeys = supportedCategoryKeys.ToArray(),
             DiscoveryProfile = new SourceDiscoveryProfileDto
             {

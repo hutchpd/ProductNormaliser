@@ -88,7 +88,11 @@ public sealed class DetailsModel(
                 BaseUrl = Source.BaseUrl,
                 Description = Source.Description,
                 AllowedMarkets = Source.AllowedMarkets,
-                PreferredLocale = Source.PreferredLocale
+                PreferredLocale = Source.PreferredLocale,
+                AutomationPolicy = new SourceAutomationPolicyDto
+                {
+                    Mode = NormalizeAutomationMode(Source.AutomationMode)
+                }
             }, cancellationToken);
 
             StatusMessage = $"Updated source '{sourceId}'.";
@@ -322,7 +326,8 @@ public sealed class DetailsModel(
                     BaseUrl = CurrentSource.BaseUrl,
                     Description = CurrentSource.Description,
                     AllowedMarkets = CurrentSource.AllowedMarkets.ToList(),
-                    PreferredLocale = CurrentSource.PreferredLocale
+                    PreferredLocale = CurrentSource.PreferredLocale,
+                    AutomationMode = NormalizeAutomationMode(CurrentSource.AutomationPolicy.Mode)
                 };
             }
 
@@ -486,6 +491,16 @@ public sealed class DetailsModel(
                 .Select(entry => $"{entry.Key}={string.Join(", ", entry.Value)}"));
     }
 
+    private static string NormalizeAutomationMode(string? value)
+    {
+        return value?.Trim().ToLowerInvariant() switch
+        {
+            "suggest_accept" => "suggest_accept",
+            "auto_accept_and_seed" => "auto_accept_and_seed",
+            _ => "operator_assisted"
+        };
+    }
+
     public sealed class EditSourceInput
     {
         [Required]
@@ -502,6 +517,9 @@ public sealed class DetailsModel(
 
         [Display(Name = "Preferred locale")]
         public string PreferredLocale { get; set; } = "en-GB";
+
+        [Display(Name = "Automation mode")]
+        public string AutomationMode { get; set; } = "operator_assisted";
     }
 
     public sealed class CategoryAssignmentInput

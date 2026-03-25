@@ -29,6 +29,7 @@ builder.Services.AddAuthorization(options =>
 });
 builder.Services.Configure<ManagementApiSecurityOptions>(builder.Configuration.GetSection(ManagementApiSecurityOptions.SectionName));
 builder.Services.Configure<SourceCandidateDiscoveryOptions>(builder.Configuration.GetSection(SourceCandidateDiscoveryOptions.SectionName));
+builder.Services.Configure<SourceOnboardingAutomationOptions>(builder.Configuration.GetSection(SourceOnboardingAutomationOptions.SectionName));
 builder.Services.AddOpenApi(options =>
 {
     options.AddOperationTransformer(SourceEndpointOpenApiTransformer.ApplyAsync);

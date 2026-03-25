@@ -43,6 +43,8 @@ public sealed class SearchApiSourceCandidateSearchProvider(HttpClient httpClient
                         PreferredLocale = string.Equals(existing.PreferredLocale, request.Locale, StringComparison.OrdinalIgnoreCase)
                             ? existing.PreferredLocale
                             : candidate.PreferredLocale,
+                        MarketEvidence = MergeEvidence(existing.MarketEvidence, candidate.MarketEvidence),
+                        LocaleEvidence = MergeEvidence(existing.LocaleEvidence, candidate.LocaleEvidence),
                         MatchedCategoryKeys = existing.MatchedCategoryKeys
                             .Concat(candidate.MatchedCategoryKeys)
                             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -164,6 +166,9 @@ public sealed class SearchApiSourceCandidateSearchProvider(HttpClient httpClient
             ? "manufacturer"
             : "retailer";
 
+        var allowedMarkets = InferAllowedMarkets(uri, request, out var marketEvidence);
+        var preferredLocale = InferPreferredLocale(uri, request, out var localeEvidence);
+
         return new SourceCandidateSearchResult
         {
             CandidateKey = host.Replace('.', '_'),
@@ -171,8 +176,10 @@ public sealed class SearchApiSourceCandidateSearchProvider(HttpClient httpClient
             BaseUrl = uri.GetLeftPart(UriPartial.Authority).TrimEnd('/') + "/",
             Host = host,
             CandidateType = candidateType,
-            AllowedMarkets = InferAllowedMarkets(uri, request),
-            PreferredLocale = InferPreferredLocale(uri, request),
+            AllowedMarkets = allowedMarkets,
+            PreferredLocale = preferredLocale,
+            MarketEvidence = marketEvidence,
+            LocaleEvidence = localeEvidence,
             MatchedCategoryKeys = matchedCategoryKeys.Length > 0 ? matchedCategoryKeys : request.CategoryKeys.ToArray(),
             MatchedBrandHints = matchedBrandHints,
             SearchReasons = [$"Search query '{query}' matched '{title}'."]
@@ -187,9 +194,10 @@ public sealed class SearchApiSourceCandidateSearchProvider(HttpClient httpClient
         return $"{candidate.Host}::{marketKey}";
     }
 
-    private static IReadOnlyList<string> InferAllowedMarkets(Uri uri, DiscoverSourceCandidatesRequest request)
+    private static IReadOnlyList<string> InferAllowedMarkets(Uri uri, DiscoverSourceCandidatesRequest request, out string evidence)
     {
         var markets = new List<string>();
+        var explicitSignals = new List<string>();
         if (!string.IsNullOrWhiteSpace(request.Market))
         {
             markets.Add(request.Market.Trim().ToUpperInvariant());
@@ -199,26 +207,67 @@ public sealed class SearchApiSourceCandidateSearchProvider(HttpClient httpClient
         if (host.EndsWith(".co.uk", StringComparison.OrdinalIgnoreCase) || host.EndsWith(".uk", StringComparison.OrdinalIgnoreCase))
         {
             markets.Add("UK");
+            explicitSignals.Add("UK");
         }
 
-        if (uri.AbsolutePath.Contains("/uk", StringComparison.OrdinalIgnoreCase))
+        if (uri.AbsolutePath.Contains("/uk", StringComparison.OrdinalIgnoreCase)
+            || uri.AbsolutePath.Contains("/en-gb", StringComparison.OrdinalIgnoreCase))
         {
             markets.Add("UK");
+            explicitSignals.Add("UK");
         }
 
-        return markets.Count == 0
-            ? ["UK"]
-            : markets.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
+        var normalized = markets
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        evidence = normalized.Length switch
+        {
+            0 => "missing",
+            _ when explicitSignals.Count > 0 && normalized.Length == 1 => "explicit",
+            _ when explicitSignals.Count > 0 && normalized.Length > 1 => "ambiguous",
+            _ => "request_hint"
+        };
+
+        return normalized;
     }
 
-    private static string InferPreferredLocale(Uri uri, DiscoverSourceCandidatesRequest request)
+    private static string? InferPreferredLocale(Uri uri, DiscoverSourceCandidatesRequest request, out string evidence)
     {
+        if (uri.AbsolutePath.Contains("/en-gb", StringComparison.OrdinalIgnoreCase)
+            || uri.AbsolutePath.Contains("/uk", StringComparison.OrdinalIgnoreCase)
+            || uri.Host.EndsWith(".co.uk", StringComparison.OrdinalIgnoreCase)
+            || uri.Host.EndsWith(".uk", StringComparison.OrdinalIgnoreCase))
+        {
+            evidence = "explicit";
+            return "en-GB";
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Locale))
         {
+            evidence = "request_hint";
             return request.Locale.Trim();
         }
 
-        return uri.AbsolutePath.Contains("/uk", StringComparison.OrdinalIgnoreCase) ? "en-GB" : "en-GB";
+        evidence = "missing";
+        return null;
+    }
+
+    private static string MergeEvidence(string existing, string candidate)
+    {
+        return GetEvidenceStrength(existing) >= GetEvidenceStrength(candidate) ? existing : candidate;
+    }
+
+    private static int GetEvidenceStrength(string? evidence)
+    {
+        return evidence?.Trim().ToLowerInvariant() switch
+        {
+            "explicit" => 3,
+            "request_hint" => 2,
+            "ambiguous" => 1,
+            _ => 0
+        };
     }
 
     private static bool IsSupportedCandidateUri(Uri uri)

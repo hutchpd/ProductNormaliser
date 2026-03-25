@@ -9,6 +9,8 @@ public sealed class SourceCandidateDto
     public string CandidateType { get; init; } = default!;
     public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
     public string? PreferredLocale { get; init; }
+    public string MarketEvidence { get; init; } = string.Empty;
+    public string LocaleEvidence { get; init; } = string.Empty;
     public decimal ConfidenceScore { get; init; }
     public decimal CrawlabilityScore { get; init; }
     public decimal ExtractabilityScore { get; init; }
@@ -22,5 +24,6 @@ public sealed class SourceCandidateDto
     public bool AllowedByGovernance { get; init; }
     public string? GovernanceWarning { get; init; }
     public SourceCandidateProbeDto Probe { get; init; } = new();
+    public SourceCandidateAutomationAssessmentDto AutomationAssessment { get; init; } = new();
     public IReadOnlyList<SourceCandidateReasonDto> Reasons { get; init; } = [];
 }

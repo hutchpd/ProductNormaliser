@@ -9,6 +9,8 @@ public sealed class SourceCandidateSearchResult
     public string CandidateType { get; init; } = string.Empty;
     public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
     public string? PreferredLocale { get; init; }
+    public string MarketEvidence { get; init; } = "missing";
+    public string LocaleEvidence { get; init; } = "missing";
     public IReadOnlyList<string> MatchedCategoryKeys { get; init; } = [];
     public IReadOnlyList<string> MatchedBrandHints { get; init; } = [];
     public IReadOnlyList<string> SearchReasons { get; init; } = [];

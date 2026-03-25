@@ -124,6 +124,14 @@
                             <label asp-for="Source.PreferredLocale" class="form-label"></label>
                             <input asp-for="Source.PreferredLocale" class="form-control" />
                         </div>
+                        <div>
+                            <label asp-for="Source.AutomationMode" class="form-label"></label>
+                            <select asp-for="Source.AutomationMode" class="form-control">
+                                <option value="operator_assisted">Operator-assisted</option>
+                                <option value="suggest_accept">Suggest accept</option>
+                                <option value="auto_accept_and_seed">Auto-accept and seed</option>
+                            </select>
+                        </div>
                         <div class="wide">
                             <label asp-for="Source.Description" class="form-label"></label>
                             <textarea asp-for="Source.Description" rows="3" class="form-control"></textarea>
@@ -195,6 +203,10 @@
                     <div>
                         <dt>Preferred locale</dt>
                         <dd>@Model.CurrentSource.PreferredLocale</dd>
+                    </div>
+                    <div>
+                        <dt>Automation mode</dt>
+                        <dd>@Model.CurrentSource.AutomationPolicy.Mode.Replace('_', ' ')</dd>
                     </div>
                     <div>
                         <dt>Last health snapshot</dt>

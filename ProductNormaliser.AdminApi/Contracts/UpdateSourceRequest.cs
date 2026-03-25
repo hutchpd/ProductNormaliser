@@ -16,5 +16,7 @@ public sealed class UpdateSourceRequest
 
     public string? PreferredLocale { get; init; }
 
+    public SourceAutomationPolicyDto? AutomationPolicy { get; init; }
+
     public SourceDiscoveryProfileDto? DiscoveryProfile { get; init; }
 }

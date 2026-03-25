@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using ProductNormaliser.AdminApi.Contracts;
 using ProductNormaliser.AdminApi.Controllers;
 using ProductNormaliser.AdminApi.Services;
@@ -12,7 +13,7 @@ public sealed class SourcesControllerTests
     [Test]
     public async Task GetSources_ReturnsMappedDtos()
     {
-        var controller = new SourcesController(new FakeSourceManagementService(CreateSource("alpha")), new FakeSourceOperationalInsightsProvider());
+        var controller = CreateController(new FakeSourceManagementService(CreateSource("alpha")));
 
         var result = await controller.GetSources();
 
@@ -26,6 +27,7 @@ public sealed class SourcesControllerTests
             Assert.That(payload[0].SourceId, Is.EqualTo("alpha"));
             Assert.That(payload[0].AllowedMarkets, Is.EqualTo(new[] { "UK" }));
             Assert.That(payload[0].PreferredLocale, Is.EqualTo("en-GB"));
+            Assert.That(payload[0].AutomationPolicy.Mode, Is.EqualTo("operator_assisted"));
             Assert.That(payload[0].DiscoveryProfile.CategoryEntryPages["tv"], Is.EqualTo(new[] { "https://alpha.example/tv" }));
             Assert.That(payload[0].ThrottlingPolicy.MaxConcurrentRequests, Is.EqualTo(1));
             Assert.That(payload[0].Readiness.Status, Is.EqualTo("Ready"));
@@ -36,7 +38,7 @@ public sealed class SourcesControllerTests
     [Test]
     public async Task GetSource_ReturnsNotFoundForUnknownSource()
     {
-        var controller = new SourcesController(new FakeSourceManagementService(), new FakeSourceOperationalInsightsProvider());
+        var controller = CreateController(new FakeSourceManagementService());
 
         var result = await controller.GetSource("missing");
 
@@ -47,7 +49,7 @@ public sealed class SourcesControllerTests
     public async Task RegisterSource_ReturnsCreatedResult()
     {
         var service = new FakeSourceManagementService();
-        var controller = new SourcesController(service, new FakeSourceOperationalInsightsProvider());
+        var controller = CreateController(service);
 
         var result = await controller.RegisterSource(new RegisterSourceRequest
         {
@@ -56,6 +58,7 @@ public sealed class SourcesControllerTests
             BaseUrl = "https://alpha.example",
             AllowedMarkets = ["UK", "IE"],
             PreferredLocale = "en-GB",
+            AutomationPolicy = new SourceAutomationPolicyDto { Mode = "suggest_accept" },
             SupportedCategoryKeys = ["tv"],
             DiscoveryProfile = new SourceDiscoveryProfileDto
             {
@@ -82,8 +85,34 @@ public sealed class SourcesControllerTests
             Assert.That(payload!.SourceId, Is.EqualTo("alpha"));
             Assert.That(payload.AllowedMarkets, Is.EqualTo(new[] { "UK", "IE" }));
             Assert.That(payload.PreferredLocale, Is.EqualTo("en-GB"));
+            Assert.That(payload.AutomationPolicy.Mode, Is.EqualTo("suggest_accept"));
             Assert.That(payload.DiscoveryProfile.SitemapHints, Is.EqualTo(new[] { "/sitemap-products.xml" }));
             Assert.That(payload.DiscoveryProfile.MaxUrlsPerRun, Is.EqualTo(250));
+        });
+    }
+
+    [Test]
+    public void GetAutomationSettings_ReturnsConfiguredThresholds()
+    {
+        var controller = CreateController(new FakeSourceManagementService(), new SourceOnboardingAutomationOptions
+        {
+            DefaultMode = "operator_assisted",
+            MaxAutoAcceptedCandidatesPerRun = 1,
+            SuggestMinConfidenceScore = 78m,
+            AutoAcceptMinConfidenceScore = 90m,
+            MinYieldConfidenceScore = 70m
+        });
+
+        var result = controller.GetAutomationSettings() as OkObjectResult;
+
+        Assert.That(result, Is.Not.Null);
+        var payload = result!.Value as SourceOnboardingAutomationSettingsDto;
+        Assert.That(payload, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(payload!.DefaultMode, Is.EqualTo("operator_assisted"));
+            Assert.That(payload.MaxAutoAcceptedCandidatesPerRun, Is.EqualTo(1));
+            Assert.That(payload.AutoAcceptMinConfidenceScore, Is.EqualTo(90m));
         });
     }
 
@@ -92,7 +121,8 @@ public sealed class SourcesControllerTests
     {
         var controller = new SourcesController(
             new FakeSourceManagementService(registerException: new ArgumentException("Source 'alpha' already exists.", "registration")),
-            new FakeSourceOperationalInsightsProvider());
+            new FakeSourceOperationalInsightsProvider(),
+            Options.Create(new SourceOnboardingAutomationOptions()));
 
         var result = await controller.RegisterSource(new RegisterSourceRequest
         {
@@ -111,7 +141,7 @@ public sealed class SourcesControllerTests
     [Test]
     public async Task AssignCategories_ReturnsValidationProblemForUnknownCategory()
     {
-        var controller = new SourcesController(new FakeSourceManagementService(assignCategoriesException: new ArgumentException("Unknown category keys: smartwatch.", "categoryKeys")), new FakeSourceOperationalInsightsProvider());
+        var controller = CreateController(new FakeSourceManagementService(assignCategoriesException: new ArgumentException("Unknown category keys: smartwatch.", "categoryKeys")));
 
         var result = await controller.AssignCategories("alpha", new AssignSourceCategoriesRequest
         {
@@ -126,7 +156,7 @@ public sealed class SourcesControllerTests
     [Test]
     public async Task UpdateThrottling_ReturnsNotFoundForUnknownSource()
     {
-        var controller = new SourcesController(new FakeSourceManagementService(throttlingException: new KeyNotFoundException("missing")), new FakeSourceOperationalInsightsProvider());
+        var controller = CreateController(new FakeSourceManagementService(throttlingException: new KeyNotFoundException("missing")));
 
         var result = await controller.UpdateThrottling("missing", new UpdateSourceThrottlingRequest
         {
@@ -143,7 +173,7 @@ public sealed class SourcesControllerTests
     [Test]
     public async Task EnableAndDisable_ReturnUpdatedSource()
     {
-        var controller = new SourcesController(new FakeSourceManagementService(CreateSource("alpha", isEnabled: false)), new FakeSourceOperationalInsightsProvider());
+        var controller = CreateController(new FakeSourceManagementService(CreateSource("alpha", isEnabled: false)));
 
         var enabled = await controller.EnableSource("alpha") as OkObjectResult;
         var disabled = await controller.DisableSource("alpha") as OkObjectResult;
@@ -166,6 +196,7 @@ public sealed class SourcesControllerTests
             IsEnabled = isEnabled,
             AllowedMarkets = ["UK"],
             PreferredLocale = "en-GB",
+            AutomationPolicy = new SourceAutomationPolicy { Mode = "operator_assisted" },
             SupportedCategoryKeys = ["tv"],
             DiscoveryProfile = new SourceDiscoveryProfile
             {
@@ -194,6 +225,14 @@ public sealed class SourcesControllerTests
             CreatedUtc = DateTime.UtcNow,
             UpdatedUtc = DateTime.UtcNow
         };
+    }
+
+    private static SourcesController CreateController(FakeSourceManagementService service, SourceOnboardingAutomationOptions? options = null)
+    {
+        return new SourcesController(
+            service,
+            new FakeSourceOperationalInsightsProvider(),
+            Options.Create(options ?? new SourceOnboardingAutomationOptions()));
     }
 
     private sealed class FakeSourceManagementService(
@@ -227,6 +266,7 @@ public sealed class SourcesControllerTests
             created.Description = registration.Description;
             created.AllowedMarkets = registration.AllowedMarkets.ToList();
             created.PreferredLocale = registration.PreferredLocale ?? created.PreferredLocale;
+            created.AutomationPolicy = registration.AutomationPolicy ?? created.AutomationPolicy;
             created.SupportedCategoryKeys = registration.SupportedCategoryKeys.OrderBy(key => key).ToList();
             if (registration.DiscoveryProfile is not null)
             {
@@ -257,6 +297,10 @@ public sealed class SourcesControllerTests
             if (!string.IsNullOrWhiteSpace(update.PreferredLocale))
             {
                 existing.PreferredLocale = update.PreferredLocale;
+            }
+            if (update.AutomationPolicy is not null)
+            {
+                existing.AutomationPolicy = update.AutomationPolicy;
             }
             if (update.DiscoveryProfile is not null)
             {

@@ -97,6 +97,11 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
         return await GetRequiredAsync<SourceDto[]>("api/sources", AdminApiContractValidator.ValidateSources, cancellationToken);
     }
 
+    public Task<SourceOnboardingAutomationSettingsDto> GetSourceOnboardingAutomationSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        return GetRequiredAsync<SourceOnboardingAutomationSettingsDto>("api/sources/automation-settings", AdminApiContractValidator.ValidateSourceOnboardingAutomationSettings, cancellationToken);
+    }
+
     public Task<SourceDto?> GetSourceAsync(string sourceId, CancellationToken cancellationToken = default)
     {
         return GetOptionalAsync<SourceDto>($"api/sources/{Uri.EscapeDataString(sourceId)}", AdminApiContractValidator.ValidateSource, cancellationToken);

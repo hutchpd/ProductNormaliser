@@ -304,6 +304,124 @@ public sealed class SourceCandidateDiscoveryServiceTests
     }
 
     [Test]
+    public async Task DiscoverAsync_MarksCandidateAsSuggestion_WhenGuardrailsPassButModeIsSuggestionOnly()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "guarded_shop",
+                    DisplayName = "Guarded Shop",
+                    BaseUrl = "https://guarded.example/",
+                    Host = "guarded.example",
+                    CandidateType = "retailer",
+                    AllowedMarkets = ["UK"],
+                    PreferredLocale = "en-GB",
+                    MarketEvidence = "explicit",
+                    LocaleEvidence = "explicit",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new FakeSourceCandidateProbeService(
+                new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["guarded.example"] = new SourceCandidateProbeResult
+                    {
+                        HomePageReachable = true,
+                        RobotsTxtReachable = true,
+                        SitemapDetected = true,
+                        CrawlabilityScore = 90m,
+                        CategoryRelevanceScore = 70m,
+                        ExtractabilityScore = 92m,
+                        CatalogLikelihoodScore = 80m,
+                        RepresentativeCategoryPageReachable = true,
+                        RepresentativeProductPageReachable = true,
+                        StructuredProductEvidenceDetected = true,
+                        TechnicalAttributeEvidenceDetected = true,
+                        LikelyListingUrlPatterns = ["/tv/"]
+                    }
+                }),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"],
+            Market = "UK",
+            Locale = "en-GB",
+            AutomationMode = "suggest_accept"
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.AutomationMode, Is.EqualTo("suggest_accept"));
+            Assert.That(result.Candidates[0].AutomationAssessment.EligibleForSuggestion, Is.True);
+            Assert.That(result.Candidates[0].AutomationAssessment.EligibleForAutoAccept, Is.False);
+            Assert.That(result.Candidates[0].AutomationAssessment.Decision, Is.EqualTo(SourceCandidateAutomationAssessment.DecisionSuggestAccept));
+        });
+    }
+
+    [Test]
+    public async Task DiscoverAsync_BlocksAutomation_WhenMarketEvidenceIsOnlyRequestHint()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "ambiguous_shop",
+                    DisplayName = "Ambiguous Shop",
+                    BaseUrl = "https://ambiguous.example/",
+                    Host = "ambiguous.example",
+                    CandidateType = "retailer",
+                    AllowedMarkets = ["UK"],
+                    PreferredLocale = "en-GB",
+                    MarketEvidence = "request_hint",
+                    LocaleEvidence = "request_hint",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new FakeSourceCandidateProbeService(
+                new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["ambiguous.example"] = new SourceCandidateProbeResult
+                    {
+                        HomePageReachable = true,
+                        RobotsTxtReachable = true,
+                        SitemapDetected = true,
+                        CrawlabilityScore = 95m,
+                        CategoryRelevanceScore = 80m,
+                        ExtractabilityScore = 95m,
+                        CatalogLikelihoodScore = 85m,
+                        RepresentativeCategoryPageReachable = true,
+                        RepresentativeProductPageReachable = true,
+                        StructuredProductEvidenceDetected = true,
+                        TechnicalAttributeEvidenceDetected = true,
+                        LikelyListingUrlPatterns = ["/tv/"]
+                    }
+                }),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"],
+            Market = "UK",
+            Locale = "en-GB",
+            AutomationMode = "auto_accept_and_seed"
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Candidates[0].AutomationAssessment.EligibleForSuggestion, Is.False);
+            Assert.That(result.Candidates[0].AutomationAssessment.EligibleForAutoAccept, Is.False);
+            Assert.That(result.Candidates[0].AutomationAssessment.Decision, Is.EqualTo(SourceCandidateAutomationAssessment.DecisionManualOnly));
+            Assert.That(result.Candidates[0].AutomationAssessment.BlockingReasons.Any(reason => reason.Contains("weakly inferred", StringComparison.OrdinalIgnoreCase)), Is.True);
+        });
+    }
+
+    [Test]
     public async Task DiscoverAsync_CapsConfidenceWhenGovernanceRejectsCandidate()
     {
         var service = CreateService(

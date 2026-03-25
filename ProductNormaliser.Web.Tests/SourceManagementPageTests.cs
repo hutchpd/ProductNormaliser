@@ -99,6 +99,7 @@ public sealed class SourceManagementPageTests
             Assert.That(client.LastRegisteredSourceRequest, Is.Not.Null);
             Assert.That(client.LastRegisteredSourceRequest!.AllowedMarkets, Is.EqualTo(new[] { "UK" }));
             Assert.That(client.LastRegisteredSourceRequest.PreferredLocale, Is.EqualTo("en-GB"));
+            Assert.That(client.LastRegisteredSourceRequest.AutomationPolicy!.Mode, Is.EqualTo("operator_assisted"));
             Assert.That(client.LastRegisteredSourceRequest!.SupportedCategoryKeys, Is.EqualTo(new[] { "tv", "monitor" }));
             Assert.That(result, Is.TypeOf<RedirectToPageResult>());
             Assert.That(((RedirectToPageResult)result).PageName, Is.EqualTo("/Sources/Details"));
@@ -154,6 +155,148 @@ public sealed class SourceManagementPageTests
             Assert.That(client.LastSourceCandidateDiscoveryRequest.Market, Is.EqualTo("UK"));
             Assert.That(model.CandidateDiscoveryResult, Is.Not.Null);
             Assert.That(model.CandidateDiscoveryResult!.Candidates.Select(candidate => candidate.DisplayName), Is.EqualTo(new[] { "Currys" }));
+        });
+    }
+
+    [Test]
+    public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_LeavesSuggestedCandidatesForOperatorConfirmation()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            SourceCandidateDiscoveryResponse = new SourceCandidateDiscoveryResponseDto
+            {
+                RequestedCategoryKeys = ["tv"],
+                Market = "UK",
+                Locale = "en-GB",
+                AutomationMode = "suggest_accept",
+                GeneratedUtc = DateTime.UtcNow,
+                Candidates =
+                [
+                    new SourceCandidateDto
+                    {
+                        CandidateKey = "safe_shop",
+                        DisplayName = "Safe Shop",
+                        BaseUrl = "https://safe.example/",
+                        Host = "safe.example",
+                        CandidateType = "retailer",
+                        AllowedMarkets = ["UK"],
+                        PreferredLocale = "en-GB",
+                        MarketEvidence = "explicit",
+                        LocaleEvidence = "explicit",
+                        ConfidenceScore = 91m,
+                        MatchedCategoryKeys = ["tv"],
+                        AllowedByGovernance = true,
+                        Probe = new SourceCandidateProbeDto(),
+                        AutomationAssessment = new SourceCandidateAutomationAssessmentDto
+                        {
+                            RequestedMode = "suggest_accept",
+                            Decision = "suggest_accept",
+                            EligibleForSuggestion = true,
+                            EligibleForAutoAccept = false,
+                            MarketEvidence = "explicit",
+                            LocaleEvidence = "explicit",
+                            SupportingReasons = ["Market evidence is explicit rather than only request-hinted."]
+                        },
+                        Reasons = []
+                    }
+                ]
+            }
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IndexModel>.Instance)
+        {
+            CandidateDiscovery = new ProductNormaliser.Web.Pages.Sources.IndexModel.DiscoverSourceCandidatesInput
+            {
+                CategoryKeys = ["tv"],
+                Market = "UK",
+                Locale = "en-GB",
+                AutomationMode = "suggest_accept"
+            }
+        };
+
+        var result = await model.OnPostDiscoverCandidatesAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<PageResult>());
+            Assert.That(client.LastRegisteredSourceRequest, Is.Null);
+            Assert.That(model.CandidateDiscoveryResult, Is.Not.Null);
+            Assert.That(model.CandidateDiscoveryResult!.Candidates[0].AutomationAssessment.Decision, Is.EqualTo("suggest_accept"));
+        });
+    }
+
+    [Test]
+    public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_GuardedAutomationAutoAcceptsSeedsAndStillAllowsDisable()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            CreatedJob = new CrawlJobDto { JobId = "job_guarded_1" },
+            SourceCandidateDiscoveryResponse = new SourceCandidateDiscoveryResponseDto
+            {
+                RequestedCategoryKeys = ["tv"],
+                Market = "UK",
+                Locale = "en-GB",
+                AutomationMode = "auto_accept_and_seed",
+                GeneratedUtc = DateTime.UtcNow,
+                Candidates =
+                [
+                    new SourceCandidateDto
+                    {
+                        CandidateKey = "guarded_shop",
+                        DisplayName = "Guarded Shop",
+                        BaseUrl = "https://guarded.example/",
+                        Host = "guarded.example",
+                        CandidateType = "retailer",
+                        AllowedMarkets = ["UK"],
+                        PreferredLocale = "en-GB",
+                        MarketEvidence = "explicit",
+                        LocaleEvidence = "explicit",
+                        ConfidenceScore = 95m,
+                        MatchedCategoryKeys = ["tv"],
+                        AllowedByGovernance = true,
+                        Probe = new SourceCandidateProbeDto(),
+                        AutomationAssessment = new SourceCandidateAutomationAssessmentDto
+                        {
+                            RequestedMode = "auto_accept_and_seed",
+                            Decision = "auto_accept_and_seed",
+                            EligibleForSuggestion = true,
+                            EligibleForAutoAccept = true,
+                            EligibleForAutoSeed = true,
+                            MarketEvidence = "explicit",
+                            LocaleEvidence = "explicit",
+                            SupportingReasons = ["Representative category and product pages were both validated."]
+                        },
+                        Reasons = []
+                    }
+                ]
+            }
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IndexModel>.Instance)
+        {
+            CandidateDiscovery = new ProductNormaliser.Web.Pages.Sources.IndexModel.DiscoverSourceCandidatesInput
+            {
+                CategoryKeys = ["tv"],
+                Market = "UK",
+                Locale = "en-GB",
+                AutomationMode = "auto_accept_and_seed"
+            }
+        };
+
+        var discoverResult = await model.OnPostDiscoverCandidatesAsync(CancellationToken.None);
+        var toggleResult = await model.OnPostToggleAsync("guarded_example", currentlyEnabled: true, category: "tv", search: null, enabled: true, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(discoverResult, Is.TypeOf<PageResult>());
+            Assert.That(client.LastRegisteredSourceRequest, Is.Not.Null);
+            Assert.That(client.LastRegisteredSourceRequest!.AutomationPolicy!.Mode, Is.EqualTo("auto_accept_and_seed"));
+            Assert.That(client.LastCreatedJobRequest, Is.Not.Null);
+            Assert.That(client.LastCreatedJobRequest!.RequestedSources, Is.EqualTo(new[] { "guarded_example" }));
+            Assert.That(client.LastDisabledSourceId, Is.EqualTo("guarded_example"));
+            Assert.That(toggleResult, Is.TypeOf<RedirectToPageResult>());
         });
     }
 
@@ -715,6 +858,10 @@ public sealed class SourceManagementPageTests
             IsEnabled = isEnabled,
             AllowedMarkets = ["UK"],
             PreferredLocale = "en-GB",
+            AutomationPolicy = new SourceAutomationPolicyDto
+            {
+                Mode = "operator_assisted"
+            },
             SupportedCategoryKeys = categoryKeys,
             DiscoveryProfile = new SourceDiscoveryProfileDto
             {

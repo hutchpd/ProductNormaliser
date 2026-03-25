@@ -140,6 +140,7 @@ public sealed class SourceManagementServiceTests
         {
             Assert.That(result.AllowedMarkets, Is.EqualTo(new[] { "UK" }));
             Assert.That(result.PreferredLocale, Is.EqualTo("en-GB"));
+            Assert.That(result.AutomationPolicy.Mode, Is.EqualTo("operator_assisted"));
             Assert.That(result.DiscoveryProfile.SitemapHints, Is.Not.Empty);
             Assert.That(result.DiscoveryProfile.AllowedMarkets, Is.EqualTo(new[] { "UK" }));
             Assert.That(result.DiscoveryProfile.PreferredLocale, Is.EqualTo("en-GB"));
@@ -162,6 +163,10 @@ public sealed class SourceManagementServiceTests
             IsEnabled = true,
             AllowedMarkets = ["UK"],
             PreferredLocale = "en-GB",
+            AutomationPolicy = new SourceAutomationPolicy
+            {
+                Mode = "operator_assisted"
+            },
             SupportedCategoryKeys = ["tv"],
             DiscoveryProfile = new SourceDiscoveryProfile
             {
@@ -180,13 +185,18 @@ public sealed class SourceManagementServiceTests
             BaseUrl = "https://alpha.example/uk/",
             Description = "Updated",
             AllowedMarkets = ["UK", "IE"],
-            PreferredLocale = "en-IE"
+            PreferredLocale = "en-IE",
+            AutomationPolicy = new SourceAutomationPolicy
+            {
+                Mode = "suggest_accept"
+            }
         });
 
         Assert.Multiple(() =>
         {
             Assert.That(result.AllowedMarkets, Is.EqualTo(new[] { "IE", "UK" }));
             Assert.That(result.PreferredLocale, Is.EqualTo("en-IE"));
+            Assert.That(result.AutomationPolicy.Mode, Is.EqualTo("suggest_accept"));
         });
     }
 

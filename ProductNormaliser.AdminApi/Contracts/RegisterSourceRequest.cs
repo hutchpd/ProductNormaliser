@@ -21,6 +21,8 @@ public sealed class RegisterSourceRequest
 
     public string? PreferredLocale { get; init; }
 
+    public SourceAutomationPolicyDto? AutomationPolicy { get; init; }
+
     public IReadOnlyList<string> SupportedCategoryKeys { get; init; } = [];
 
     public SourceDiscoveryProfileDto? DiscoveryProfile { get; init; }

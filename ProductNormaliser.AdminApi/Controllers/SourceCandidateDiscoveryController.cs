@@ -21,6 +21,7 @@ public sealed class SourceCandidateDiscoveryController(ISourceCandidateDiscovery
                 CategoryKeys = request.CategoryKeys,
                 Locale = request.Locale,
                 Market = request.Market,
+                AutomationMode = request.AutomationMode,
                 BrandHints = request.BrandHints,
                 MaxCandidates = request.MaxCandidates
             }, cancellationToken);
@@ -30,6 +31,7 @@ public sealed class SourceCandidateDiscoveryController(ISourceCandidateDiscovery
                 RequestedCategoryKeys = result.RequestedCategoryKeys,
                 Locale = result.Locale,
                 Market = result.Market,
+                AutomationMode = result.AutomationMode,
                 BrandHints = result.BrandHints,
                 GeneratedUtc = result.GeneratedUtc,
                 Candidates = result.Candidates.Select(candidate => new Contracts.SourceCandidateDto
@@ -41,6 +43,8 @@ public sealed class SourceCandidateDiscoveryController(ISourceCandidateDiscovery
                     CandidateType = candidate.CandidateType,
                     AllowedMarkets = candidate.AllowedMarkets,
                     PreferredLocale = candidate.PreferredLocale,
+                    MarketEvidence = candidate.MarketEvidence,
+                    LocaleEvidence = candidate.LocaleEvidence,
                     ConfidenceScore = candidate.ConfidenceScore,
                     CrawlabilityScore = candidate.CrawlabilityScore,
                     ExtractabilityScore = candidate.ExtractabilityScore,
@@ -73,6 +77,25 @@ public sealed class SourceCandidateDiscoveryController(ISourceCandidateDiscovery
                         CategoryPageHints = candidate.Probe.CategoryPageHints,
                         LikelyListingUrlPatterns = candidate.Probe.LikelyListingUrlPatterns,
                         LikelyProductUrlPatterns = candidate.Probe.LikelyProductUrlPatterns
+                    },
+                    AutomationAssessment = new Contracts.SourceCandidateAutomationAssessmentDto
+                    {
+                        RequestedMode = candidate.AutomationAssessment.RequestedMode,
+                        Decision = candidate.AutomationAssessment.Decision,
+                        MarketMatchApproved = candidate.AutomationAssessment.MarketMatchApproved,
+                        MarketEvidenceStrongEnough = candidate.AutomationAssessment.MarketEvidenceStrongEnough,
+                        GovernancePassed = candidate.AutomationAssessment.GovernancePassed,
+                        DuplicateRiskAccepted = candidate.AutomationAssessment.DuplicateRiskAccepted,
+                        RepresentativeValidationPassed = candidate.AutomationAssessment.RepresentativeValidationPassed,
+                        ExtractabilityConfidencePassed = candidate.AutomationAssessment.ExtractabilityConfidencePassed,
+                        YieldConfidencePassed = candidate.AutomationAssessment.YieldConfidencePassed,
+                        EligibleForSuggestion = candidate.AutomationAssessment.EligibleForSuggestion,
+                        EligibleForAutoAccept = candidate.AutomationAssessment.EligibleForAutoAccept,
+                        EligibleForAutoSeed = candidate.AutomationAssessment.EligibleForAutoSeed,
+                        MarketEvidence = candidate.AutomationAssessment.MarketEvidence,
+                        LocaleEvidence = candidate.AutomationAssessment.LocaleEvidence,
+                        SupportingReasons = candidate.AutomationAssessment.SupportingReasons,
+                        BlockingReasons = candidate.AutomationAssessment.BlockingReasons
                     },
                     Reasons = candidate.Reasons.Select(reason => new Contracts.SourceCandidateReasonDto
                     {

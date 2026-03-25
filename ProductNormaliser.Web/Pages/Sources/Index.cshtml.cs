@@ -12,6 +12,10 @@ public sealed class IndexModel(
     IProductNormaliserAdminApiClient adminApiClient,
     ILogger<IndexModel> logger) : PageModel
 {
+    private const string OperatorAssistedMode = "operator_assisted";
+    private const string SuggestAcceptMode = "suggest_accept";
+    private const string AutoAcceptAndSeedMode = "auto_accept_and_seed";
+
     [BindProperty(SupportsGet = true, Name = "category")]
     public string? CategoryKey { get; set; }
 
@@ -38,6 +42,12 @@ public sealed class IndexModel(
     public string? CandidateDiscoveryErrorMessage { get; private set; }
 
     public SourceCandidateDiscoveryResponseDto? CandidateDiscoveryResult { get; private set; }
+
+    public SourceOnboardingAutomationSettingsDto AutomationSettings { get; private set; } = new()
+    {
+        DefaultMode = OperatorAssistedMode,
+        MaxAutoAcceptedCandidatesPerRun = 1
+    };
 
     public IReadOnlyList<CategoryMetadataDto> Categories { get; private set; } = [];
 
@@ -96,6 +106,7 @@ public sealed class IndexModel(
         await LoadAsync(cancellationToken);
 
         await DiscoverCandidatesAsync(addValidationErrorWhenEmpty: true, cancellationToken);
+        await ApplyGuardedAutomationAsync(cancellationToken);
 
         return Page();
     }
@@ -237,15 +248,47 @@ public sealed class IndexModel(
             && string.Equals(candidate.RecommendationStatus, "recommended", StringComparison.OrdinalIgnoreCase);
     }
 
+    public string GetAutomationModeLabel(string? mode)
+    {
+        return NormalizeAutomationMode(mode) switch
+        {
+            SuggestAcceptMode => "Suggest accept",
+            AutoAcceptAndSeedMode => "Auto-accept and seed",
+            _ => "Operator-assisted"
+        };
+    }
+
+    public string GetAutomationDecisionLabel(SourceCandidateDto candidate)
+    {
+        return candidate.AutomationAssessment.Decision switch
+        {
+            "auto_accept_and_seed" => "Auto-ready",
+            "suggest_accept" => "Safe to accept",
+            _ => "Manual only"
+        };
+    }
+
+    public string GetAutomationDecisionTone(SourceCandidateDto candidate)
+    {
+        return candidate.AutomationAssessment.Decision switch
+        {
+            "auto_accept_and_seed" => "completed",
+            "suggest_accept" => "pending",
+            _ => "warning"
+        };
+    }
+
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
         try
         {
             var categoriesTask = adminApiClient.GetCategoriesAsync(cancellationToken);
             var sourcesTask = adminApiClient.GetSourcesAsync(cancellationToken);
-            await Task.WhenAll(categoriesTask, sourcesTask);
+            var automationSettingsTask = adminApiClient.GetSourceOnboardingAutomationSettingsAsync(cancellationToken);
+            await Task.WhenAll(categoriesTask, sourcesTask, automationSettingsTask);
 
             Categories = InteractiveCategoryFilter.Apply(categoriesTask.Result);
+            AutomationSettings = automationSettingsTask.Result;
             var categoryContext = CategoryContextStateFactory.Resolve(
                 Categories,
                 CategoryKey,
@@ -283,10 +326,14 @@ public sealed class IndexModel(
                 Registration.CategoryKeys = [CategoryKey];
             }
 
+            Registration.AutomationMode = NormalizeAutomationMode(string.IsNullOrWhiteSpace(Registration.AutomationMode) ? AutomationSettings.DefaultMode : Registration.AutomationMode);
+
             if (CandidateDiscovery.CategoryKeys.Count == 0 && !string.IsNullOrWhiteSpace(CategoryKey))
             {
                 CandidateDiscovery.CategoryKeys = [CategoryKey];
             }
+
+            CandidateDiscovery.AutomationMode = NormalizeAutomationMode(string.IsNullOrWhiteSpace(CandidateDiscovery.AutomationMode) ? AutomationSettings.DefaultMode : CandidateDiscovery.AutomationMode);
         }
         catch (AdminApiException exception)
         {
@@ -295,6 +342,11 @@ public sealed class IndexModel(
             Categories = [];
             AllSources = [];
             Sources = [];
+            AutomationSettings = new SourceOnboardingAutomationSettingsDto
+            {
+                DefaultMode = OperatorAssistedMode,
+                MaxAutoAcceptedCandidatesPerRun = 1
+            };
         }
     }
 
@@ -354,6 +406,7 @@ public sealed class IndexModel(
                 CategoryKeys = categoryKeys,
                 Locale = NormalizeOptionalText(CandidateDiscovery.Locale),
                 Market = NormalizeOptionalText(CandidateDiscovery.Market),
+                AutomationMode = NormalizeAutomationMode(CandidateDiscovery.AutomationMode),
                 BrandHints = ParseDelimitedValues(CandidateDiscovery.BrandHints),
                 MaxCandidates = NormalizeMaxCandidates(CandidateDiscovery.MaxCandidates)
             }, cancellationToken);
@@ -379,17 +432,7 @@ public sealed class IndexModel(
     {
         try
         {
-            var source = await adminApiClient.RegisterSourceAsync(new RegisterSourceRequest
-            {
-                SourceId = registration.SourceId,
-                DisplayName = registration.DisplayName,
-                BaseUrl = registration.BaseUrl,
-                Description = registration.Description,
-                IsEnabled = registration.IsEnabled,
-                AllowedMarkets = registration.AllowedMarkets,
-                PreferredLocale = NormalizeOptionalText(registration.PreferredLocale),
-                SupportedCategoryKeys = registration.CategoryKeys
-            }, cancellationToken);
+            var source = await adminApiClient.RegisterSourceAsync(BuildRegisterRequest(registration), cancellationToken);
 
             StatusMessage = acceptedFromCandidate
                 ? $"Accepted candidate '{source.DisplayName}' and registered it as a managed source. Startup discovery defaults were applied automatically."
@@ -435,7 +478,175 @@ public sealed class IndexModel(
             IsEnabled = candidate.IsEnabled,
             AllowedMarkets = ResolveCandidateAllowedMarkets(candidate),
             PreferredLocale = NormalizeOptionalText(candidate.PreferredLocale) ?? CandidateDiscovery.Locale ?? "en-GB",
+            AutomationMode = NormalizeAutomationMode(Registration.AutomationMode),
             CategoryKeys = categoryKeys
+        };
+    }
+
+    private async Task ApplyGuardedAutomationAsync(CancellationToken cancellationToken)
+    {
+        if (CandidateDiscoveryResult is null
+            || NormalizeAutomationMode(CandidateDiscovery.AutomationMode) != AutoAcceptAndSeedMode)
+        {
+            return;
+        }
+
+        var maxAutoAccepted = Math.Max(0, AutomationSettings.MaxAutoAcceptedCandidatesPerRun);
+        if (maxAutoAccepted == 0)
+        {
+            return;
+        }
+
+        var candidatesToAccept = CandidateDiscoveryResult.Candidates
+            .Where(candidate => candidate.AutomationAssessment.EligibleForAutoAccept)
+            .Take(maxAutoAccepted)
+            .ToArray();
+
+        if (candidatesToAccept.Length == 0)
+        {
+            StatusMessage = "Guarded automation reviewed the current candidates, but none met the auto-accept and auto-seed guardrails.";
+            return;
+        }
+
+        var acceptedCandidateKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var acceptedSources = new List<string>();
+        var seededJobIds = new List<string>();
+
+        foreach (var candidate in candidatesToAccept)
+        {
+            var registration = BuildRegistrationFromCandidate(candidate, AutoAcceptAndSeedMode);
+
+            try
+            {
+                var source = await adminApiClient.RegisterSourceAsync(BuildRegisterRequest(registration), cancellationToken);
+                acceptedCandidateKeys.Add(candidate.CandidateKey);
+                acceptedSources.Add(source.DisplayName);
+
+                if (candidate.AutomationAssessment.EligibleForAutoSeed && registration.CategoryKeys.Count > 0)
+                {
+                    var job = await adminApiClient.CreateCrawlJobAsync(new CreateCrawlJobRequest
+                    {
+                        RequestType = "category",
+                        RequestedCategories = registration.CategoryKeys,
+                        RequestedSources = [source.SourceId]
+                    }, cancellationToken);
+                    seededJobIds.Add(job.JobId);
+                }
+            }
+            catch (AdminApiValidationException exception)
+            {
+                foreach (var entry in exception.Errors)
+                {
+                    foreach (var message in entry.Value)
+                    {
+                        ModelState.AddModelError(string.Empty, $"Guarded automation skipped '{candidate.DisplayName}': {message}");
+                    }
+                }
+            }
+            catch (AdminApiException exception)
+            {
+                logger.LogWarning(exception, "Guarded automation failed for candidate {CandidateKey}.", candidate.CandidateKey);
+                ModelState.AddModelError(string.Empty, $"Guarded automation skipped '{candidate.DisplayName}': {exception.Message}");
+            }
+        }
+
+        if (acceptedCandidateKeys.Count == 0)
+        {
+            return;
+        }
+
+        CandidateDiscoveryResult = new SourceCandidateDiscoveryResponseDto
+        {
+            RequestedCategoryKeys = CandidateDiscoveryResult.RequestedCategoryKeys,
+            Locale = CandidateDiscoveryResult.Locale,
+            Market = CandidateDiscoveryResult.Market,
+            AutomationMode = CandidateDiscoveryResult.AutomationMode,
+            BrandHints = CandidateDiscoveryResult.BrandHints,
+            GeneratedUtc = CandidateDiscoveryResult.GeneratedUtc,
+            Candidates = CandidateDiscoveryResult.Candidates.Select(candidate => acceptedCandidateKeys.Contains(candidate.CandidateKey)
+                ? new SourceCandidateDto
+                {
+                    CandidateKey = candidate.CandidateKey,
+                    DisplayName = candidate.DisplayName,
+                    BaseUrl = candidate.BaseUrl,
+                    Host = candidate.Host,
+                    CandidateType = candidate.CandidateType,
+                    AllowedMarkets = candidate.AllowedMarkets,
+                    PreferredLocale = candidate.PreferredLocale,
+                    MarketEvidence = candidate.MarketEvidence,
+                    LocaleEvidence = candidate.LocaleEvidence,
+                    ConfidenceScore = candidate.ConfidenceScore,
+                    CrawlabilityScore = candidate.CrawlabilityScore,
+                    ExtractabilityScore = candidate.ExtractabilityScore,
+                    DuplicateRiskScore = candidate.DuplicateRiskScore,
+                    RecommendationStatus = candidate.RecommendationStatus,
+                    MatchedCategoryKeys = candidate.MatchedCategoryKeys,
+                    MatchedBrandHints = candidate.MatchedBrandHints,
+                    AlreadyRegistered = true,
+                    DuplicateSourceIds = candidate.DuplicateSourceIds,
+                    DuplicateSourceDisplayNames = candidate.DuplicateSourceDisplayNames,
+                    AllowedByGovernance = candidate.AllowedByGovernance,
+                    GovernanceWarning = candidate.GovernanceWarning,
+                    Probe = candidate.Probe,
+                    AutomationAssessment = candidate.AutomationAssessment,
+                    Reasons = candidate.Reasons
+                }
+                : candidate).ToArray()
+        };
+
+        await LoadAsync(cancellationToken);
+
+        StatusMessage = seededJobIds.Count == 0
+            ? $"Guarded automation auto-accepted {acceptedSources.Count} source(s): {string.Join(", ", acceptedSources)}."
+            : $"Guarded automation auto-accepted {acceptedSources.Count} source(s) and seeded {seededJobIds.Count} crawl job(s): {string.Join(", ", seededJobIds)}.";
+    }
+
+    private RegisterSourceInput BuildRegistrationFromCandidate(SourceCandidateDto candidate, string automationMode)
+    {
+        var categoryKeys = NormalizeValues(candidate.MatchedCategoryKeys);
+        if (categoryKeys.Count == 0)
+        {
+            categoryKeys = NormalizeValues(CandidateDiscovery.CategoryKeys);
+        }
+
+        return new RegisterSourceInput
+        {
+            SourceId = DeriveSourceId(new UseCandidateInput
+            {
+                CandidateKey = candidate.CandidateKey,
+                DisplayName = candidate.DisplayName,
+                BaseUrl = candidate.BaseUrl
+            }),
+            DisplayName = candidate.DisplayName.Trim(),
+            BaseUrl = NormalizeBaseUrl(candidate.BaseUrl),
+            Description = Registration.Description,
+            IsEnabled = true,
+            AllowedMarkets = ResolveCandidateAllowedMarkets(new UseCandidateInput
+            {
+                AllowedMarkets = candidate.AllowedMarkets.ToList()
+            }),
+            PreferredLocale = NormalizeOptionalText(candidate.PreferredLocale) ?? CandidateDiscovery.Locale ?? "en-GB",
+            AutomationMode = NormalizeAutomationMode(automationMode),
+            CategoryKeys = categoryKeys
+        };
+    }
+
+    private RegisterSourceRequest BuildRegisterRequest(RegisterSourceInput registration)
+    {
+        return new RegisterSourceRequest
+        {
+            SourceId = registration.SourceId,
+            DisplayName = registration.DisplayName,
+            BaseUrl = registration.BaseUrl,
+            Description = registration.Description,
+            IsEnabled = registration.IsEnabled,
+            AllowedMarkets = registration.AllowedMarkets,
+            PreferredLocale = NormalizeOptionalText(registration.PreferredLocale),
+            AutomationPolicy = new SourceAutomationPolicyDto
+            {
+                Mode = NormalizeAutomationMode(registration.AutomationMode)
+            },
+            SupportedCategoryKeys = registration.CategoryKeys
         };
     }
 
@@ -534,6 +745,16 @@ public sealed class IndexModel(
         return Math.Min(25, value);
     }
 
+    private static string NormalizeAutomationMode(string? value)
+    {
+        return value?.Trim().ToLowerInvariant() switch
+        {
+            SuggestAcceptMode => SuggestAcceptMode,
+            AutoAcceptAndSeedMode => AutoAcceptAndSeedMode,
+            _ => OperatorAssistedMode
+        };
+    }
+
     public sealed class RegisterSourceInput
     {
         [Required]
@@ -560,6 +781,9 @@ public sealed class IndexModel(
         [Display(Name = "Preferred locale")]
         public string PreferredLocale { get; set; } = "en-GB";
 
+        [Display(Name = "Automation mode")]
+        public string AutomationMode { get; set; } = OperatorAssistedMode;
+
         public List<string> CategoryKeys { get; set; } = [];
     }
 
@@ -576,6 +800,9 @@ public sealed class IndexModel(
 
         [Display(Name = "Brand hints")]
         public string? BrandHints { get; set; }
+
+        [Display(Name = "Automation mode")]
+        public string AutomationMode { get; set; } = OperatorAssistedMode;
 
         [Range(1, 25)]
         [Display(Name = "Max candidates")]

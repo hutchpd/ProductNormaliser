@@ -1,5 +1,7 @@
+using Microsoft.Extensions.Options;
 using ProductNormaliser.Application.Categories;
 using ProductNormaliser.Application.Governance;
+using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Application.Sources;
 
@@ -8,8 +10,11 @@ public sealed class SourceCandidateDiscoveryService(
     ICategoryMetadataService categoryMetadataService,
     ICrawlGovernanceService crawlGovernanceService,
     ISourceCandidateSearchProvider sourceCandidateSearchProvider,
-    ISourceCandidateProbeService sourceCandidateProbeService) : ISourceCandidateDiscoveryService
+    ISourceCandidateProbeService sourceCandidateProbeService,
+    IOptions<SourceOnboardingAutomationOptions>? onboardingAutomationOptions = null) : ISourceCandidateDiscoveryService
 {
+    private readonly SourceOnboardingAutomationOptions onboardingAutomationOptions = onboardingAutomationOptions?.Value ?? new SourceOnboardingAutomationOptions();
+
     public async Task<SourceCandidateDiscoveryResult> DiscoverAsync(DiscoverSourceCandidatesRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -36,6 +41,7 @@ public sealed class SourceCandidateDiscoveryService(
             CategoryKeys = categoryKeys,
             Locale = NormalizeOptionalText(request.Locale),
             Market = NormalizeOptionalText(request.Market),
+            AutomationMode = SourceAutomationModes.Normalize(request.AutomationMode),
             BrandHints = NormalizeValues(request.BrandHints),
             MaxCandidates = NormalizeMaxCandidates(request.MaxCandidates)
         };
@@ -66,6 +72,8 @@ public sealed class SourceCandidateDiscoveryService(
             var reasons = BuildReasons(searchResult, probe, duplicateSources, governanceWarning);
             var duplicateRiskScore = CalculateDuplicateRiskScore(duplicateSources);
             var recommendationStatus = DetermineRecommendationStatus(probe, duplicateRiskScore, allowedByGovernance);
+            var confidenceScore = CalculateConfidenceScore(probe, duplicateRiskScore, allowedByGovernance, searchResult, normalizedRequest);
+            var automationAssessment = BuildAutomationAssessment(searchResult, normalizedRequest, probe, duplicateRiskScore, allowedByGovernance, confidenceScore);
             candidates.Add(new SourceCandidateResult
             {
                 CandidateKey = string.IsNullOrWhiteSpace(searchResult.CandidateKey) ? searchResult.Host : searchResult.CandidateKey,
@@ -75,7 +83,9 @@ public sealed class SourceCandidateDiscoveryService(
                 CandidateType = searchResult.CandidateType,
                 AllowedMarkets = NormalizeValues(searchResult.AllowedMarkets),
                 PreferredLocale = NormalizeOptionalText(searchResult.PreferredLocale),
-                ConfidenceScore = CalculateConfidenceScore(probe, duplicateRiskScore, allowedByGovernance, searchResult, normalizedRequest),
+                MarketEvidence = searchResult.MarketEvidence,
+                LocaleEvidence = searchResult.LocaleEvidence,
+                ConfidenceScore = confidenceScore,
                 CrawlabilityScore = probe.CrawlabilityScore,
                 ExtractabilityScore = probe.ExtractabilityScore,
                 DuplicateRiskScore = duplicateRiskScore,
@@ -88,6 +98,7 @@ public sealed class SourceCandidateDiscoveryService(
                 AllowedByGovernance = allowedByGovernance,
                 GovernanceWarning = governanceWarning,
                 Probe = probe,
+                AutomationAssessment = automationAssessment,
                 Reasons = reasons
             });
         }
@@ -97,6 +108,7 @@ public sealed class SourceCandidateDiscoveryService(
             RequestedCategoryKeys = categoryKeys,
             Locale = normalizedRequest.Locale,
             Market = normalizedRequest.Market,
+            AutomationMode = normalizedRequest.AutomationMode ?? SourceAutomationModes.OperatorAssisted,
             BrandHints = NormalizeValues(normalizedRequest.BrandHints),
             GeneratedUtc = DateTime.UtcNow,
             Candidates = candidates
@@ -142,6 +154,12 @@ public sealed class SourceCandidateDiscoveryService(
                     .ToArray(),
                 PreferredLocale = ordered.Select(candidate => candidate.PreferredLocale)
                     .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)),
+                MarketEvidence = ordered
+                    .Select(candidate => candidate.MarketEvidence)
+                    .FirstOrDefault(value => GetEvidenceStrength(value) == ordered.Max(item => GetEvidenceStrength(item.MarketEvidence))) ?? "missing",
+                LocaleEvidence = ordered
+                    .Select(candidate => candidate.LocaleEvidence)
+                    .FirstOrDefault(value => GetEvidenceStrength(value) == ordered.Max(item => GetEvidenceStrength(item.LocaleEvidence))) ?? "missing",
                 MatchedCategoryKeys = ordered.SelectMany(candidate => candidate.MatchedCategoryKeys)
                     .Where(value => !string.IsNullOrWhiteSpace(value))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -286,6 +304,178 @@ public sealed class SourceCandidateDiscoveryService(
             .ToArray();
     }
 
+    private SourceCandidateAutomationAssessment BuildAutomationAssessment(
+        SourceCandidateSearchResult searchResult,
+        DiscoverSourceCandidatesRequest request,
+        SourceCandidateProbeResult probe,
+        decimal duplicateRiskScore,
+        bool allowedByGovernance,
+        decimal confidenceScore)
+    {
+        var requestedMode = SourceAutomationModes.Normalize(request.AutomationMode);
+        var requestedMarket = NormalizeOptionalText(request.Market);
+        var requestedLocale = NormalizeOptionalText(request.Locale);
+        var candidateMarkets = NormalizeValues(searchResult.AllowedMarkets);
+
+        var marketMatchApproved = !string.IsNullOrWhiteSpace(requestedMarket)
+            && candidateMarkets.Count > 0
+            && candidateMarkets.Contains(requestedMarket, StringComparer.OrdinalIgnoreCase);
+        var marketEvidenceStrongEnough = string.Equals(searchResult.MarketEvidence, "explicit", StringComparison.OrdinalIgnoreCase)
+            && candidateMarkets.Count == 1
+            && marketMatchApproved;
+        var duplicateRiskAccepted = duplicateRiskScore <= onboardingAutomationOptions.MaxDuplicateRiskScore;
+        var representativeValidationPassed = probe.RepresentativeCategoryPageReachable
+            && probe.RepresentativeProductPageReachable;
+        var extractabilityConfidencePassed = probe.ExtractabilityScore >= onboardingAutomationOptions.MinExtractabilityScore
+            && (probe.StructuredProductEvidenceDetected || probe.TechnicalAttributeEvidenceDetected);
+        var yieldConfidenceScore = CalculateYieldConfidenceScore(probe);
+        var yieldConfidencePassed = yieldConfidenceScore >= onboardingAutomationOptions.MinYieldConfidenceScore;
+        var localeAligned = string.IsNullOrWhiteSpace(requestedLocale)
+            || string.Equals(NormalizeOptionalText(searchResult.PreferredLocale), requestedLocale, StringComparison.OrdinalIgnoreCase);
+
+        var baseGuardrailsPassed = marketMatchApproved
+            && marketEvidenceStrongEnough
+            && allowedByGovernance
+            && duplicateRiskAccepted
+            && representativeValidationPassed
+            && extractabilityConfidencePassed
+            && yieldConfidencePassed
+            && localeAligned
+            && probe.CrawlabilityScore >= onboardingAutomationOptions.MinCrawlabilityScore
+            && probe.CategoryRelevanceScore >= onboardingAutomationOptions.MinCategoryRelevanceScore
+            && probe.CatalogLikelihoodScore >= onboardingAutomationOptions.MinCatalogLikelihoodScore;
+
+        var eligibleForSuggestion = requestedMode is SourceAutomationModes.SuggestAccept or SourceAutomationModes.AutoAcceptAndSeed
+            && baseGuardrailsPassed
+            && confidenceScore >= onboardingAutomationOptions.SuggestMinConfidenceScore;
+        var eligibleForAutoAccept = requestedMode == SourceAutomationModes.AutoAcceptAndSeed
+            && eligibleForSuggestion
+            && confidenceScore >= onboardingAutomationOptions.AutoAcceptMinConfidenceScore;
+
+        var supportingReasons = new List<string>();
+        if (marketMatchApproved)
+        {
+            supportingReasons.Add($"Requested market '{requestedMarket}' matches candidate market metadata.");
+        }
+
+        if (marketEvidenceStrongEnough)
+        {
+            supportingReasons.Add("Market evidence is explicit rather than only request-hinted.");
+        }
+
+        if (representativeValidationPassed)
+        {
+            supportingReasons.Add("Representative category and product pages were both validated.");
+        }
+
+        if (extractabilityConfidencePassed)
+        {
+            supportingReasons.Add("Representative product evidence cleared the extractability threshold.");
+        }
+
+        if (yieldConfidencePassed)
+        {
+            supportingReasons.Add($"Predicted downstream yield confidence scored {yieldConfidenceScore:0.#}.");
+        }
+
+        var blockingReasons = new List<string>();
+        if (string.IsNullOrWhiteSpace(requestedMarket))
+        {
+            blockingReasons.Add("Automation requires an explicit requested market so source policy stays operator-scoped.");
+        }
+
+        if (!marketMatchApproved)
+        {
+            blockingReasons.Add("Candidate market metadata does not clearly match the requested market.");
+        }
+
+        if (!marketEvidenceStrongEnough)
+        {
+            blockingReasons.Add("Candidate market metadata is missing, weakly inferred, or regionally ambiguous.");
+        }
+
+        if (!allowedByGovernance)
+        {
+            blockingReasons.Add("Governance rejected this candidate.");
+        }
+
+        if (!duplicateRiskAccepted)
+        {
+            blockingReasons.Add("Duplicate risk is too high for automation.");
+        }
+
+        if (!representativeValidationPassed)
+        {
+            blockingReasons.Add("Representative category and product validation both need to succeed before automation.");
+        }
+
+        if (!extractabilityConfidencePassed)
+        {
+            blockingReasons.Add("Extractability confidence is below the guarded threshold.");
+        }
+
+        if (!yieldConfidencePassed)
+        {
+            blockingReasons.Add("Predicted downstream yield confidence is below the guarded threshold.");
+        }
+
+        if (!localeAligned)
+        {
+            blockingReasons.Add("Candidate locale does not align cleanly with the requested locale.");
+        }
+
+        if (probe.CrawlabilityScore < onboardingAutomationOptions.MinCrawlabilityScore)
+        {
+            blockingReasons.Add("Crawlability is below the guarded threshold.");
+        }
+
+        if (probe.CategoryRelevanceScore < onboardingAutomationOptions.MinCategoryRelevanceScore)
+        {
+            blockingReasons.Add("Category relevance is below the guarded threshold.");
+        }
+
+        if (probe.CatalogLikelihoodScore < onboardingAutomationOptions.MinCatalogLikelihoodScore)
+        {
+            blockingReasons.Add("Catalog-likelihood is below the guarded threshold.");
+        }
+
+        if (confidenceScore < onboardingAutomationOptions.SuggestMinConfidenceScore)
+        {
+            blockingReasons.Add("Overall confidence is below the suggestion threshold.");
+        }
+
+        if (requestedMode == SourceAutomationModes.AutoAcceptAndSeed && confidenceScore < onboardingAutomationOptions.AutoAcceptMinConfidenceScore)
+        {
+            blockingReasons.Add("Overall confidence is below the auto-accept threshold.");
+        }
+
+        var decision = eligibleForAutoAccept
+            ? SourceCandidateAutomationAssessment.DecisionAutoAcceptAndSeed
+            : eligibleForSuggestion
+                ? SourceCandidateAutomationAssessment.DecisionSuggestAccept
+                : SourceCandidateAutomationAssessment.DecisionManualOnly;
+
+        return new SourceCandidateAutomationAssessment
+        {
+            RequestedMode = requestedMode,
+            Decision = decision,
+            MarketMatchApproved = marketMatchApproved,
+            MarketEvidenceStrongEnough = marketEvidenceStrongEnough,
+            GovernancePassed = allowedByGovernance,
+            DuplicateRiskAccepted = duplicateRiskAccepted,
+            RepresentativeValidationPassed = representativeValidationPassed,
+            ExtractabilityConfidencePassed = extractabilityConfidencePassed,
+            YieldConfidencePassed = yieldConfidencePassed,
+            EligibleForSuggestion = eligibleForSuggestion,
+            EligibleForAutoAccept = eligibleForAutoAccept,
+            EligibleForAutoSeed = eligibleForAutoAccept,
+            MarketEvidence = searchResult.MarketEvidence,
+            LocaleEvidence = searchResult.LocaleEvidence,
+            SupportingReasons = supportingReasons,
+            BlockingReasons = blockingReasons.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+        };
+    }
+
     private static decimal CalculateConfidenceScore(SourceCandidateProbeResult probe, decimal duplicateRiskScore, bool allowedByGovernance, SourceCandidateSearchResult searchResult, DiscoverSourceCandidatesRequest request)
     {
         var score = probe.CrawlabilityScore * 0.30m
@@ -312,6 +502,43 @@ public sealed class SourceCandidateDiscoveryService(
         }
 
         return Math.Min(100m, 60m + ((duplicateSources.Count - 1) * 20m));
+    }
+
+    private static decimal CalculateYieldConfidenceScore(SourceCandidateProbeResult probe)
+    {
+        var score = 0m;
+
+        if (probe.RepresentativeProductPageReachable)
+        {
+            score += 30m;
+        }
+
+        if (probe.StructuredProductEvidenceDetected)
+        {
+            score += 25m;
+        }
+
+        if (probe.TechnicalAttributeEvidenceDetected)
+        {
+            score += 20m;
+        }
+
+        if (probe.SitemapDetected)
+        {
+            score += 10m;
+        }
+
+        if (probe.LikelyListingUrlPatterns.Count > 0)
+        {
+            score += 10m;
+        }
+
+        if (probe.CatalogLikelihoodScore >= 60m)
+        {
+            score += 5m;
+        }
+
+        return Math.Clamp(decimal.Round(score, 2, MidpointRounding.AwayFromZero), 0m, 100m);
     }
 
     private static string DetermineRecommendationStatus(SourceCandidateProbeResult probe, decimal duplicateRiskScore, bool allowedByGovernance)
@@ -392,6 +619,17 @@ public sealed class SourceCandidateDiscoveryService(
         }
 
         return normalizedSourceMarkets.Any(market => normalizedCandidateMarkets.Contains(market, StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static int GetEvidenceStrength(string? evidence)
+    {
+        return evidence?.Trim().ToLowerInvariant() switch
+        {
+            "explicit" => 3,
+            "request_hint" => 2,
+            "ambiguous" => 1,
+            _ => 0
+        };
     }
 
     private static decimal ScoreMarketAlignment(SourceCandidateResult candidate, DiscoverSourceCandidatesRequest request)

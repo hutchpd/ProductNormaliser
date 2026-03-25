@@ -10,6 +10,7 @@ public sealed class SourceDto
     public bool IsEnabled { get; init; }
     public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
     public string PreferredLocale { get; init; } = string.Empty;
+    public SourceAutomationPolicyDto AutomationPolicy { get; init; } = new();
     public IReadOnlyList<string> SupportedCategoryKeys { get; init; } = [];
     public SourceDiscoveryProfileDto DiscoveryProfile { get; init; } = new();
     public SourceThrottlingPolicyDto ThrottlingPolicy { get; init; } = default!;
