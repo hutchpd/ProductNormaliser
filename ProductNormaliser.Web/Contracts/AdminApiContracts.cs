@@ -272,6 +272,63 @@ public sealed class UpdateSourceThrottlingRequest
     public bool RespectRobotsTxt { get; init; } = true;
 }
 
+public sealed class DiscoverSourceCandidatesRequest
+{
+    public IReadOnlyList<string> CategoryKeys { get; init; } = [];
+    public string? Locale { get; init; }
+    public string? Market { get; init; }
+    public IReadOnlyList<string> BrandHints { get; init; } = [];
+    public int MaxCandidates { get; init; } = 10;
+}
+
+public sealed class SourceCandidateDiscoveryResponseDto
+{
+    public IReadOnlyList<string> RequestedCategoryKeys { get; init; } = [];
+    public string? Locale { get; init; }
+    public string? Market { get; init; }
+    public IReadOnlyList<string> BrandHints { get; init; } = [];
+    public DateTime GeneratedUtc { get; init; }
+    public IReadOnlyList<SourceCandidateDto> Candidates { get; init; } = [];
+}
+
+public sealed class SourceCandidateDto
+{
+    public string CandidateKey { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public string BaseUrl { get; init; } = string.Empty;
+    public string Host { get; init; } = string.Empty;
+    public string CandidateType { get; init; } = string.Empty;
+    public decimal ConfidenceScore { get; init; }
+    public IReadOnlyList<string> MatchedCategoryKeys { get; init; } = [];
+    public IReadOnlyList<string> MatchedBrandHints { get; init; } = [];
+    public bool AlreadyRegistered { get; init; }
+    public IReadOnlyList<string> DuplicateSourceIds { get; init; } = [];
+    public IReadOnlyList<string> DuplicateSourceDisplayNames { get; init; } = [];
+    public bool AllowedByGovernance { get; init; }
+    public string? GovernanceWarning { get; init; }
+    public SourceCandidateProbeDto Probe { get; init; } = new();
+    public IReadOnlyList<SourceCandidateReasonDto> Reasons { get; init; } = [];
+}
+
+public sealed class SourceCandidateProbeDto
+{
+    public bool HomePageReachable { get; init; }
+    public bool RobotsTxtReachable { get; init; }
+    public bool SitemapDetected { get; init; }
+    public IReadOnlyList<string> SitemapUrls { get; init; } = [];
+    public decimal CategoryRelevanceScore { get; init; }
+    public IReadOnlyList<string> CategoryPageHints { get; init; } = [];
+    public IReadOnlyList<string> LikelyListingUrlPatterns { get; init; } = [];
+    public IReadOnlyList<string> LikelyProductUrlPatterns { get; init; } = [];
+}
+
+public sealed class SourceCandidateReasonDto
+{
+    public string Code { get; init; } = string.Empty;
+    public string Message { get; init; } = string.Empty;
+    public decimal Weight { get; init; }
+}
+
 public sealed class CreateCrawlJobRequest
 {
     public string RequestType { get; init; } = string.Empty;

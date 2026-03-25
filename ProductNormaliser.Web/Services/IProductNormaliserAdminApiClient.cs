@@ -44,6 +44,8 @@ public interface IProductNormaliserAdminApiClient
 
     Task<SourceDto> UpdateThrottlingAsync(string sourceId, UpdateSourceThrottlingRequest request, CancellationToken cancellationToken = default);
 
+    Task<SourceCandidateDiscoveryResponseDto> DiscoverSourceCandidatesAsync(DiscoverSourceCandidatesRequest request, CancellationToken cancellationToken = default);
+
     Task<CrawlJobListResponseDto> GetCrawlJobsAsync(CrawlJobQueryDto? query = null, CancellationToken cancellationToken = default);
 
     Task<CrawlJobDto?> GetCrawlJobAsync(string jobId, CancellationToken cancellationToken = default);

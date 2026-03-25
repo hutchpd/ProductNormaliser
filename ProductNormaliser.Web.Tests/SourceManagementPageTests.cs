@@ -101,6 +101,56 @@ public sealed class SourceManagementPageTests
     }
 
     [Test]
+    public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_LoadsEphemeralCandidateResults()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            SourceCandidateDiscoveryResponse = new SourceCandidateDiscoveryResponseDto
+            {
+                RequestedCategoryKeys = ["tv"],
+                GeneratedUtc = new DateTime(2026, 03, 25, 11, 00, 00, DateTimeKind.Utc),
+                Candidates =
+                [
+                    new SourceCandidateDto
+                    {
+                        CandidateKey = "currys_co_uk",
+                        DisplayName = "Currys",
+                        BaseUrl = "https://www.currys.co.uk/",
+                        Host = "www.currys.co.uk",
+                        CandidateType = "retailer",
+                        ConfidenceScore = 82m,
+                        MatchedCategoryKeys = ["tv"],
+                        Probe = new SourceCandidateProbeDto(),
+                        Reasons = []
+                    }
+                ]
+            }
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IndexModel>.Instance)
+        {
+            CandidateDiscovery = new ProductNormaliser.Web.Pages.Sources.IndexModel.DiscoverSourceCandidatesInput
+            {
+                CategoryKeys = ["tv"],
+                Locale = "en-GB",
+                BrandHints = "Samsung"
+            }
+        };
+
+        var result = await model.OnPostDiscoverCandidatesAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<PageResult>());
+            Assert.That(client.LastSourceCandidateDiscoveryRequest, Is.Not.Null);
+            Assert.That(client.LastSourceCandidateDiscoveryRequest!.CategoryKeys, Is.EqualTo(new[] { "tv" }));
+            Assert.That(model.CandidateDiscoveryResult, Is.Not.Null);
+            Assert.That(model.CandidateDiscoveryResult!.Candidates.Select(candidate => candidate.DisplayName), Is.EqualTo(new[] { "Currys" }));
+        });
+    }
+
+    [Test]
     public async Task SourceDetails_OnPostCategoriesAsync_SubmitsAssignmentsAndRedirects()
     {
         var client = new FakeAdminApiClient

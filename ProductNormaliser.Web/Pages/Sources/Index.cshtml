@@ -122,6 +122,192 @@
         </section>
     </div>
 
+    <section class="panel panel-muted">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Candidate Discovery</p>
+                <h2>Search likely source hosts before registration</h2>
+            </div>
+        </div>
+
+        <div class="empty-panel mt-3">
+            <p class="empty-state">Discover likely retailer or manufacturer hosts for the selected categories, review their probe signals, then decide what to register.</p>
+            <p class="subtle-copy">This MVP is intentionally stateless: results are ephemeral and do not create or modify registered sources until you use the existing registration flow.</p>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Model.CandidateDiscoveryErrorMessage))
+        {
+            <div class="notice error">@Model.CandidateDiscoveryErrorMessage</div>
+        }
+
+        <form method="post" asp-page-handler="DiscoverCandidates" class="source-form">
+            <div>
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Categories</p>
+                        <h2>Select discovery scope</h2>
+                    </div>
+                </div>
+
+                <div class="check-grid">
+                @foreach (var category in Model.Categories)
+                {
+                    <label class="check-card @(category.IsEnabled ? string.Empty : "disabled")">
+                        <input type="checkbox"
+                               name="CandidateDiscovery.CategoryKeys"
+                               value="@category.CategoryKey"
+                               checked="@Model.CandidateDiscovery.CategoryKeys.Contains(category.CategoryKey)"
+                               disabled="@(!category.IsEnabled)" />
+                        <span>
+                            <strong>@category.DisplayName</strong>
+                            <span class="subtle-copy d-block">@category.CrawlSupportStatus</span>
+                        </span>
+                    </label>
+                }
+                </div>
+                <span asp-validation-for="CandidateDiscovery.CategoryKeys" class="text-danger small"></span>
+            </div>
+
+            <div class="form-grid">
+                <div>
+                    <label asp-for="CandidateDiscovery.Locale" class="form-label"></label>
+                    <input asp-for="CandidateDiscovery.Locale" class="form-control" placeholder="en-GB" />
+                </div>
+                <div>
+                    <label asp-for="CandidateDiscovery.Market" class="form-label"></label>
+                    <input asp-for="CandidateDiscovery.Market" class="form-control" placeholder="UK" />
+                </div>
+                <div>
+                    <label asp-for="CandidateDiscovery.MaxCandidates" class="form-label"></label>
+                    <input asp-for="CandidateDiscovery.MaxCandidates" class="form-control" min="1" max="25" />
+                    <span asp-validation-for="CandidateDiscovery.MaxCandidates" class="text-danger small"></span>
+                </div>
+                <div class="wide">
+                    <label asp-for="CandidateDiscovery.BrandHints" class="form-label"></label>
+                    <textarea asp-for="CandidateDiscovery.BrandHints" rows="2" class="form-control" placeholder="Samsung, LG, Sony"></textarea>
+                    <span class="subtle-copy">Optional hints only. They do not create any sources or change crawl launch behavior.</span>
+                </div>
+            </div>
+
+            <div class="actions-bar">
+                <button type="submit" class="btn btn-dark">Discover candidates</button>
+            </div>
+        </form>
+    </section>
+
+    @if (Model.CandidateDiscoveryResult is not null)
+    {
+        <section class="panel">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Discovery Results</p>
+                    <h2>Ephemeral source candidates</h2>
+                </div>
+            </div>
+
+            <div class="metric-strip">
+                <article>
+                    <span>Requested categories</span>
+                    <strong>@Model.CandidateDiscoveryResult.RequestedCategoryKeys.Count</strong>
+                </article>
+                <article>
+                    <span>Returned candidates</span>
+                    <strong>@Model.CandidateDiscoveryResult.Candidates.Count</strong>
+                </article>
+                <article>
+                    <span>Already registered</span>
+                    <strong>@Model.CandidateDiscoveryResult.Candidates.Count(candidate => candidate.AlreadyRegistered)</strong>
+                </article>
+                <article>
+                    <span>Generated</span>
+                    <strong>@Model.CandidateDiscoveryResult.GeneratedUtc.ToString("u")</strong>
+                </article>
+            </div>
+
+            @if (Model.CandidateDiscoveryResult.Candidates.Count == 0)
+            {
+                <div class="empty-panel mt-3">
+                    <p class="empty-state">No source candidates are available yet.</p>
+                    <p class="subtle-copy">Provider integrations are still a skeleton in this MVP, so empty results are expected until search and probing providers are connected.</p>
+                </div>
+            }
+            else
+            {
+                <div class="job-card-grid mt-3">
+                @foreach (var candidate in Model.CandidateDiscoveryResult.Candidates)
+                {
+                    <article class="job-card @(candidate.AlreadyRegistered ? "attention" : string.Empty)">
+                        <div class="job-card-header">
+                            <div>
+                                <strong>@candidate.DisplayName</strong>
+                                <div class="subtle-copy mono">@candidate.Host</div>
+                                <div class="subtle-copy">@candidate.BaseUrl</div>
+                            </div>
+                            <partial name="_StatusBadge" model='new ProductNormaliser.Web.Models.StatusBadgeModel { Text = $"{candidate.ConfidenceScore:0.#}% confidence", Tone = candidate.AllowedByGovernance ? "completed" : "warning" }' />
+                        </div>
+
+                        <div class="chip-row compact-wrap">
+                            <span class="chip">@candidate.CandidateType</span>
+                            @foreach (var categoryKey in candidate.MatchedCategoryKeys)
+                            {
+                                <span class="chip">@categoryKey</span>
+                            }
+                            @if (candidate.AlreadyRegistered)
+                            {
+                                <span class="chip">Already registered</span>
+                            }
+                        </div>
+
+                        @if (!string.IsNullOrWhiteSpace(candidate.GovernanceWarning))
+                        {
+                            <p class="text-danger small mt-2">@candidate.GovernanceWarning</p>
+                        }
+
+                        <dl class="job-meta-grid compact mt-3">
+                            <div><dt>Robots</dt><dd>@(candidate.Probe.RobotsTxtReachable ? "Reachable" : "Unknown")</dd></div>
+                            <div><dt>Sitemap</dt><dd>@(candidate.Probe.SitemapDetected ? "Detected" : "None")</dd></div>
+                            <div><dt>Relevance</dt><dd>@candidate.Probe.CategoryRelevanceScore.ToString("0.##")</dd></div>
+                            <div><dt>Duplicates</dt><dd>@candidate.DuplicateSourceIds.Count</dd></div>
+                        </dl>
+
+                        @if (candidate.Reasons.Count > 0)
+                        {
+                            <div class="subtle-copy mt-3">Why suggested</div>
+                            <ul class="small mb-0">
+                            @foreach (var reason in candidate.Reasons)
+                            {
+                                <li>@reason.Message</li>
+                            }
+                            </ul>
+                        }
+
+                        @if (candidate.Probe.LikelyListingUrlPatterns.Count > 0 || candidate.Probe.LikelyProductUrlPatterns.Count > 0 || candidate.Probe.SitemapUrls.Count > 0)
+                        {
+                            <div class="subtle-copy mt-3">Probe hints</div>
+                            <ul class="small mb-0">
+                                @foreach (var sitemapUrl in candidate.Probe.SitemapUrls)
+                                {
+                                    <li>Sitemap: @sitemapUrl</li>
+                                }
+                                @foreach (var pattern in candidate.Probe.LikelyListingUrlPatterns)
+                                {
+                                    <li>Listing pattern: @pattern</li>
+                                }
+                                @foreach (var pattern in candidate.Probe.LikelyProductUrlPatterns)
+                                {
+                                    <li>Product pattern: @pattern</li>
+                                }
+                            </ul>
+                        }
+
+                        <p class="subtle-copy mt-3 mb-0">Registration remains explicit. Use the existing source registration form below to add accepted hosts.</p>
+                    </article>
+                }
+                </div>
+            }
+        </section>
+    }
+
     <section class="panel">
         <div class="panel-heading">
             <div>

@@ -132,6 +132,11 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
         return SendAsync<SourceDto>(HttpMethod.Put, $"api/sources/{Uri.EscapeDataString(sourceId)}/throttling", request, AdminApiContractValidator.ValidateSource, cancellationToken);
     }
 
+    public Task<SourceCandidateDiscoveryResponseDto> DiscoverSourceCandidatesAsync(DiscoverSourceCandidatesRequest request, CancellationToken cancellationToken = default)
+    {
+        return SendAsync<SourceCandidateDiscoveryResponseDto>(HttpMethod.Post, "api/sources/candidates/discover", request, AdminApiContractValidator.ValidateSourceCandidateDiscoveryResponse, cancellationToken);
+    }
+
     public Task<CrawlJobListResponseDto> GetCrawlJobsAsync(CrawlJobQueryDto? query = null, CancellationToken cancellationToken = default)
     {
         var relativeUri = BuildRelativeUri("api/crawl/jobs", new Dictionary<string, string?>

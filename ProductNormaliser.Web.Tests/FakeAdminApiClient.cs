@@ -9,6 +9,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public Exception? CategoriesException { get; set; }
     public Exception? CategoryDetailException { get; set; }
     public Exception? SourcesException { get; set; }
+    public Exception? SourceCandidateDiscoveryException { get; set; }
     public Exception? CrawlJobsException { get; set; }
     public StatsDto Stats { get; set; } = new();
     public IReadOnlyList<CategoryMetadataDto> Categories { get; set; } = [];
@@ -17,7 +18,9 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public CategoryDetailDto? CategoryDetail { get; set; }
     public IReadOnlyList<SourceDto> Sources { get; set; } = [];
     public SourceDto? Source { get; set; }
+    public SourceCandidateDiscoveryResponseDto SourceCandidateDiscoveryResponse { get; set; } = new();
     public RegisterSourceRequest? LastRegisteredSourceRequest { get; private set; }
+    public DiscoverSourceCandidatesRequest? LastSourceCandidateDiscoveryRequest { get; private set; }
     public UpdateSourceRequest? LastUpdatedSourceRequest { get; private set; }
     public string? LastUpdatedSourceId { get; private set; }
     public string? LastEnabledSourceId { get; private set; }
@@ -311,6 +314,13 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, source.IsEnabled, source.SupportedCategoryKeys, source.DiscoveryProfile, throttling, DateTime.UtcNow);
         UpsertSource(updated);
         return Task.FromResult(updated);
+    }
+    public Task<SourceCandidateDiscoveryResponseDto> DiscoverSourceCandidatesAsync(DiscoverSourceCandidatesRequest request, CancellationToken cancellationToken = default)
+    {
+        LastSourceCandidateDiscoveryRequest = request;
+        return SourceCandidateDiscoveryException is null
+            ? Task.FromResult(SourceCandidateDiscoveryResponse)
+            : Task.FromException<SourceCandidateDiscoveryResponseDto>(SourceCandidateDiscoveryException);
     }
     public Task<CrawlJobListResponseDto> GetCrawlJobsAsync(CrawlJobQueryDto? query = null, CancellationToken cancellationToken = default)
         => CrawlJobsException is null ? Task.FromResult(CrawlJobsPage) : Task.FromException<CrawlJobListResponseDto>(CrawlJobsException);

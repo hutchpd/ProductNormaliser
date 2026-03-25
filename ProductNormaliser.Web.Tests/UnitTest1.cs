@@ -426,6 +426,73 @@ public sealed class AdminApiClientTests
     }
 
     [Test]
+    public async Task DiscoverSourceCandidatesAsync_PostsToCandidateDiscoveryEndpoint()
+    {
+        var requestUri = string.Empty;
+        DiscoverSourceCandidatesRequest? requestPayload = null;
+        var client = CreateClient(async (request, cancellationToken) =>
+        {
+            requestUri = request.RequestUri!.ToString();
+            requestPayload = await request.Content!.ReadFromJsonAsync<DiscoverSourceCandidatesRequest>(cancellationToken: cancellationToken);
+            return CreateJsonResponse(HttpStatusCode.OK, new SourceCandidateDiscoveryResponseDto
+            {
+                RequestedCategoryKeys = ["tv"],
+                Locale = "en-GB",
+                Market = "UK",
+                BrandHints = ["Samsung"],
+                GeneratedUtc = new DateTime(2026, 03, 25, 10, 00, 00, DateTimeKind.Utc),
+                Candidates =
+                [
+                    new SourceCandidateDto
+                    {
+                        CandidateKey = "currys_co_uk",
+                        DisplayName = "Currys",
+                        BaseUrl = "https://www.currys.co.uk/",
+                        Host = "www.currys.co.uk",
+                        CandidateType = "retailer",
+                        ConfidenceScore = 82.5m,
+                        MatchedCategoryKeys = ["tv"],
+                        Probe = new SourceCandidateProbeDto
+                        {
+                            RobotsTxtReachable = true,
+                            SitemapDetected = true,
+                            SitemapUrls = ["https://www.currys.co.uk/sitemap.xml"]
+                        },
+                        Reasons =
+                        [
+                            new SourceCandidateReasonDto
+                            {
+                                Code = "search_match",
+                                Message = "Matched category-oriented retailer search results.",
+                                Weight = 10m
+                            }
+                        ]
+                    }
+                ]
+            });
+        });
+
+        var result = await client.DiscoverSourceCandidatesAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"],
+            Locale = "en-GB",
+            Market = "UK",
+            BrandHints = ["Samsung"],
+            MaxCandidates = 5
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(requestUri, Does.Contain("api/sources/candidates/discover"));
+            Assert.That(requestPayload, Is.Not.Null);
+            Assert.That(requestPayload!.CategoryKeys, Is.EqualTo(new[] { "tv" }));
+            Assert.That(requestPayload.BrandHints, Is.EqualTo(new[] { "Samsung" }));
+            Assert.That(result.Candidates, Has.Count.EqualTo(1));
+            Assert.That(result.Candidates[0].DisplayName, Is.EqualTo("Currys"));
+        });
+    }
+
+    [Test]
     public async Task CancelCrawlJobAsync_PostsToCancelEndpoint()
     {
         var requestUri = string.Empty;

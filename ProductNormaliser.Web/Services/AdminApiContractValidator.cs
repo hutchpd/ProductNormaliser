@@ -97,6 +97,13 @@ internal static class AdminApiContractValidator
         ValidateSource(payload, "source");
     }
 
+    public static void ValidateSourceCandidateDiscoveryResponse(SourceCandidateDiscoveryResponseDto payload)
+    {
+        ValidateStringItems(payload.RequestedCategoryKeys, "sourceCandidateDiscovery.requestedCategoryKeys");
+        ValidateStringItems(payload.BrandHints, "sourceCandidateDiscovery.brandHints");
+        ValidateItems(payload.Candidates, "sourceCandidateDiscovery.candidates", ValidateSourceCandidate);
+    }
+
     public static void ValidateCrawlJobList(CrawlJobListResponseDto payload)
     {
         ValidateItems(payload.Items, "crawlJobs.items", ValidateCrawlJob);
@@ -236,6 +243,36 @@ internal static class AdminApiContractValidator
         ValidateStringItems(payload.ExcludedPathPrefixes, $"{path}.excludedPathPrefixes");
         ValidateStringItems(payload.ProductUrlPatterns, $"{path}.productUrlPatterns");
         ValidateStringItems(payload.ListingUrlPatterns, $"{path}.listingUrlPatterns");
+    }
+
+    private static void ValidateSourceCandidate(SourceCandidateDto payload, string path)
+    {
+        ValidateRequiredString(payload.CandidateKey, $"{path}.candidateKey");
+        ValidateRequiredString(payload.DisplayName, $"{path}.displayName");
+        ValidateRequiredString(payload.BaseUrl, $"{path}.baseUrl");
+        ValidateRequiredString(payload.Host, $"{path}.host");
+        ValidateRequiredString(payload.CandidateType, $"{path}.candidateType");
+        ValidateStringItems(payload.MatchedCategoryKeys, $"{path}.matchedCategoryKeys");
+        ValidateStringItems(payload.MatchedBrandHints, $"{path}.matchedBrandHints");
+        ValidateStringItems(payload.DuplicateSourceIds, $"{path}.duplicateSourceIds");
+        ValidateStringItems(payload.DuplicateSourceDisplayNames, $"{path}.duplicateSourceDisplayNames");
+        ValidateSourceCandidateProbe(payload.Probe, $"{path}.probe");
+        ValidateItems(payload.Reasons, $"{path}.reasons", ValidateSourceCandidateReason);
+    }
+
+    private static void ValidateSourceCandidateProbe(SourceCandidateProbeDto payload, string path)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        ValidateStringItems(payload.SitemapUrls, $"{path}.sitemapUrls");
+        ValidateStringItems(payload.CategoryPageHints, $"{path}.categoryPageHints");
+        ValidateStringItems(payload.LikelyListingUrlPatterns, $"{path}.likelyListingUrlPatterns");
+        ValidateStringItems(payload.LikelyProductUrlPatterns, $"{path}.likelyProductUrlPatterns");
+    }
+
+    private static void ValidateSourceCandidateReason(SourceCandidateReasonDto payload, string path)
+    {
+        ValidateRequiredString(payload.Code, $"{path}.code");
+        ValidateRequiredString(payload.Message, $"{path}.message");
     }
 
     private static void ValidateSourceThrottlingPolicy(SourceThrottlingPolicyDto payload, string path)

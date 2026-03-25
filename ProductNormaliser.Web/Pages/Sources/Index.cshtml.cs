@@ -26,7 +26,14 @@ public sealed class IndexModel(
     [BindProperty]
     public RegisterSourceInput Registration { get; set; } = new();
 
+    [BindProperty]
+    public DiscoverSourceCandidatesInput CandidateDiscovery { get; set; } = new();
+
     public string? ErrorMessage { get; private set; }
+
+    public string? CandidateDiscoveryErrorMessage { get; private set; }
+
+    public SourceCandidateDiscoveryResponseDto? CandidateDiscoveryResult { get; private set; }
 
     public IReadOnlyList<CategoryMetadataDto> Categories { get; private set; } = [];
 
@@ -109,6 +116,54 @@ public sealed class IndexModel(
         }
 
         await LoadAsync(cancellationToken);
+        return Page();
+    }
+
+    public async Task<IActionResult> OnPostDiscoverCandidatesAsync(CancellationToken cancellationToken)
+    {
+        await LoadAsync(cancellationToken);
+
+        var categoryKeys = NormalizeValues(CandidateDiscovery.CategoryKeys);
+        if (categoryKeys.Count == 0 && !string.IsNullOrWhiteSpace(CategoryKey))
+        {
+            categoryKeys = [CategoryKey];
+        }
+
+        if (categoryKeys.Count == 0)
+        {
+            ModelState.AddModelError($"{nameof(CandidateDiscovery)}.{nameof(CandidateDiscovery.CategoryKeys)}", "Choose at least one category before discovering source candidates.");
+            return Page();
+        }
+
+        CandidateDiscovery.CategoryKeys = categoryKeys;
+
+        try
+        {
+            CandidateDiscoveryResult = await adminApiClient.DiscoverSourceCandidatesAsync(new DiscoverSourceCandidatesRequest
+            {
+                CategoryKeys = categoryKeys,
+                Locale = NormalizeOptionalText(CandidateDiscovery.Locale),
+                Market = NormalizeOptionalText(CandidateDiscovery.Market),
+                BrandHints = ParseDelimitedValues(CandidateDiscovery.BrandHints),
+                MaxCandidates = NormalizeMaxCandidates(CandidateDiscovery.MaxCandidates)
+            }, cancellationToken);
+        }
+        catch (AdminApiValidationException exception)
+        {
+            foreach (var entry in exception.Errors)
+            {
+                foreach (var message in entry.Value)
+                {
+                    ModelState.AddModelError(string.Empty, message);
+                }
+            }
+        }
+        catch (AdminApiException exception)
+        {
+            logger.LogWarning(exception, "Failed to discover source candidates from sources index.");
+            CandidateDiscoveryErrorMessage = exception.Message;
+        }
+
         return Page();
     }
 
@@ -247,6 +302,11 @@ public sealed class IndexModel(
             {
                 Registration.CategoryKeys = [CategoryKey];
             }
+
+            if (CandidateDiscovery.CategoryKeys.Count == 0 && !string.IsNullOrWhiteSpace(CategoryKey))
+            {
+                CandidateDiscovery.CategoryKeys = [CategoryKey];
+            }
         }
         catch (AdminApiException exception)
         {
@@ -256,6 +316,42 @@ public sealed class IndexModel(
             AllSources = [];
             Sources = [];
         }
+    }
+
+    private static List<string> NormalizeValues(IEnumerable<string>? values)
+    {
+        return (values ?? [])
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static List<string> ParseDelimitedValues(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return [];
+        }
+
+        return NormalizeValues(value
+            .Split([',', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+    }
+
+    private static string? NormalizeOptionalText(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static int NormalizeMaxCandidates(int value)
+    {
+        if (value <= 0)
+        {
+            return 10;
+        }
+
+        return Math.Min(25, value);
     }
 
     public sealed class RegisterSourceInput
@@ -279,5 +375,24 @@ public sealed class IndexModel(
         public bool IsEnabled { get; set; } = true;
 
         public List<string> CategoryKeys { get; set; } = [];
+    }
+
+    public sealed class DiscoverSourceCandidatesInput
+    {
+        [Display(Name = "Categories")]
+        public List<string> CategoryKeys { get; set; } = [];
+
+        [Display(Name = "Locale")]
+        public string? Locale { get; set; }
+
+        [Display(Name = "Market")]
+        public string? Market { get; set; }
+
+        [Display(Name = "Brand hints")]
+        public string? BrandHints { get; set; }
+
+        [Range(1, 25)]
+        [Display(Name = "Max candidates")]
+        public int MaxCandidates { get; set; } = 10;
     }
 }
