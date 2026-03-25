@@ -4,6 +4,10 @@ public sealed class SourceCandidateDiscoveryOptions
 {
     public const string SectionName = "SourceCandidateDiscovery";
 
+    public string SearchApiBaseUrl { get; init; } = "https://api.search.brave.com";
+
+    public string? SearchApiKey { get; init; }
+
     public int SearchTimeoutSeconds { get; init; } = 15;
 
     public int ProbeTimeoutSeconds { get; init; } = 10;

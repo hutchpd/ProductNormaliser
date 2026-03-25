@@ -326,6 +326,133 @@ public sealed class SourceCandidateDiscoveryServiceTests
         });
     }
 
+    [Test]
+    public async Task DiscoverAsync_CollapsesEquivalentCandidatesBeforeRanking()
+    {
+        var probeService = new FakeSourceCandidateProbeService(
+            new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ao.example"] = new SourceCandidateProbeResult { CategoryRelevanceScore = 12m }
+            });
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "ao_primary",
+                    DisplayName = "AO Primary",
+                    BaseUrl = "https://www.ao.example/",
+                    Host = "www.ao.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Primary result"]
+                },
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "ao_secondary",
+                    DisplayName = "AO Secondary",
+                    BaseUrl = "https://ao.example/",
+                    Host = "ao.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Secondary result"]
+                }),
+            probeService,
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest { CategoryKeys = ["tv"] });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Candidates, Has.Count.EqualTo(1));
+            Assert.That(probeService.ProbeCallCount, Is.EqualTo(1));
+            Assert.That(result.Candidates[0].Reasons.Count(reason => reason.Code == "search_match"), Is.EqualTo(2));
+        });
+    }
+
+    [Test]
+    public async Task DiscoverAsync_PrefersHigherSignalCandidateWhenHostsOverlap()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv"), CreateCategory("laptop")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "samsung_basic",
+                    DisplayName = "Samsung Shop",
+                    BaseUrl = "https://www.samsung.example/",
+                    Host = "www.samsung.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Basic result"]
+                },
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "samsung_official",
+                    DisplayName = "Samsung Official Store",
+                    BaseUrl = "https://samsung.example/",
+                    Host = "samsung.example",
+                    CandidateType = "manufacturer",
+                    MatchedCategoryKeys = ["tv", "laptop"],
+                    MatchedBrandHints = ["Samsung"],
+                    SearchReasons = ["Official result", "Manufacturer match"]
+                }),
+            new FakeSourceCandidateProbeService(),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv", "laptop"],
+            BrandHints = ["Samsung"]
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Candidates, Has.Count.EqualTo(1));
+            Assert.That(result.Candidates[0].DisplayName, Is.EqualTo("Samsung Official Store"));
+            Assert.That(result.Candidates[0].CandidateType, Is.EqualTo("manufacturer"));
+            Assert.That(result.Candidates[0].MatchedCategoryKeys, Is.EqualTo(new[] { "laptop", "tv" }));
+            Assert.That(result.Candidates[0].MatchedBrandHints, Is.EqualTo(new[] { "Samsung" }));
+        });
+    }
+
+    [Test]
+    public async Task DiscoverAsync_SortsByConfidenceThenDisplayName()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "beta",
+                    DisplayName = "Beta Store",
+                    BaseUrl = "https://beta.example/",
+                    Host = "beta.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Beta result"]
+                },
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "alpha",
+                    DisplayName = "Alpha Store",
+                    BaseUrl = "https://alpha.example/",
+                    Host = "alpha.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Alpha result"]
+                }),
+            new FakeSourceCandidateProbeService(),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest { CategoryKeys = ["tv"] });
+
+        Assert.That(result.Candidates.Select(candidate => candidate.DisplayName), Is.EqualTo(new[] { "Alpha Store", "Beta Store" }));
+    }
+
     private static SourceCandidateDiscoveryService CreateService(
         FakeCrawlSourceStore store,
         FakeCategoryMetadataService categoryService,
@@ -429,8 +556,11 @@ public sealed class SourceCandidateDiscoveryServiceTests
 
         public Dictionary<string, IReadOnlyCollection<string>> CategoryKeysByHost { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+        public int ProbeCallCount { get; private set; }
+
         public Task<SourceCandidateProbeResult> ProbeAsync(SourceCandidateSearchResult candidate, IReadOnlyCollection<string> categoryKeys, CancellationToken cancellationToken = default)
         {
+            ProbeCallCount++;
             CategoryKeysByHost[candidate.Host] = categoryKeys.ToArray();
             return Task.FromResult(resultsByHost.TryGetValue(candidate.Host, out var result) ? result : new SourceCandidateProbeResult());
         }

@@ -201,7 +201,10 @@ public sealed class SearchApiSourceCandidateSearchProvider(HttpClient httpClient
 
     private Uri BuildRequestUri(string query)
     {
-        var baseAddress = httpClient.BaseAddress ?? DefaultBaseAddress;
+        var configuredBaseAddress = Uri.TryCreate(options.SearchApiBaseUrl, UriKind.Absolute, out var parsed)
+            ? parsed
+            : DefaultBaseAddress;
+        var baseAddress = httpClient.BaseAddress ?? configuredBaseAddress;
         var uri = new Uri(baseAddress, $"/res/v1/web/search?q={Uri.EscapeDataString(query)}&count=10");
         return uri;
     }

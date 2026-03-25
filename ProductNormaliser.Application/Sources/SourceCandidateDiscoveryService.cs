@@ -41,7 +41,7 @@ public sealed class SourceCandidateDiscoveryService(
         };
 
         var registeredSources = await crawlSourceStore.ListAsync(cancellationToken);
-        var searchResults = await sourceCandidateSearchProvider.SearchAsync(normalizedRequest, cancellationToken);
+        var searchResults = CollapseEquivalentCandidates(await sourceCandidateSearchProvider.SearchAsync(normalizedRequest, cancellationToken));
 
         var candidates = new List<SourceCandidateResult>(searchResults.Count);
         foreach (var searchResult in searchResults)
@@ -97,6 +97,54 @@ public sealed class SourceCandidateDiscoveryService(
                 .Take(normalizedRequest.MaxCandidates)
                 .ToArray()
         };
+    }
+
+    private static IReadOnlyList<SourceCandidateSearchResult> CollapseEquivalentCandidates(IReadOnlyList<SourceCandidateSearchResult> candidates)
+    {
+        if (candidates.Count <= 1)
+        {
+            return candidates;
+        }
+
+        var groups = candidates
+            .GroupBy(GetCandidateEquivalenceKey, StringComparer.OrdinalIgnoreCase);
+        var collapsed = new List<SourceCandidateSearchResult>();
+        foreach (var group in groups)
+        {
+            var ordered = group
+                .OrderByDescending(GetSearchSignalScore)
+                .ThenBy(candidate => candidate.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var preferred = ordered[0];
+
+            collapsed.Add(new SourceCandidateSearchResult
+            {
+                CandidateKey = string.IsNullOrWhiteSpace(preferred.CandidateKey) ? preferred.Host : preferred.CandidateKey,
+                DisplayName = preferred.DisplayName,
+                BaseUrl = preferred.BaseUrl,
+                Host = preferred.Host,
+                CandidateType = ordered.Any(candidate => string.Equals(candidate.CandidateType, "manufacturer", StringComparison.OrdinalIgnoreCase))
+                    ? "manufacturer"
+                    : preferred.CandidateType,
+                MatchedCategoryKeys = ordered.SelectMany(candidate => candidate.MatchedCategoryKeys)
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                MatchedBrandHints = ordered.SelectMany(candidate => candidate.MatchedBrandHints)
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                SearchReasons = ordered.SelectMany(candidate => candidate.SearchReasons)
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+            });
+        }
+
+        return collapsed;
     }
 
     private static IReadOnlyList<SourceCandidateReason> BuildReasons(
@@ -195,12 +243,12 @@ public sealed class SourceCandidateDiscoveryService(
 
     private static bool IsPotentialDuplicate(Core.Models.CrawlSource source, SourceCandidateSearchResult candidate)
     {
-        if (string.Equals(source.Host, candidate.Host, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(NormalizeHost(source.Host), NormalizeHost(candidate.Host), StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
-        if (string.Equals(source.BaseUrl.TrimEnd('/'), candidate.BaseUrl.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(NormalizeBaseUrl(source.BaseUrl), NormalizeBaseUrl(candidate.BaseUrl), StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -214,6 +262,53 @@ public sealed class SourceCandidateDiscoveryService(
             .Where(char.IsLetterOrDigit)
             .Select(char.ToLowerInvariant)
             .ToArray());
+    }
+
+    private static string GetCandidateEquivalenceKey(SourceCandidateSearchResult candidate)
+    {
+        var normalizedHost = NormalizeHost(candidate.Host);
+        if (!string.IsNullOrWhiteSpace(normalizedHost))
+        {
+            return $"host:{normalizedHost}";
+        }
+
+        return $"base:{NormalizeBaseUrl(candidate.BaseUrl)}";
+    }
+
+    private static int GetSearchSignalScore(SourceCandidateSearchResult candidate)
+    {
+        var score = 0;
+        score += candidate.MatchedCategoryKeys.Count * 10;
+        score += candidate.MatchedBrandHints.Count * 8;
+        score += candidate.SearchReasons.Count * 3;
+        if (string.Equals(candidate.CandidateType, "manufacturer", StringComparison.OrdinalIgnoreCase))
+        {
+            score += 5;
+        }
+
+        return score;
+    }
+
+    private static string NormalizeBaseUrl(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+        {
+            return value.Trim().TrimEnd('/').ToLowerInvariant();
+        }
+
+        var authority = uri.IsDefaultPort
+            ? $"{uri.Scheme.ToLowerInvariant()}://{NormalizeHost(uri.Host)}"
+            : $"{uri.Scheme.ToLowerInvariant()}://{NormalizeHost(uri.Host)}:{uri.Port}";
+        var path = string.IsNullOrWhiteSpace(uri.AbsolutePath) ? "/" : uri.AbsolutePath.TrimEnd('/');
+        return $"{authority}{path}";
+    }
+
+    private static string NormalizeHost(string value)
+    {
+        var normalized = value.Trim().TrimEnd('.');
+        return normalized.StartsWith("www.", StringComparison.OrdinalIgnoreCase)
+            ? normalized[4..]
+            : normalized;
     }
 
     private static List<string> NormalizeValues(IEnumerable<string>? values)

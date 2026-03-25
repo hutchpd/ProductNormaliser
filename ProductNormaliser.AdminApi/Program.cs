@@ -36,11 +36,24 @@ builder.Services.AddOpenApi(options =>
 builder.Services.AddProductNormaliserMongo(builder.Configuration);
 builder.Services.AddSingleton<IStructuredDataExtractor, SchemaOrgJsonLdExtractor>();
 builder.Services.AddHttpClient<IHttpFetcher, HttpFetcher>();
+builder.Services.AddHttpClient<ISourceCandidateSearchProvider, SearchApiSourceCandidateSearchProvider>((serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<SourceCandidateDiscoveryOptions>>().Value;
+    if (Uri.TryCreate(options.SearchApiBaseUrl, UriKind.Absolute, out var baseAddress))
+    {
+        client.BaseAddress = baseAddress;
+    }
+
+    if (!string.IsNullOrWhiteSpace(options.SearchApiKey))
+    {
+        client.DefaultRequestHeaders.Remove("X-Subscription-Token");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("X-Subscription-Token", options.SearchApiKey);
+    }
+});
 builder.Services.AddSingleton<ICategoryMetadataService, CategoryMetadataService>();
 builder.Services.AddSingleton<ICategoryManagementService, CategoryManagementService>();
 builder.Services.AddSingleton<ICrawlJobService, CrawlJobService>();
-builder.Services.AddSingleton<ISourceCandidateSearchProvider, NoOpSourceCandidateSearchProvider>();
-builder.Services.AddSingleton<ISourceCandidateProbeService, NoOpSourceCandidateProbeService>();
+builder.Services.AddSingleton<ISourceCandidateProbeService, HttpSourceCandidateProbeService>();
 builder.Services.AddSingleton<ISourceCandidateDiscoveryService, SourceCandidateDiscoveryService>();
 builder.Services.AddSingleton<ISourceManagementService, SourceManagementService>();
 builder.Services.AddSingleton<ISourceOperationalInsightsProvider, SourceOperationalInsightsProvider>();
