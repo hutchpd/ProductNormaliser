@@ -64,6 +64,8 @@ public sealed class SourceCandidateDiscoveryService(
             }
 
             var reasons = BuildReasons(searchResult, probe, duplicateSources, governanceWarning);
+            var duplicateRiskScore = CalculateDuplicateRiskScore(duplicateSources);
+            var recommendationStatus = DetermineRecommendationStatus(probe, duplicateRiskScore, allowedByGovernance);
             candidates.Add(new SourceCandidateResult
             {
                 CandidateKey = string.IsNullOrWhiteSpace(searchResult.CandidateKey) ? searchResult.Host : searchResult.CandidateKey,
@@ -71,7 +73,11 @@ public sealed class SourceCandidateDiscoveryService(
                 BaseUrl = searchResult.BaseUrl,
                 Host = searchResult.Host,
                 CandidateType = searchResult.CandidateType,
-                ConfidenceScore = CalculateConfidenceScore(probe, duplicateSources, allowedByGovernance),
+                ConfidenceScore = CalculateConfidenceScore(probe, duplicateRiskScore, allowedByGovernance),
+                CrawlabilityScore = probe.CrawlabilityScore,
+                ExtractabilityScore = probe.ExtractabilityScore,
+                DuplicateRiskScore = duplicateRiskScore,
+                RecommendationStatus = recommendationStatus,
                 MatchedCategoryKeys = NormalizeValues(searchResult.MatchedCategoryKeys),
                 MatchedBrandHints = NormalizeValues(searchResult.MatchedBrandHints),
                 AlreadyRegistered = duplicateSources.Any(source => string.Equals(source.Host, searchResult.Host, StringComparison.OrdinalIgnoreCase)),
@@ -182,6 +188,68 @@ public sealed class SourceCandidateDiscoveryService(
             });
         }
 
+        if (probe.RepresentativeCategoryPageReachable)
+        {
+            reasons.Add(new SourceCandidateReason
+            {
+                Code = "category_page",
+                Message = "A representative category page was reachable during probing.",
+                Weight = 18m
+            });
+        }
+
+        if (probe.RepresentativeProductPageReachable)
+        {
+            reasons.Add(new SourceCandidateReason
+            {
+                Code = "product_page",
+                Message = "A representative product page was reachable during probing.",
+                Weight = 22m
+            });
+        }
+
+        if (probe.StructuredProductEvidenceDetected)
+        {
+            reasons.Add(new SourceCandidateReason
+            {
+                Code = "structured_product_evidence",
+                Message = "Structured product evidence was detected on a representative product page.",
+                Weight = 32m
+            });
+        }
+
+        if (probe.TechnicalAttributeEvidenceDetected)
+        {
+            reasons.Add(new SourceCandidateReason
+            {
+                Code = "technical_attribute_evidence",
+                Message = "Technical attribute evidence was detected even without relying only on JSON-LD.",
+                Weight = 24m
+            });
+        }
+
+        if (probe.NonCatalogContentHeavy)
+        {
+            reasons.Add(new SourceCandidateReason
+            {
+                Code = "non_catalog_bias",
+                Message = "The sampled pages look more support, blog, or marketing heavy than product-catalog heavy.",
+                Weight = -28m
+            });
+        }
+
+        if (probe.RepresentativeProductPageReachable
+            && !probe.StructuredProductEvidenceDetected
+            && !probe.TechnicalAttributeEvidenceDetected)
+        {
+            reasons.Add(new SourceCandidateReason
+            {
+                Code = "weak_extractability",
+                Message = "Representative product pages were reachable but did not show useful product or technical-attribute evidence.",
+                Weight = -30m
+            });
+        }
+
         if (duplicateSources.Count > 0)
         {
             reasons.Add(new SourceCandidateReason
@@ -208,30 +276,13 @@ public sealed class SourceCandidateDiscoveryService(
             .ToArray();
     }
 
-    private static decimal CalculateConfidenceScore(SourceCandidateProbeResult probe, IReadOnlyCollection<Core.Models.CrawlSource> duplicateSources, bool allowedByGovernance)
+    private static decimal CalculateConfidenceScore(SourceCandidateProbeResult probe, decimal duplicateRiskScore, bool allowedByGovernance)
     {
-        var score = 15m;
-        if (probe.HomePageReachable)
-        {
-            score += 10m;
-        }
-
-        if (probe.RobotsTxtReachable)
-        {
-            score += 15m;
-        }
-
-        if (probe.SitemapDetected)
-        {
-            score += 20m;
-        }
-
-        score += Math.Clamp(probe.CategoryRelevanceScore, 0m, 40m);
-
-        if (duplicateSources.Count > 0)
-        {
-            score -= 35m;
-        }
+        var score = probe.CrawlabilityScore * 0.30m
+            + probe.CategoryRelevanceScore * 0.25m
+            + probe.ExtractabilityScore * 0.35m
+            + probe.CatalogLikelihoodScore * 0.10m
+            - (duplicateRiskScore * 0.35m);
 
         if (!allowedByGovernance)
         {
@@ -239,6 +290,47 @@ public sealed class SourceCandidateDiscoveryService(
         }
 
         return Math.Clamp(decimal.Round(score, 2, MidpointRounding.AwayFromZero), 0m, 100m);
+    }
+
+    private static decimal CalculateDuplicateRiskScore(IReadOnlyCollection<Core.Models.CrawlSource> duplicateSources)
+    {
+        if (duplicateSources.Count == 0)
+        {
+            return 0m;
+        }
+
+        return Math.Min(100m, 60m + ((duplicateSources.Count - 1) * 20m));
+    }
+
+    private static string DetermineRecommendationStatus(SourceCandidateProbeResult probe, decimal duplicateRiskScore, bool allowedByGovernance)
+    {
+        if (!allowedByGovernance)
+        {
+            return SourceCandidateResult.RecommendationDoNotAccept;
+        }
+
+        if (probe.RepresentativeProductPageReachable
+            && !probe.StructuredProductEvidenceDetected
+            && !probe.TechnicalAttributeEvidenceDetected)
+        {
+            return SourceCandidateResult.RecommendationDoNotAccept;
+        }
+
+        if (probe.CatalogLikelihoodScore < 25m && probe.CategoryRelevanceScore < 25m)
+        {
+            return SourceCandidateResult.RecommendationDoNotAccept;
+        }
+
+        if (probe.CrawlabilityScore >= 55m
+            && probe.CategoryRelevanceScore >= 35m
+            && probe.ExtractabilityScore >= 55m
+            && probe.CatalogLikelihoodScore >= 45m
+            && duplicateRiskScore < 50m)
+        {
+            return SourceCandidateResult.RecommendationRecommended;
+        }
+
+        return SourceCandidateResult.RecommendationManualReview;
     }
 
     private static bool IsPotentialDuplicate(Core.Models.CrawlSource source, SourceCandidateSearchResult candidate)

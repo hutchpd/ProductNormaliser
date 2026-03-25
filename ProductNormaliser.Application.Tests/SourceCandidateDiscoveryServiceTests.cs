@@ -52,12 +52,21 @@ public sealed class SourceCandidateDiscoveryServiceTests
                     RobotsTxtReachable = true,
                     SitemapDetected = true,
                     SitemapUrls = ["https://www.currys.co.uk/sitemap.xml"],
-                    CategoryRelevanceScore = 12m
+                    CrawlabilityScore = 80m,
+                    CategoryRelevanceScore = 55m,
+                    ExtractabilityScore = 62m,
+                    CatalogLikelihoodScore = 68m,
+                    RepresentativeCategoryPageReachable = true,
+                    RepresentativeProductPageReachable = true,
+                    StructuredProductEvidenceDetected = true,
+                    TechnicalAttributeEvidenceDetected = true
                 },
                 ["blocked.example"] = new SourceCandidateProbeResult
                 {
                     HomePageReachable = true,
-                    CategoryRelevanceScore = 8m
+                    CrawlabilityScore = 55m,
+                    CategoryRelevanceScore = 40m,
+                    CatalogLikelihoodScore = 42m
                 }
             });
         var service = CreateService(
@@ -83,7 +92,8 @@ public sealed class SourceCandidateDiscoveryServiceTests
             Assert.That(duplicateCandidate.DuplicateSourceIds, Is.EqualTo(new[] { "currys_uk" }));
             Assert.That(duplicateCandidate.DuplicateSourceDisplayNames, Is.EqualTo(new[] { "Currys" }));
             Assert.That(duplicateCandidate.AllowedByGovernance, Is.True);
-            Assert.That(duplicateCandidate.ConfidenceScore, Is.EqualTo(37m));
+            Assert.That(duplicateCandidate.ConfidenceScore, Is.GreaterThan(30m));
+            Assert.That(duplicateCandidate.RecommendationStatus, Is.EqualTo(SourceCandidateResult.RecommendationManualReview));
             Assert.That(duplicateCandidate.Reasons.Select(reason => reason.Code), Does.Contain("duplicate"));
             Assert.That(duplicateCandidate.Reasons.Select(reason => reason.Code), Does.Contain("sitemap"));
 
@@ -91,6 +101,7 @@ public sealed class SourceCandidateDiscoveryServiceTests
             Assert.That(blockedCandidate.AllowedByGovernance, Is.False);
             Assert.That(blockedCandidate.GovernanceWarning, Does.Contain("blocked by crawl governance rules"));
             Assert.That(blockedCandidate.ConfidenceScore, Is.EqualTo(10m));
+            Assert.That(blockedCandidate.RecommendationStatus, Is.EqualTo(SourceCandidateResult.RecommendationDoNotAccept));
             Assert.That(blockedCandidate.Reasons.Select(reason => reason.Code), Does.Contain("governance"));
         });
     }
@@ -155,9 +166,9 @@ public sealed class SourceCandidateDiscoveryServiceTests
         var probeService = new FakeSourceCandidateProbeService(
             new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
             {
-                ["gamma.example"] = new SourceCandidateProbeResult { CategoryRelevanceScore = 30m },
-                ["alpha.example"] = new SourceCandidateProbeResult { CategoryRelevanceScore = 20m },
-                ["beta.example"] = new SourceCandidateProbeResult { CategoryRelevanceScore = 10m }
+                ["gamma.example"] = new SourceCandidateProbeResult { CrawlabilityScore = 70m, CategoryRelevanceScore = 85m, ExtractabilityScore = 80m, CatalogLikelihoodScore = 70m },
+                ["alpha.example"] = new SourceCandidateProbeResult { CrawlabilityScore = 60m, CategoryRelevanceScore = 65m, ExtractabilityScore = 55m, CatalogLikelihoodScore = 60m },
+                ["beta.example"] = new SourceCandidateProbeResult { CrawlabilityScore = 50m, CategoryRelevanceScore = 35m, ExtractabilityScore = 25m, CatalogLikelihoodScore = 40m }
             });
         var service = CreateService(
             new FakeCrawlSourceStore(),
@@ -222,11 +233,12 @@ public sealed class SourceCandidateDiscoveryServiceTests
         {
             Assert.That(result.Candidates, Has.Count.EqualTo(1));
             Assert.That(result.Candidates[0].DisplayName, Is.EqualTo("AO Example"));
-            Assert.That(result.Candidates[0].ConfidenceScore, Is.EqualTo(15m));
+            Assert.That(result.Candidates[0].ConfidenceScore, Is.EqualTo(0m));
             Assert.That(result.Candidates[0].AllowedByGovernance, Is.True);
             Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Is.EqualTo(new[] { "search_match" }));
             Assert.That(result.Candidates[0].Probe.RobotsTxtReachable, Is.False);
             Assert.That(result.Candidates[0].Probe.SitemapDetected, Is.False);
+            Assert.That(result.Candidates[0].RecommendationStatus, Is.EqualTo(SourceCandidateResult.RecommendationDoNotAccept));
         });
     }
 
@@ -256,7 +268,14 @@ public sealed class SourceCandidateDiscoveryServiceTests
                         RobotsTxtReachable = true,
                         SitemapDetected = true,
                         SitemapUrls = ["https://rich.example/sitemap.xml"],
-                        CategoryRelevanceScore = 18m,
+                        CrawlabilityScore = 90m,
+                        CategoryRelevanceScore = 60m,
+                        ExtractabilityScore = 90m,
+                        CatalogLikelihoodScore = 75m,
+                        RepresentativeCategoryPageReachable = true,
+                        RepresentativeProductPageReachable = true,
+                        StructuredProductEvidenceDetected = true,
+                        TechnicalAttributeEvidenceDetected = true,
                         CategoryPageHints = ["https://rich.example/tv/"],
                         LikelyListingUrlPatterns = ["/tv/"],
                         LikelyProductUrlPatterns = ["/product/"]
@@ -272,10 +291,12 @@ public sealed class SourceCandidateDiscoveryServiceTests
         Assert.Multiple(() =>
         {
             Assert.That(result.Candidates, Has.Count.EqualTo(1));
-            Assert.That(result.Candidates[0].ConfidenceScore, Is.EqualTo(78m));
+            Assert.That(result.Candidates[0].ConfidenceScore, Is.GreaterThan(75m));
+            Assert.That(result.Candidates[0].RecommendationStatus, Is.EqualTo(SourceCandidateResult.RecommendationRecommended));
             Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("robots"));
             Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("sitemap"));
             Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("category_relevance"));
+            Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("structured_product_evidence"));
             Assert.That(result.Candidates[0].Probe.SitemapUrls, Is.EqualTo(new[] { "https://rich.example/sitemap.xml" }));
             Assert.That(result.Candidates[0].Probe.LikelyListingUrlPatterns, Is.EqualTo(new[] { "/tv/" }));
             Assert.That(result.Candidates[0].Probe.LikelyProductUrlPatterns, Is.EqualTo(new[] { "/product/" }));
@@ -307,7 +328,13 @@ public sealed class SourceCandidateDiscoveryServiceTests
                         HomePageReachable = true,
                         RobotsTxtReachable = true,
                         SitemapDetected = true,
-                        CategoryRelevanceScore = 40m
+                        CrawlabilityScore = 95m,
+                        CategoryRelevanceScore = 90m,
+                        ExtractabilityScore = 90m,
+                        CatalogLikelihoodScore = 80m,
+                        StructuredProductEvidenceDetected = true,
+                        TechnicalAttributeEvidenceDetected = true,
+                        RepresentativeProductPageReachable = true
                     }
                 }),
             new BlockingGovernanceService("blocked.example"));
@@ -322,6 +349,7 @@ public sealed class SourceCandidateDiscoveryServiceTests
             Assert.That(result.Candidates, Has.Count.EqualTo(1));
             Assert.That(result.Candidates[0].AllowedByGovernance, Is.False);
             Assert.That(result.Candidates[0].ConfidenceScore, Is.EqualTo(10m));
+            Assert.That(result.Candidates[0].RecommendationStatus, Is.EqualTo(SourceCandidateResult.RecommendationDoNotAccept));
             Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("governance"));
         });
     }
@@ -332,7 +360,7 @@ public sealed class SourceCandidateDiscoveryServiceTests
         var probeService = new FakeSourceCandidateProbeService(
             new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
             {
-                ["ao.example"] = new SourceCandidateProbeResult { CategoryRelevanceScore = 12m }
+                ["ao.example"] = new SourceCandidateProbeResult { CrawlabilityScore = 50m, CategoryRelevanceScore = 45m, ExtractabilityScore = 40m, CatalogLikelihoodScore = 55m }
             });
         var service = CreateService(
             new FakeCrawlSourceStore(),
@@ -369,6 +397,92 @@ public sealed class SourceCandidateDiscoveryServiceTests
             Assert.That(probeService.ProbeCallCount, Is.EqualTo(1));
             Assert.That(result.Candidates[0].Reasons.Count(reason => reason.Code == "search_match"), Is.EqualTo(2));
         });
+    }
+
+    [Test]
+    public async Task DiscoverAsync_DowngradesCandidate_WithGoodHomepageSignalsButPoorRepresentativeProductEvidence()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "support_heavy",
+                    DisplayName = "Support Heavy",
+                    BaseUrl = "https://support-heavy.example/",
+                    Host = "support-heavy.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new FakeSourceCandidateProbeService(
+                new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["support-heavy.example"] = new SourceCandidateProbeResult
+                    {
+                        HomePageReachable = true,
+                        RobotsTxtReachable = true,
+                        SitemapDetected = true,
+                        CrawlabilityScore = 80m,
+                        CategoryRelevanceScore = 50m,
+                        ExtractabilityScore = 10m,
+                        CatalogLikelihoodScore = 20m,
+                        RepresentativeCategoryPageReachable = true,
+                        RepresentativeProductPageReachable = true,
+                        NonCatalogContentHeavy = true
+                    }
+                }),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest { CategoryKeys = ["tv"] });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Candidates, Has.Count.EqualTo(1));
+            Assert.That(result.Candidates[0].RecommendationStatus, Is.EqualTo(SourceCandidateResult.RecommendationDoNotAccept));
+            Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("weak_extractability"));
+            Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("non_catalog_bias"));
+        });
+    }
+
+    [Test]
+    public async Task DiscoverAsync_MarksCrawlableButNonExtractableCandidate_ForManualReviewOrRejection()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "thin_specs",
+                    DisplayName = "Thin Specs",
+                    BaseUrl = "https://thin-specs.example/",
+                    Host = "thin-specs.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new FakeSourceCandidateProbeService(
+                new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["thin-specs.example"] = new SourceCandidateProbeResult
+                    {
+                        HomePageReachable = true,
+                        RobotsTxtReachable = true,
+                        CrawlabilityScore = 75m,
+                        CategoryRelevanceScore = 55m,
+                        ExtractabilityScore = 15m,
+                        CatalogLikelihoodScore = 55m,
+                        RepresentativeCategoryPageReachable = true,
+                        RepresentativeProductPageReachable = true
+                    }
+                }),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest { CategoryKeys = ["tv"] });
+
+        Assert.That(result.Candidates[0].RecommendationStatus, Is.EqualTo(SourceCandidateResult.RecommendationDoNotAccept));
     }
 
     [Test]

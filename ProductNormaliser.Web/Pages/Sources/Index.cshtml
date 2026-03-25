@@ -243,7 +243,10 @@
                                 <div class="subtle-copy mono">@candidate.Host</div>
                                 <div class="subtle-copy">@candidate.BaseUrl</div>
                             </div>
-                            <partial name="_StatusBadge" model='new ProductNormaliser.Web.Models.StatusBadgeModel { Text = $"{candidate.ConfidenceScore:0.#}% confidence", Tone = candidate.AllowedByGovernance ? "completed" : "warning" }' />
+                            <div class="d-flex flex-column align-items-end gap-2">
+                                <partial name="_StatusBadge" model='new ProductNormaliser.Web.Models.StatusBadgeModel { Text = Model.GetCandidateRecommendationLabel(candidate), Tone = Model.GetCandidateRecommendationTone(candidate) }' />
+                                <partial name="_StatusBadge" model='new ProductNormaliser.Web.Models.StatusBadgeModel { Text = $"{candidate.ConfidenceScore:0.#}% confidence", Tone = candidate.AllowedByGovernance ? "completed" : "warning" }' />
+                            </div>
                         </div>
 
                         <div class="chip-row compact-wrap">
@@ -271,9 +274,28 @@
                         <dl class="job-meta-grid compact mt-3">
                             <div><dt>Robots</dt><dd>@(candidate.Probe.RobotsTxtReachable ? "Reachable" : "Unknown")</dd></div>
                             <div><dt>Sitemap</dt><dd>@(candidate.Probe.SitemapDetected ? "Detected" : "None")</dd></div>
-                            <div><dt>Relevance</dt><dd>@candidate.Probe.CategoryRelevanceScore.ToString("0.##")</dd></div>
-                            <div><dt>Duplicates</dt><dd>@candidate.DuplicateSourceIds.Count</dd></div>
+                            <div><dt>Crawlability</dt><dd>@candidate.CrawlabilityScore.ToString("0.#")</dd></div>
+                            <div><dt>Relevance</dt><dd>@candidate.Probe.CategoryRelevanceScore.ToString("0.#")</dd></div>
+                            <div><dt>Extractability</dt><dd>@candidate.ExtractabilityScore.ToString("0.#")</dd></div>
+                            <div><dt>Catalog fit</dt><dd>@candidate.Probe.CatalogLikelihoodScore.ToString("0.#")</dd></div>
+                            <div><dt>Duplicate risk</dt><dd>@candidate.DuplicateRiskScore.ToString("0.#")</dd></div>
                         </dl>
+
+                        @if (candidate.Probe.RepresentativeCategoryPageReachable || candidate.Probe.RepresentativeProductPageReachable || candidate.Probe.StructuredProductEvidenceDetected || candidate.Probe.TechnicalAttributeEvidenceDetected)
+                        {
+                            <div class="subtle-copy mt-3">Representative evidence</div>
+                            <ul class="small mb-0">
+                                <li>Category page: @(candidate.Probe.RepresentativeCategoryPageReachable ? "reachable" : "not confirmed")@(string.IsNullOrWhiteSpace(candidate.Probe.RepresentativeCategoryPageUrl) ? string.Empty : $" ({candidate.Probe.RepresentativeCategoryPageUrl})")</li>
+                                <li>Product page: @(candidate.Probe.RepresentativeProductPageReachable ? "reachable" : "not confirmed")@(string.IsNullOrWhiteSpace(candidate.Probe.RepresentativeProductPageUrl) ? string.Empty : $" ({candidate.Probe.RepresentativeProductPageUrl})")</li>
+                                <li>Structured product evidence: @(candidate.Probe.StructuredProductEvidenceDetected ? "detected" : "not detected")</li>
+                                <li>Technical attribute evidence: @(candidate.Probe.TechnicalAttributeEvidenceDetected ? "detected" : "not detected")</li>
+                            </ul>
+                        }
+
+                        @if (candidate.Probe.NonCatalogContentHeavy)
+                        {
+                            <p class="subtle-copy mt-2">Sampled pages look more support, blog, or marketing heavy than product-catalog heavy.</p>
+                        }
 
                         @if (candidate.Reasons.Count > 0)
                         {
@@ -305,29 +327,52 @@
                             </ul>
                         }
 
-                        <form method="post" asp-page-handler="UseCandidate" class="mt-3">
-                            <input type="hidden" asp-for="CandidateSelection.CandidateKey" value="@candidate.CandidateKey" />
-                            <input type="hidden" asp-for="CandidateSelection.DisplayName" value="@candidate.DisplayName" />
-                            <input type="hidden" asp-for="CandidateSelection.BaseUrl" value="@candidate.BaseUrl" />
-                            @foreach (var categoryKey in candidate.MatchedCategoryKeys)
-                            {
-                                <input type="hidden" name="CandidateSelection.CategoryKeys" value="@categoryKey" />
-                            }
-                            @foreach (var categoryKey in Model.CandidateDiscovery.CategoryKeys)
-                            {
-                                <input type="hidden" name="CandidateDiscovery.CategoryKeys" value="@categoryKey" />
-                            }
-                            <input type="hidden" asp-for="CandidateDiscovery.Locale" />
-                            <input type="hidden" asp-for="CandidateDiscovery.Market" />
-                            <input type="hidden" asp-for="CandidateDiscovery.BrandHints" />
-                            <input type="hidden" asp-for="CandidateDiscovery.MaxCandidates" />
-
-                            <div class="actions-bar">
+                        <div class="actions-bar mt-3">
+                            <form method="post" asp-page-handler="UseCandidate">
+                                <input type="hidden" asp-for="CandidateSelection.CandidateKey" value="@candidate.CandidateKey" />
+                                <input type="hidden" asp-for="CandidateSelection.DisplayName" value="@candidate.DisplayName" />
+                                <input type="hidden" asp-for="CandidateSelection.BaseUrl" value="@candidate.BaseUrl" />
+                                <input type="hidden" asp-for="CandidateSelection.IsEnabled" value="true" />
+                                @foreach (var categoryKey in candidate.MatchedCategoryKeys)
+                                {
+                                    <input type="hidden" name="CandidateSelection.CategoryKeys" value="@categoryKey" />
+                                }
+                                @foreach (var categoryKey in Model.CandidateDiscovery.CategoryKeys)
+                                {
+                                    <input type="hidden" name="CandidateDiscovery.CategoryKeys" value="@categoryKey" />
+                                }
+                                <input type="hidden" asp-for="CandidateDiscovery.Locale" />
+                                <input type="hidden" asp-for="CandidateDiscovery.Market" />
+                                <input type="hidden" asp-for="CandidateDiscovery.BrandHints" />
+                                <input type="hidden" asp-for="CandidateDiscovery.MaxCandidates" />
                                 <button type="submit" class="btn btn-outline-secondary">Use candidate</button>
-                            </div>
-                        </form>
+                            </form>
 
-                        <p class="subtle-copy mt-2 mb-0">This pre-fills the existing registration form with editable values only. Nothing is registered until you submit the normal source registration form.</p>
+                            @if (Model.CanAcceptCandidate(candidate))
+                            {
+                                <form method="post" asp-page-handler="AcceptCandidate">
+                                    <input type="hidden" asp-for="CandidateSelection.CandidateKey" value="@candidate.CandidateKey" />
+                                    <input type="hidden" asp-for="CandidateSelection.DisplayName" value="@candidate.DisplayName" />
+                                    <input type="hidden" asp-for="CandidateSelection.BaseUrl" value="@candidate.BaseUrl" />
+                                    <input type="hidden" asp-for="CandidateSelection.IsEnabled" value="true" />
+                                    @foreach (var categoryKey in candidate.MatchedCategoryKeys)
+                                    {
+                                        <input type="hidden" name="CandidateSelection.CategoryKeys" value="@categoryKey" />
+                                    }
+                                    @foreach (var categoryKey in Model.CandidateDiscovery.CategoryKeys)
+                                    {
+                                        <input type="hidden" name="CandidateDiscovery.CategoryKeys" value="@categoryKey" />
+                                    }
+                                    <input type="hidden" asp-for="CandidateDiscovery.Locale" />
+                                    <input type="hidden" asp-for="CandidateDiscovery.Market" />
+                                    <input type="hidden" asp-for="CandidateDiscovery.BrandHints" />
+                                    <input type="hidden" asp-for="CandidateDiscovery.MaxCandidates" />
+                                    <button type="submit" class="btn btn-dark">Accept candidate</button>
+                                </form>
+                            }
+                        </div>
+
+                        <p class="subtle-copy mt-2 mb-0">Use candidate keeps the registration form editable. Accept candidate is only shown for recommended candidates and still registers through the same source registration pipeline.</p>
                     </article>
                 }
                 </div>

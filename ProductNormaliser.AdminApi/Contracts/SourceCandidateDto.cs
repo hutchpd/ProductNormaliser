@@ -8,6 +8,10 @@ public sealed class SourceCandidateDto
     public string Host { get; init; } = default!;
     public string CandidateType { get; init; } = default!;
     public decimal ConfidenceScore { get; init; }
+    public decimal CrawlabilityScore { get; init; }
+    public decimal ExtractabilityScore { get; init; }
+    public decimal DuplicateRiskScore { get; init; }
+    public string RecommendationStatus { get; init; } = string.Empty;
     public IReadOnlyList<string> MatchedCategoryKeys { get; init; } = [];
     public IReadOnlyList<string> MatchedBrandHints { get; init; } = [];
     public bool AlreadyRegistered { get; init; }

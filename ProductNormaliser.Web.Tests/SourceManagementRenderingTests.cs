@@ -239,6 +239,10 @@ public sealed class SourceManagementRenderingTests
                         Host = "www.currys.co.uk",
                         CandidateType = "retailer",
                         ConfidenceScore = 82m,
+                        CrawlabilityScore = 40m,
+                        ExtractabilityScore = 10m,
+                        DuplicateRiskScore = 60m,
+                        RecommendationStatus = "do_not_accept",
                         MatchedCategoryKeys = ["tv"],
                         AlreadyRegistered = true,
                         DuplicateSourceIds = ["currys_uk"],
@@ -249,7 +253,9 @@ public sealed class SourceManagementRenderingTests
                         {
                             RobotsTxtReachable = true,
                             SitemapDetected = true,
-                            SitemapUrls = ["https://www.currys.co.uk/sitemap.xml"]
+                            SitemapUrls = ["https://www.currys.co.uk/sitemap.xml"],
+                            CatalogLikelihoodScore = 20m,
+                            NonCatalogContentHeavy = true
                         },
                         Reasons =
                         [
@@ -286,8 +292,171 @@ public sealed class SourceManagementRenderingTests
             Assert.That(html, Does.Contain("Matches registered source"));
             Assert.That(html, Does.Contain("Governance review needed before registration."));
             Assert.That(html, Does.Contain("Use candidate"));
-            Assert.That(html, Does.Contain("Nothing is registered until you submit the normal source registration form."));
+            Assert.That(html, Does.Not.Contain("<button type=\"submit\" class=\"btn btn-dark\">Accept candidate</button>"));
+            Assert.That(html, Does.Contain("Do not accept"));
             Assert.That(html, Does.Contain("Duplicate match: Currys"));
+        });
+    }
+
+    [Test]
+    public async Task SourcesIndex_RendersAcceptCandidateAction_ForGovernanceApprovedUnregisteredCandidate()
+    {
+        var fakeAdminApiClient = new FakeAdminApiClient
+        {
+            Categories =
+            [
+                new CategoryMetadataDto
+                {
+                    CategoryKey = "tv",
+                    DisplayName = "TVs",
+                    FamilyKey = "display",
+                    FamilyDisplayName = "Display",
+                    IconKey = "tv",
+                    CrawlSupportStatus = "Supported",
+                    SchemaCompletenessScore = 0.95m,
+                    IsEnabled = true
+                }
+            ],
+            Sources = [],
+            SourceCandidateDiscoveryResponse = new SourceCandidateDiscoveryResponseDto
+            {
+                RequestedCategoryKeys = ["tv"],
+                GeneratedUtc = new DateTime(2026, 03, 25, 12, 00, 00, DateTimeKind.Utc),
+                Candidates =
+                [
+                    new SourceCandidateDto
+                    {
+                        CandidateKey = "richersounds_co_uk",
+                        DisplayName = "Richer Sounds",
+                        BaseUrl = "https://www.richersounds.com/",
+                        Host = "www.richersounds.com",
+                        CandidateType = "retailer",
+                        ConfidenceScore = 88m,
+                        CrawlabilityScore = 85m,
+                        ExtractabilityScore = 82m,
+                        DuplicateRiskScore = 0m,
+                        RecommendationStatus = "recommended",
+                        MatchedCategoryKeys = ["tv"],
+                        AlreadyRegistered = false,
+                        AllowedByGovernance = true,
+                        Probe = new SourceCandidateProbeDto
+                        {
+                            CrawlabilityScore = 85m,
+                            CategoryRelevanceScore = 72m,
+                            ExtractabilityScore = 82m,
+                            CatalogLikelihoodScore = 68m,
+                            RepresentativeCategoryPageReachable = true,
+                            RepresentativeProductPageReachable = true,
+                            StructuredProductEvidenceDetected = true,
+                            TechnicalAttributeEvidenceDetected = true
+                        },
+                        Reasons = []
+                    }
+                ]
+            }
+        };
+
+        await using var factory = new ProductWebApplicationFactory(fakeAdminApiClient);
+        using var client = await factory.CreateOperatorClientAsync();
+
+        var initialHtml = await client.GetStringAsync("/Sources/Index?category=tv");
+        var tokenMatch = Regex.Match(initialHtml, "<input name=\"__RequestVerificationToken\" type=\"hidden\" value=\"(?<token>[^\"]+)\"");
+        Assert.That(tokenMatch.Success, Is.True, "Expected antiforgery token on sources index form.");
+
+        var request = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["__RequestVerificationToken"] = tokenMatch.Groups["token"].Value,
+            ["CandidateDiscovery.CategoryKeys"] = "tv"
+        });
+        using var response = await client.PostAsync("/Sources/Index?handler=DiscoverCandidates", request);
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(html, Does.Contain("Use candidate"));
+            Assert.That(html, Does.Contain("Accept candidate"));
+            Assert.That(html, Does.Contain("Recommended"));
+            Assert.That(html, Does.Contain("Structured product evidence: detected"));
+        });
+    }
+
+    [Test]
+    public async Task SourcesIndex_RendersManualReviewCandidateState()
+    {
+        var fakeAdminApiClient = new FakeAdminApiClient
+        {
+            Categories =
+            [
+                new CategoryMetadataDto
+                {
+                    CategoryKey = "tv",
+                    DisplayName = "TVs",
+                    FamilyKey = "display",
+                    FamilyDisplayName = "Display",
+                    IconKey = "tv",
+                    CrawlSupportStatus = "Supported",
+                    SchemaCompletenessScore = 0.95m,
+                    IsEnabled = true
+                }
+            ],
+            Sources = [],
+            SourceCandidateDiscoveryResponse = new SourceCandidateDiscoveryResponseDto
+            {
+                RequestedCategoryKeys = ["tv"],
+                GeneratedUtc = DateTime.UtcNow,
+                Candidates =
+                [
+                    new SourceCandidateDto
+                    {
+                        CandidateKey = "manual_review_candidate",
+                        DisplayName = "Manual Review Candidate",
+                        BaseUrl = "https://manual-review.example/",
+                        Host = "manual-review.example",
+                        CandidateType = "retailer",
+                        ConfidenceScore = 49m,
+                        CrawlabilityScore = 70m,
+                        ExtractabilityScore = 30m,
+                        DuplicateRiskScore = 0m,
+                        RecommendationStatus = "manual_review",
+                        MatchedCategoryKeys = ["tv"],
+                        AllowedByGovernance = true,
+                        Probe = new SourceCandidateProbeDto
+                        {
+                            CrawlabilityScore = 70m,
+                            CategoryRelevanceScore = 55m,
+                            ExtractabilityScore = 30m,
+                            CatalogLikelihoodScore = 52m,
+                            RepresentativeCategoryPageReachable = true,
+                            RepresentativeProductPageReachable = true,
+                            StructuredProductEvidenceDetected = false,
+                            TechnicalAttributeEvidenceDetected = true
+                        },
+                        Reasons = []
+                    }
+                ]
+            }
+        };
+
+        await using var factory = new ProductWebApplicationFactory(fakeAdminApiClient);
+        using var client = await factory.CreateOperatorClientAsync();
+
+        var initialHtml = await client.GetStringAsync("/Sources/Index?category=tv");
+        var tokenMatch = Regex.Match(initialHtml, "<input name=\"__RequestVerificationToken\" type=\"hidden\" value=\"(?<token>[^\"]+)\"");
+        Assert.That(tokenMatch.Success, Is.True, "Expected antiforgery token on sources index form.");
+
+        var request = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["__RequestVerificationToken"] = tokenMatch.Groups["token"].Value,
+            ["CandidateDiscovery.CategoryKeys"] = "tv"
+        });
+        using var response = await client.PostAsync("/Sources/Index?handler=DiscoverCandidates", request);
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(html, Does.Contain("Manual review"));
+            Assert.That(html, Does.Contain("Use candidate"));
+            Assert.That(html, Does.Not.Contain("<button type=\"submit\" class=\"btn btn-dark\">Accept candidate</button>"));
         });
     }
 }

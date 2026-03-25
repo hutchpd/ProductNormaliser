@@ -80,6 +80,27 @@ public sealed class SourcesControllerTests
     }
 
     [Test]
+    public async Task RegisterSource_ReturnsValidationProblemForRegistrationRuleFailure()
+    {
+        var controller = new SourcesController(
+            new FakeSourceManagementService(registerException: new ArgumentException("Source 'alpha' already exists.", "registration")),
+            new FakeSourceOperationalInsightsProvider());
+
+        var result = await controller.RegisterSource(new RegisterSourceRequest
+        {
+            SourceId = "alpha",
+            DisplayName = "Alpha",
+            BaseUrl = "https://alpha.example",
+            SupportedCategoryKeys = ["tv"]
+        });
+
+        Assert.That(result, Is.InstanceOf<ObjectResult>());
+        var objectResult = (ObjectResult)result;
+        Assert.That(objectResult.StatusCode, Is.EqualTo(400));
+        Assert.That(objectResult.Value, Is.TypeOf<ValidationProblemDetails>());
+    }
+
+    [Test]
     public async Task AssignCategories_ReturnsValidationProblemForUnknownCategory()
     {
         var controller = new SourcesController(new FakeSourceManagementService(assignCategoriesException: new ArgumentException("Unknown category keys: smartwatch.", "categoryKeys")), new FakeSourceOperationalInsightsProvider());
@@ -165,10 +186,12 @@ public sealed class SourcesControllerTests
 
     private sealed class FakeSourceManagementService(
         CrawlSource? source = null,
+        Exception? registerException = null,
         Exception? assignCategoriesException = null,
         Exception? throttlingException = null) : ISourceManagementService
     {
         private readonly List<CrawlSource> sources = source is null ? [] : [source];
+        private readonly Exception? registerException = registerException;
         private readonly Exception? assignCategoriesException = assignCategoriesException;
         private readonly Exception? throttlingException = throttlingException;
 
@@ -180,6 +203,11 @@ public sealed class SourcesControllerTests
 
         public Task<CrawlSource> RegisterAsync(CrawlSourceRegistration registration, CancellationToken cancellationToken = default)
         {
+            if (registerException is not null)
+            {
+                throw registerException;
+            }
+
             var created = CreateSource(registration.SourceId, registration.IsEnabled);
             created.DisplayName = registration.DisplayName;
             created.BaseUrl = registration.BaseUrl;

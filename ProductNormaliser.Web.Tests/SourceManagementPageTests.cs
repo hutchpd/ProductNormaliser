@@ -299,6 +299,130 @@ public sealed class SourceManagementPageTests
     }
 
     [Test]
+    public async Task SourcesIndex_OnPostAcceptCandidateAsync_RegistersCandidateAndRedirectsToDetails()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            Sources = [],
+            SourceCandidateDiscoveryResponse = new SourceCandidateDiscoveryResponseDto
+            {
+                RequestedCategoryKeys = ["tv"],
+                GeneratedUtc = DateTime.UtcNow,
+                Candidates =
+                [
+                    new SourceCandidateDto
+                    {
+                        CandidateKey = "currys_co_uk",
+                        DisplayName = "Currys",
+                        BaseUrl = "https://www.currys.co.uk/",
+                        Host = "www.currys.co.uk",
+                        CandidateType = "retailer",
+                        ConfidenceScore = 82m,
+                        MatchedCategoryKeys = ["tv"],
+                        AllowedByGovernance = true,
+                        Probe = new SourceCandidateProbeDto(),
+                        Reasons = []
+                    }
+                ]
+            }
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IndexModel>.Instance)
+        {
+            CandidateDiscovery = new ProductNormaliser.Web.Pages.Sources.IndexModel.DiscoverSourceCandidatesInput
+            {
+                CategoryKeys = ["tv"],
+                Locale = "en-GB",
+                Market = "UK"
+            },
+            CandidateSelection = new ProductNormaliser.Web.Pages.Sources.IndexModel.UseCandidateInput
+            {
+                CandidateKey = "currys_co_uk",
+                DisplayName = "Currys",
+                BaseUrl = "https://www.currys.co.uk/",
+                IsEnabled = true,
+                CategoryKeys = ["tv"]
+            }
+        };
+
+        var result = await model.OnPostAcceptCandidateAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
+            Assert.That(client.LastRegisteredSourceRequest, Is.Not.Null);
+            Assert.That(client.LastRegisteredSourceRequest!.SourceId, Is.EqualTo("currys_co_uk"));
+            Assert.That(client.LastRegisteredSourceRequest.DisplayName, Is.EqualTo("Currys"));
+            Assert.That(client.LastRegisteredSourceRequest.BaseUrl, Is.EqualTo("https://www.currys.co.uk/"));
+            Assert.That(client.LastRegisteredSourceRequest.SupportedCategoryKeys, Is.EqualTo(new[] { "tv" }));
+        });
+    }
+
+    [Test]
+    public async Task SourcesIndex_OnPostAcceptCandidateAsync_AddsValidationErrorsAndKeepsManualFallback()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            SourceRegistrationException = new AdminApiValidationException(
+                "Validation failed.",
+                new Dictionary<string, string[]>
+                {
+                    ["request"] = ["Source 'currys_co_uk' already exists."]
+                }),
+            SourceCandidateDiscoveryResponse = new SourceCandidateDiscoveryResponseDto
+            {
+                RequestedCategoryKeys = ["tv"],
+                GeneratedUtc = DateTime.UtcNow,
+                Candidates =
+                [
+                    new SourceCandidateDto
+                    {
+                        CandidateKey = "currys_co_uk",
+                        DisplayName = "Currys",
+                        BaseUrl = "https://www.currys.co.uk/",
+                        Host = "www.currys.co.uk",
+                        CandidateType = "retailer",
+                        ConfidenceScore = 82m,
+                        MatchedCategoryKeys = ["tv"],
+                        AllowedByGovernance = true,
+                        Probe = new SourceCandidateProbeDto(),
+                        Reasons = []
+                    }
+                ]
+            }
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IndexModel>.Instance)
+        {
+            CandidateDiscovery = new ProductNormaliser.Web.Pages.Sources.IndexModel.DiscoverSourceCandidatesInput
+            {
+                CategoryKeys = ["tv"]
+            },
+            CandidateSelection = new ProductNormaliser.Web.Pages.Sources.IndexModel.UseCandidateInput
+            {
+                CandidateKey = "currys_co_uk",
+                DisplayName = "Currys",
+                BaseUrl = "https://www.currys.co.uk/",
+                IsEnabled = true,
+                CategoryKeys = ["tv"]
+            }
+        };
+
+        var result = await model.OnPostAcceptCandidateAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<PageResult>());
+            Assert.That(model.ModelState[string.Empty]!.Errors.Select(error => error.ErrorMessage), Does.Contain("Source 'currys_co_uk' already exists."));
+            Assert.That(model.Registration.SourceId, Is.EqualTo("currys_co_uk"));
+            Assert.That(model.Registration.DisplayName, Is.EqualTo("Currys"));
+            Assert.That(model.CandidateDiscoveryResult, Is.Not.Null);
+        });
+    }
+
+    [Test]
     public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_AddsModelErrorsForValidationProblem()
     {
         var client = new FakeAdminApiClient

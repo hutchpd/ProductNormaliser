@@ -4,6 +4,13 @@ namespace ProductNormaliser.Web.Services;
 
 internal static class AdminApiContractValidator
 {
+    private static readonly IReadOnlySet<string> CandidateRecommendationStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "recommended",
+        "manual_review",
+        "do_not_accept"
+    };
+
     private static readonly HashSet<string> CrawlSupportStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
         "Planned",
@@ -252,6 +259,7 @@ internal static class AdminApiContractValidator
         ValidateRequiredString(payload.BaseUrl, $"{path}.baseUrl");
         ValidateRequiredString(payload.Host, $"{path}.host");
         ValidateRequiredString(payload.CandidateType, $"{path}.candidateType");
+        ValidateEnumValue(payload.RecommendationStatus, CandidateRecommendationStatuses, $"{path}.recommendationStatus", value => value);
         ValidateStringItems(payload.MatchedCategoryKeys, $"{path}.matchedCategoryKeys");
         ValidateStringItems(payload.MatchedBrandHints, $"{path}.matchedBrandHints");
         ValidateStringItems(payload.DuplicateSourceIds, $"{path}.duplicateSourceIds");

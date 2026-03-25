@@ -26,6 +26,10 @@ public sealed class SourceCandidateDiscoveryControllerTests
                     Host = "samsung.example",
                     CandidateType = "manufacturer",
                     ConfidenceScore = 82m,
+                    CrawlabilityScore = 90m,
+                    ExtractabilityScore = 88m,
+                    DuplicateRiskScore = 0m,
+                    RecommendationStatus = SourceCandidateResult.RecommendationRecommended,
                     MatchedCategoryKeys = ["tv"],
                     MatchedBrandHints = ["Samsung"],
                     AlreadyRegistered = false,
@@ -36,7 +40,16 @@ public sealed class SourceCandidateDiscoveryControllerTests
                         RobotsTxtReachable = true,
                         SitemapDetected = true,
                         SitemapUrls = ["https://samsung.example/sitemap.xml"],
+                        CrawlabilityScore = 90m,
                         CategoryRelevanceScore = 18m,
+                        ExtractabilityScore = 88m,
+                        CatalogLikelihoodScore = 72m,
+                        RepresentativeCategoryPageUrl = "https://samsung.example/tv/",
+                        RepresentativeCategoryPageReachable = true,
+                        RepresentativeProductPageUrl = "https://samsung.example/product/oled-1",
+                        RepresentativeProductPageReachable = true,
+                        StructuredProductEvidenceDetected = true,
+                        TechnicalAttributeEvidenceDetected = true,
                         CategoryPageHints = ["https://samsung.example/tv/"],
                         LikelyListingUrlPatterns = ["/tv/"],
                         LikelyProductUrlPatterns = ["/product/"]
@@ -73,7 +86,9 @@ public sealed class SourceCandidateDiscoveryControllerTests
             Assert.That(payload.Locale, Is.EqualTo("en-GB"));
             Assert.That(payload.Candidates, Has.Count.EqualTo(1));
             Assert.That(payload.Candidates[0].DisplayName, Is.EqualTo("Samsung Official Store"));
+            Assert.That(payload.Candidates[0].RecommendationStatus, Is.EqualTo("recommended"));
             Assert.That(payload.Candidates[0].Probe.SitemapUrls, Is.EqualTo(new[] { "https://samsung.example/sitemap.xml" }));
+            Assert.That(payload.Candidates[0].Probe.StructuredProductEvidenceDetected, Is.True);
             Assert.That(payload.Candidates[0].Reasons[0].Code, Is.EqualTo("search_match"));
         });
     }

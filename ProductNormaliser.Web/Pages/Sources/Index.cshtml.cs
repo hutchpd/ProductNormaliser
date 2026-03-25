@@ -88,39 +88,7 @@ public sealed class IndexModel(
             return Page();
         }
 
-        try
-        {
-            var source = await adminApiClient.RegisterSourceAsync(new RegisterSourceRequest
-            {
-                SourceId = Registration.SourceId,
-                DisplayName = Registration.DisplayName,
-                BaseUrl = Registration.BaseUrl,
-                Description = Registration.Description,
-                IsEnabled = Registration.IsEnabled,
-                SupportedCategoryKeys = Registration.CategoryKeys
-            }, cancellationToken);
-
-            StatusMessage = $"Registered source '{source.DisplayName}'. Startup discovery defaults were applied automatically.";
-            return RedirectToPage("/Sources/Details", new { sourceId = source.SourceId });
-        }
-        catch (AdminApiValidationException exception)
-        {
-            foreach (var entry in exception.Errors)
-            {
-                foreach (var message in entry.Value)
-                {
-                    ModelState.AddModelError(string.Empty, message);
-                }
-            }
-        }
-        catch (AdminApiException exception)
-        {
-            logger.LogWarning(exception, "Failed to register source from sources index.");
-            ErrorMessage = exception.Message;
-        }
-
-        await LoadAsync(cancellationToken);
-        return Page();
+        return await RegisterAsync(Registration, acceptedFromCandidate: false, cancellationToken);
     }
 
     public async Task<IActionResult> OnPostDiscoverCandidatesAsync(CancellationToken cancellationToken)
@@ -141,6 +109,15 @@ public sealed class IndexModel(
         StatusMessage = $"Prefilled registration from candidate '{Registration.DisplayName}'. Review and submit to register the source.";
 
         return Page();
+    }
+
+    public async Task<IActionResult> OnPostAcceptCandidateAsync(CancellationToken cancellationToken)
+    {
+        await LoadAsync(cancellationToken);
+        await DiscoverCandidatesAsync(addValidationErrorWhenEmpty: false, cancellationToken);
+
+        ApplyCandidateToRegistration(CandidateSelection);
+        return await RegisterAsync(Registration, acceptedFromCandidate: true, cancellationToken);
     }
 
     public async Task<IActionResult> OnPostToggleAsync(string sourceId, bool currentlyEnabled, string? category, string? search, bool? enabled, CancellationToken cancellationToken)
@@ -231,6 +208,33 @@ public sealed class IndexModel(
         }
 
         return "Ready to seed discovery from startup defaults or an edited profile.";
+    }
+
+    public string GetCandidateRecommendationLabel(SourceCandidateDto candidate)
+    {
+        return candidate.RecommendationStatus switch
+        {
+            "recommended" => "Recommended",
+            "do_not_accept" => "Do not accept",
+            _ => "Manual review"
+        };
+    }
+
+    public string GetCandidateRecommendationTone(SourceCandidateDto candidate)
+    {
+        return candidate.RecommendationStatus switch
+        {
+            "recommended" => "completed",
+            "do_not_accept" => "warning",
+            _ => "pending"
+        };
+    }
+
+    public bool CanAcceptCandidate(SourceCandidateDto candidate)
+    {
+        return !candidate.AlreadyRegistered
+            && candidate.AllowedByGovernance
+            && string.Equals(candidate.RecommendationStatus, "recommended", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task LoadAsync(CancellationToken cancellationToken)
@@ -371,6 +375,47 @@ public sealed class IndexModel(
         }
     }
 
+    private async Task<IActionResult> RegisterAsync(RegisterSourceInput registration, bool acceptedFromCandidate, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var source = await adminApiClient.RegisterSourceAsync(new RegisterSourceRequest
+            {
+                SourceId = registration.SourceId,
+                DisplayName = registration.DisplayName,
+                BaseUrl = registration.BaseUrl,
+                Description = registration.Description,
+                IsEnabled = registration.IsEnabled,
+                SupportedCategoryKeys = registration.CategoryKeys
+            }, cancellationToken);
+
+            StatusMessage = acceptedFromCandidate
+                ? $"Accepted candidate '{source.DisplayName}' and registered it as a managed source. Startup discovery defaults were applied automatically."
+                : $"Registered source '{source.DisplayName}'. Startup discovery defaults were applied automatically.";
+            return RedirectToPage("/Sources/Details", new { sourceId = source.SourceId });
+        }
+        catch (AdminApiValidationException exception)
+        {
+            foreach (var entry in exception.Errors)
+            {
+                foreach (var message in entry.Value)
+                {
+                    ModelState.AddModelError(string.Empty, message);
+                }
+            }
+        }
+        catch (AdminApiException exception)
+        {
+            logger.LogWarning(exception, acceptedFromCandidate
+                ? "Failed to accept candidate from sources index."
+                : "Failed to register source from sources index.");
+            ErrorMessage = exception.Message;
+        }
+
+        await LoadAsync(cancellationToken);
+        return Page();
+    }
+
     private void ApplyCandidateToRegistration(UseCandidateInput candidate)
     {
         var categoryKeys = NormalizeValues(candidate.CategoryKeys);
@@ -385,7 +430,7 @@ public sealed class IndexModel(
             DisplayName = candidate.DisplayName.Trim(),
             BaseUrl = NormalizeBaseUrl(candidate.BaseUrl),
             Description = Registration.Description,
-            IsEnabled = Registration.IsEnabled,
+            IsEnabled = candidate.IsEnabled,
             CategoryKeys = categoryKeys
         };
     }
@@ -520,6 +565,8 @@ public sealed class IndexModel(
         public string DisplayName { get; set; } = string.Empty;
 
         public string BaseUrl { get; set; } = string.Empty;
+
+        public bool IsEnabled { get; set; } = true;
 
         public List<string> CategoryKeys { get; set; } = [];
     }

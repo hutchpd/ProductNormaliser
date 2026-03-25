@@ -10,6 +10,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public Exception? CategoryDetailException { get; set; }
     public Exception? SourcesException { get; set; }
     public Exception? SourceCandidateDiscoveryException { get; set; }
+    public Exception? SourceRegistrationException { get; set; }
     public Exception? CrawlJobsException { get; set; }
     public StatsDto Stats { get; set; } = new();
     public IReadOnlyList<CategoryMetadataDto> Categories { get; set; } = [];
@@ -215,6 +216,11 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         => Task.FromResult(Source ?? Sources.FirstOrDefault(item => string.Equals(item.SourceId, sourceId, StringComparison.OrdinalIgnoreCase)));
     public Task<SourceDto> RegisterSourceAsync(RegisterSourceRequest request, CancellationToken cancellationToken = default)
     {
+        if (SourceRegistrationException is not null)
+        {
+            return Task.FromException<SourceDto>(SourceRegistrationException);
+        }
+
         LastRegisteredSourceRequest = request;
 
         var source = new SourceDto

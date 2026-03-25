@@ -1,12 +1,16 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using ProductNormaliser.Application.Sources;
+using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Infrastructure.Crawling;
 
 namespace ProductNormaliser.Infrastructure.Sources;
 
-public sealed partial class HttpSourceCandidateProbeService(IHttpFetcher httpFetcher, IOptions<SourceCandidateDiscoveryOptions> options) : ISourceCandidateProbeService
+public sealed partial class HttpSourceCandidateProbeService(
+    IHttpFetcher httpFetcher,
+    IStructuredDataExtractor structuredDataExtractor,
+    IOptions<SourceCandidateDiscoveryOptions> options) : ISourceCandidateProbeService
 {
     private readonly SourceCandidateDiscoveryOptions options = options.Value;
 
@@ -27,6 +31,18 @@ public sealed partial class HttpSourceCandidateProbeService(IHttpFetcher httpFet
         var robotsText = await robotsTask;
         var sitemapUrls = ExtractSitemapUrls(candidate.BaseUrl, robotsText, homePageHtml);
         var categoryPageHints = ExtractCategoryPageHints(homePageHtml, categoryKeys);
+        var representativeCategoryPageUrl = categoryPageHints.FirstOrDefault();
+        var representativeCategoryPageHtml = await TryFetchRepresentativeAsync(candidate.BaseUrl, representativeCategoryPageUrl, timeoutCts.Token);
+        var representativeProductPageUrl = ExtractRepresentativeProductPageUrl(candidate.BaseUrl, homePageHtml, representativeCategoryPageHtml);
+        var representativeProductPageHtml = await TryFetchRepresentativeAsync(candidate.BaseUrl, representativeProductPageUrl, timeoutCts.Token);
+        var likelyListingUrlPatterns = InferListingUrlPatterns(categoryPageHints);
+        var likelyProductUrlPatterns = InferProductUrlPatterns(string.Join('\n', new[] { homePageHtml, representativeCategoryPageHtml }.Where(value => !string.IsNullOrWhiteSpace(value))));
+        var structuredProductEvidenceDetected = HasStructuredProductEvidence(representativeProductPageHtml, representativeProductPageUrl);
+        var technicalAttributeEvidenceDetected = HasTechnicalAttributeEvidence(representativeProductPageHtml);
+        var catalogLikelihoodScore = ScoreCatalogLikelihood(homePageHtml, representativeCategoryPageHtml, representativeProductPageUrl);
+        var categoryRelevanceScore = ScoreCategoryRelevance(categoryKeys, homePageHtml, representativeCategoryPageHtml, categoryPageHints);
+        var crawlabilityScore = ScoreCrawlability(homePageHtml, robotsText, sitemapUrls.Count > 0, representativeCategoryPageHtml, representativeProductPageHtml);
+        var extractabilityScore = ScoreExtractability(structuredProductEvidenceDetected, technicalAttributeEvidenceDetected, representativeProductPageHtml);
 
         return new SourceCandidateProbeResult
         {
@@ -34,11 +50,36 @@ public sealed partial class HttpSourceCandidateProbeService(IHttpFetcher httpFet
             RobotsTxtReachable = robotsText is not null,
             SitemapDetected = sitemapUrls.Count > 0,
             SitemapUrls = sitemapUrls,
-            CategoryRelevanceScore = ScoreCategoryRelevance(categoryKeys, homePageHtml, categoryPageHints),
+            CrawlabilityScore = crawlabilityScore,
+            CategoryRelevanceScore = categoryRelevanceScore,
+            ExtractabilityScore = extractabilityScore,
+            CatalogLikelihoodScore = catalogLikelihoodScore,
+            RepresentativeCategoryPageUrl = representativeCategoryPageUrl,
+            RepresentativeCategoryPageReachable = representativeCategoryPageHtml is not null,
+            RepresentativeProductPageUrl = representativeProductPageUrl,
+            RepresentativeProductPageReachable = representativeProductPageHtml is not null,
+            StructuredProductEvidenceDetected = structuredProductEvidenceDetected,
+            TechnicalAttributeEvidenceDetected = technicalAttributeEvidenceDetected,
+            NonCatalogContentHeavy = catalogLikelihoodScore <= 40m,
             CategoryPageHints = categoryPageHints,
-            LikelyListingUrlPatterns = InferListingUrlPatterns(categoryPageHints),
-            LikelyProductUrlPatterns = InferProductUrlPatterns(homePageHtml)
+            LikelyListingUrlPatterns = likelyListingUrlPatterns,
+            LikelyProductUrlPatterns = likelyProductUrlPatterns
         };
+    }
+
+    private async Task<string?> TryFetchRepresentativeAsync(string baseUrl, string? candidateUrl, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(candidateUrl))
+        {
+            return null;
+        }
+
+        if (!Uri.TryCreate(new Uri(baseUrl, UriKind.Absolute), candidateUrl, out var absoluteUri))
+        {
+            return null;
+        }
+
+        return await TryFetchTextAsync(absoluteUri.ToString(), cancellationToken);
     }
 
     private async Task<string?> TryFetchTextAsync(string absoluteUrl, CancellationToken cancellationToken)
@@ -167,6 +208,32 @@ public sealed partial class HttpSourceCandidateProbeService(IHttpFetcher httpFet
         return patterns.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
+    private static string? ExtractRepresentativeProductPageUrl(string baseUrl, params string?[] htmlFragments)
+    {
+        foreach (var html in htmlFragments)
+        {
+            if (string.IsNullOrWhiteSpace(html))
+            {
+                continue;
+            }
+
+            foreach (var href in ExtractHrefs(html))
+            {
+                if (!LooksLikeProductLink(href))
+                {
+                    continue;
+                }
+
+                if (Uri.TryCreate(new Uri(baseUrl, UriKind.Absolute), href, out var productUri))
+                {
+                    return productUri.ToString();
+                }
+            }
+        }
+
+        return null;
+    }
+
     private static IReadOnlyList<string> InferProductUrlPatterns(string? homePageHtml)
     {
         if (string.IsNullOrWhiteSpace(homePageHtml))
@@ -206,7 +273,7 @@ public sealed partial class HttpSourceCandidateProbeService(IHttpFetcher httpFet
         return patterns.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    private static decimal ScoreCategoryRelevance(IReadOnlyCollection<string> categoryKeys, string? homePageHtml, IEnumerable<string> categoryPageHints)
+    private static decimal ScoreCategoryRelevance(IReadOnlyCollection<string> categoryKeys, string? homePageHtml, string? representativeCategoryPageHtml, IEnumerable<string> categoryPageHints)
     {
         if (categoryKeys.Count == 0)
         {
@@ -214,19 +281,198 @@ public sealed partial class HttpSourceCandidateProbeService(IHttpFetcher httpFet
         }
 
         var score = 0m;
-        var html = homePageHtml ?? string.Empty;
+        var html = string.Join(' ', new[] { homePageHtml, representativeCategoryPageHtml }.Where(value => !string.IsNullOrWhiteSpace(value)));
         foreach (var categoryKey in categoryKeys.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             if (html.Contains(categoryKey, StringComparison.OrdinalIgnoreCase))
             {
-                score += 6m;
+                score += 15m;
             }
         }
 
         var hintCount = categoryPageHints.Count();
-        score += Math.Min(22m, hintCount * 6m);
+        score += Math.Min(55m, hintCount * 12m);
 
-        return Math.Min(40m, score);
+        return Math.Min(100m, score);
+    }
+
+    private decimal ScoreExtractability(bool structuredProductEvidenceDetected, bool technicalAttributeEvidenceDetected, string? representativeProductPageHtml)
+    {
+        var score = 0m;
+        if (!string.IsNullOrWhiteSpace(representativeProductPageHtml))
+        {
+            score += 10m;
+        }
+
+        if (structuredProductEvidenceDetected)
+        {
+            score += 60m;
+        }
+
+        if (technicalAttributeEvidenceDetected)
+        {
+            score += 30m;
+        }
+
+        return Math.Min(100m, score);
+    }
+
+    private static decimal ScoreCrawlability(string? homePageHtml, string? robotsText, bool sitemapDetected, string? representativeCategoryPageHtml, string? representativeProductPageHtml)
+    {
+        var score = 0m;
+        if (homePageHtml is not null)
+        {
+            score += 30m;
+        }
+
+        if (robotsText is not null)
+        {
+            score += 20m;
+        }
+
+        if (sitemapDetected)
+        {
+            score += 20m;
+        }
+
+        if (representativeCategoryPageHtml is not null)
+        {
+            score += 15m;
+        }
+
+        if (representativeProductPageHtml is not null)
+        {
+            score += 15m;
+        }
+
+        return Math.Min(100m, score);
+    }
+
+    private static decimal ScoreCatalogLikelihood(string? homePageHtml, string? representativeCategoryPageHtml, string? representativeProductPageUrl)
+    {
+        var catalogSignals = 0;
+        var nonCatalogSignals = 0;
+
+        foreach (var href in ExtractHrefs(string.Join('\n', new[] { homePageHtml, representativeCategoryPageHtml }.Where(value => !string.IsNullOrWhiteSpace(value)))))
+        {
+            if (LooksLikeCatalogLink(href))
+            {
+                catalogSignals++;
+            }
+
+            if (LooksLikeNonCatalogLink(href))
+            {
+                nonCatalogSignals++;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(representativeProductPageUrl))
+        {
+            catalogSignals += 3;
+        }
+
+        var raw = 50m + (catalogSignals * 6m) - (nonCatalogSignals * 7m);
+        return Math.Clamp(raw, 0m, 100m);
+    }
+
+    private bool HasStructuredProductEvidence(string? html, string? url)
+    {
+        if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(url))
+        {
+            return false;
+        }
+
+        if (html.Contains("application/ld+json", StringComparison.OrdinalIgnoreCase)
+            && html.Contains("Product", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return structuredDataExtractor.ExtractProducts(html, url).Count > 0
+            || html.Contains("\"@type\":\"Product\"", StringComparison.OrdinalIgnoreCase)
+            || html.Contains("\"@type\": \"Product\"", StringComparison.OrdinalIgnoreCase)
+            || html.Contains("'@type':'Product'", StringComparison.OrdinalIgnoreCase)
+            || html.Contains("schema.org/Product", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasTechnicalAttributeEvidence(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return false;
+        }
+
+        if ((html.Contains("specifications", StringComparison.OrdinalIgnoreCase)
+                || html.Contains("technical details", StringComparison.OrdinalIgnoreCase)
+                || html.Contains("product details", StringComparison.OrdinalIgnoreCase))
+            && TableSignalRegex().IsMatch(html))
+        {
+            return true;
+        }
+
+        var signalCount = 0;
+        if (html.Contains("specifications", StringComparison.OrdinalIgnoreCase)
+            || html.Contains("technical details", StringComparison.OrdinalIgnoreCase)
+            || html.Contains("key features", StringComparison.OrdinalIgnoreCase)
+            || html.Contains("product details", StringComparison.OrdinalIgnoreCase))
+        {
+            signalCount += 2;
+        }
+
+        if (TableSignalRegex().IsMatch(html))
+        {
+            signalCount += 2;
+        }
+
+        if (TechAttributeRegex().Matches(html).Count >= 2)
+        {
+            signalCount += 2;
+        }
+
+        return signalCount >= 2;
+    }
+
+    private static bool LooksLikeCatalogLink(string href)
+    {
+        return href.Contains("/product/", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/products/", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/p/", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/category/", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/shop/", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/browse/", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/department/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool LooksLikeProductLink(string href)
+    {
+        if (href.Contains("/category/", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/department/", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/shop/", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/browse/", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/support", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/help", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/blog", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/news", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return href.Contains("/product/", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/products/", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/p/", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/dp/", StringComparison.OrdinalIgnoreCase)
+            || ProductSlugRegex().IsMatch(href);
+    }
+
+    private static bool LooksLikeNonCatalogLink(string href)
+    {
+        return href.Contains("/support", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/help", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/blog", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/news", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/contact", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/about", StringComparison.OrdinalIgnoreCase)
+            || href.Contains("/search", StringComparison.OrdinalIgnoreCase);
     }
 
     private static IReadOnlyList<string> ExtractHrefs(string html)
@@ -243,4 +489,13 @@ public sealed partial class HttpSourceCandidateProbeService(IHttpFetcher httpFet
 
     [GeneratedRegex("href\\s*=\\s*[\"'](?<href>[^\"'#>]+)[\"']", RegexOptions.IgnoreCase)]
     private static partial Regex HrefRegex();
+
+    [GeneratedRegex("<(table|dl|th|td)\\b", RegexOptions.IgnoreCase)]
+    private static partial Regex TableSignalRegex();
+
+    [GeneratedRegex("(screen size|resolution|hdmi|refresh rate|panel type|processor|memory|storage|weight|dimensions|bluetooth|wifi)", RegexOptions.IgnoreCase)]
+    private static partial Regex TechAttributeRegex();
+
+    [GeneratedRegex("/(?:[a-z0-9-]+/){1,4}[a-z0-9-]{4,}$", RegexOptions.IgnoreCase)]
+    private static partial Regex ProductSlugRegex();
 }
