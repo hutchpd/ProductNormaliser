@@ -11,6 +11,11 @@ public sealed class CrawlJobCategoryBreakdownDto
     public int CancelledCount { get; init; }
     public int DiscoveredUrlCount { get; init; }
     public int ConfirmedProductTargetCount { get; init; }
+    public int PromotedProductTargetCount { get; init; }
+    public int PromotedProductProcessedCount { get; init; }
+    public int ProductYieldingTargetCount { get; init; }
+    public int ProductNoExtractionCount { get; init; }
+    public int ExtractedProductCount { get; init; }
     public int RejectedPageCount { get; init; }
     public int BlockedPageCount { get; init; }
     public int DiscoveryQueueDepth { get; init; }

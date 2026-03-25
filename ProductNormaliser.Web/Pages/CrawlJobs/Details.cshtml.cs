@@ -31,9 +31,9 @@ public sealed class DetailsModel(
 
     public decimal DiscoveryProgressPercent => Job?.DiscoveryCompletionPercent ?? 0m;
 
-    public decimal ProductProgressPercent => Job is null || Job.ConfirmedProductTargetCount == 0
+    public decimal ProductProgressPercent => Job is null || Job.PromotedProductTargetCount == 0
         ? 0m
-        : decimal.Round((decimal)Job.CrawledProductUrlCount / Job.ConfirmedProductTargetCount * 100m, 2, MidpointRounding.AwayFromZero);
+        : decimal.Round((decimal)Job.PromotedProductProcessedCount / Job.PromotedProductTargetCount * 100m, 2, MidpointRounding.AwayFromZero);
 
     public IReadOnlyList<string> EffectiveSelectedCategoryKeys { get; private set; } = [];
 
@@ -55,7 +55,7 @@ public sealed class DetailsModel(
             Metrics =
             [
                 new HeroMetricModel { Label = "Discovery", Value = $"{DiscoveryProgressPercent:0.#}%" },
-                new HeroMetricModel { Label = "Products", Value = $"{ProductProgressPercent:0.#}%" },
+                new HeroMetricModel { Label = "Product targets", Value = $"{ProductProgressPercent:0.#}%" },
                 new HeroMetricModel { Label = "Processed", Value = $"{Job.ProcessedTargets}/{Job.TotalTargets}" },
                 new HeroMetricModel { Label = "Status", Value = StatusBadge.Text }
             ]

@@ -211,7 +211,7 @@ public sealed class CrawlJobsPageTests
     public async Task CrawlJobDetails_OnGetAsync_ShowsCompletedJobProgress()
     {
         var client = CreateClient();
-        client.CrawlJob = CreateJob("job_done", "completed", 12, 12, successCount: 10, skippedCount: 2);
+        client.CrawlJob = CreateJob("job_done", "completed", 12, 12, successCount: 10, skippedCount: 2, promotedProductTargetCount: 6, promotedProductProcessedCount: 6, productYieldingTargetCount: 4, extractedProductCount: 4);
 
         var model = new ProductNormaliser.Web.Pages.CrawlJobs.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.CrawlJobs.DetailsModel>.Instance)
         {
@@ -233,7 +233,7 @@ public sealed class CrawlJobsPageTests
     public async Task CrawlJobDetails_OnGetAsync_ShowsFailedJobRenderingState()
     {
         var client = CreateClient();
-        client.CrawlJob = CreateJob("job_fail", "failed", 10, 10, successCount: 5, failedCount: 5);
+        client.CrawlJob = CreateJob("job_fail", "failed", 10, 10, successCount: 5, failedCount: 5, promotedProductTargetCount: 5, promotedProductProcessedCount: 5, productNoExtractionCount: 2);
 
         var model = new ProductNormaliser.Web.Pages.CrawlJobs.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.CrawlJobs.DetailsModel>.Instance)
         {
@@ -262,6 +262,40 @@ public sealed class CrawlJobsPageTests
             Assert.That(badge.Text, Is.EqualTo("Cancel requested"));
             Assert.That(badge.Tone, Is.EqualTo("warning"));
             Assert.That(percent, Is.EqualTo(25));
+        });
+    }
+
+    [Test]
+    public async Task CrawlJobDetails_OnGetAsync_UsesPromotedTargetProgressForDownstreamMetrics()
+    {
+        var client = CreateClient();
+        client.CrawlJob = CreateJob(
+            "job_products",
+            "running",
+            12,
+            8,
+            promotedProductTargetCount: 10,
+            promotedProductProcessedCount: 7,
+            productYieldingTargetCount: 5,
+            productNoExtractionCount: 1,
+            extractedProductCount: 5);
+
+        var model = new ProductNormaliser.Web.Pages.CrawlJobs.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.CrawlJobs.DetailsModel>.Instance)
+        {
+            JobId = "job_products"
+        };
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.Job, Is.Not.Null);
+            Assert.That(model.ProductProgressPercent, Is.EqualTo(70.00m));
+            Assert.That(model.Job!.PromotedProductTargetCount, Is.EqualTo(10));
+            Assert.That(model.Job.PromotedProductProcessedCount, Is.EqualTo(7));
+            Assert.That(model.Job.ProductYieldingTargetCount, Is.EqualTo(5));
+            Assert.That(model.Job.ProductNoExtractionCount, Is.EqualTo(1));
+            Assert.That(model.Job.ExtractedProductCount, Is.EqualTo(5));
         });
     }
 
@@ -303,7 +337,7 @@ public sealed class CrawlJobsPageTests
         };
     }
 
-    private static CrawlJobDto CreateJob(string jobId, string status, int totalTargets, int processedTargets, int successCount = 0, int skippedCount = 0, int failedCount = 0, int cancelledCount = 0)
+    private static CrawlJobDto CreateJob(string jobId, string status, int totalTargets, int processedTargets, int successCount = 0, int skippedCount = 0, int failedCount = 0, int cancelledCount = 0, int promotedProductTargetCount = 0, int promotedProductProcessedCount = 0, int productYieldingTargetCount = 0, int productNoExtractionCount = 0, int extractedProductCount = 0)
     {
         return new CrawlJobDto
         {
@@ -317,6 +351,11 @@ public sealed class CrawlJobsPageTests
             SkippedCount = skippedCount,
             FailedCount = failedCount,
             CancelledCount = cancelledCount,
+            PromotedProductTargetCount = promotedProductTargetCount,
+            PromotedProductProcessedCount = promotedProductProcessedCount,
+            ProductYieldingTargetCount = productYieldingTargetCount,
+            ProductNoExtractionCount = productNoExtractionCount,
+            ExtractedProductCount = extractedProductCount,
             StartedAt = new DateTime(2026, 03, 21, 10, 00, 00, DateTimeKind.Utc),
             LastUpdatedAt = new DateTime(2026, 03, 21, 10, 05, 00, DateTimeKind.Utc),
             Status = status,
@@ -330,7 +369,12 @@ public sealed class CrawlJobsPageTests
                     SuccessCount = successCount,
                     SkippedCount = skippedCount,
                     FailedCount = failedCount,
-                    CancelledCount = cancelledCount
+                    CancelledCount = cancelledCount,
+                    PromotedProductTargetCount = promotedProductTargetCount,
+                    PromotedProductProcessedCount = promotedProductProcessedCount,
+                    ProductYieldingTargetCount = productYieldingTargetCount,
+                    ProductNoExtractionCount = productNoExtractionCount,
+                    ExtractedProductCount = extractedProductCount
                 }
             ]
         };

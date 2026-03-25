@@ -62,6 +62,26 @@
                         <dd>@Model.Job.ConfirmedProductTargetCount</dd>
                     </div>
                     <div>
+                        <dt>Promoted product targets</dt>
+                        <dd>@Model.Job.PromotedProductTargetCount</dd>
+                    </div>
+                    <div>
+                        <dt>Processed product targets</dt>
+                        <dd>@Model.Job.PromotedProductProcessedCount</dd>
+                    </div>
+                    <div>
+                        <dt>Product-yielding targets</dt>
+                        <dd>@Model.Job.ProductYieldingTargetCount</dd>
+                    </div>
+                    <div>
+                        <dt>No-product targets</dt>
+                        <dd>@Model.Job.ProductNoExtractionCount</dd>
+                    </div>
+                    <div>
+                        <dt>Products extracted</dt>
+                        <dd>@Model.Job.ExtractedProductCount</dd>
+                    </div>
+                    <div>
                         <dt>Discovery queue depth</dt>
                         <dd>@Model.Job.DiscoveryQueueDepth</dd>
                     </div>
@@ -94,7 +114,7 @@
                         <dd>@Model.Job.BlockedPageCount</dd>
                     </div>
                     <div>
-                        <dt>Rejected pages</dt>
+                        <dt>Failed discovery targets</dt>
                         <dd>@Model.Job.FailedCount</dd>
                     </div>
                     <div>
@@ -131,20 +151,36 @@
                         <div class="progress-bar-shell">
                             <div class="progress-bar-fill" style="width: @Model.ProductProgressPercent%"></div>
                         </div>
-                        <div class="subtle-copy">@Model.Job.CrawledProductUrlCount of @Model.Job.ConfirmedProductTargetCount confirmed product targets crawled</div>
+                        <div class="subtle-copy">@Model.Job.PromotedProductProcessedCount of @Model.Job.PromotedProductTargetCount promoted product targets processed</div>
                     </div>
 
                     <dl class="detail-grid">
                         <div>
-                            <dt>Crawled product URLs</dt>
-                            <dd>@Model.Job.CrawledProductUrlCount</dd>
+                            <dt>Promoted targets</dt>
+                            <dd>@Model.Job.PromotedProductTargetCount</dd>
                         </div>
                         <div>
-                            <dt>Product queue depth</dt>
+                            <dt>Processed targets</dt>
+                            <dd>@Model.Job.PromotedProductProcessedCount</dd>
+                        </div>
+                        <div>
+                            <dt>Targets yielding products</dt>
+                            <dd>@Model.Job.ProductYieldingTargetCount</dd>
+                        </div>
+                        <div>
+                            <dt>Targets with no products</dt>
+                            <dd>@Model.Job.ProductNoExtractionCount</dd>
+                        </div>
+                        <div>
+                            <dt>Products extracted</dt>
+                            <dd>@Model.Job.ExtractedProductCount</dd>
+                        </div>
+                        <div>
+                            <dt>Remaining uncrawled targets</dt>
                             <dd>@Model.Job.ProductQueueDepth</dd>
                         </div>
                         <div>
-                            <dt>Product failures</dt>
+                            <dt>Latest failed targets</dt>
                             <dd>@Model.Job.ProductFailureCount</dd>
                         </div>
                     </dl>
@@ -219,8 +255,9 @@
                     <article>
                         <strong>@breakdown.CategoryKey</strong>
                         <div class="subtle-copy">Discovery @breakdown.ProcessedTargets / @breakdown.TotalTargets, queue @breakdown.DiscoveryQueueDepth, completion @breakdown.DiscoveryCompletionPercent.ToString("0.#")%</div>
-                        <div class="subtle-copy">Discovered @breakdown.DiscoveredUrlCount, confirmed @breakdown.ConfirmedProductTargetCount, crawled @breakdown.CrawledProductUrlCount</div>
-                        <div class="subtle-copy">Product queue @breakdown.ProductQueueDepth, product failures @breakdown.ProductFailureCount, source coverage @breakdown.ActiveSourceCoverage (@breakdown.SourceCoveragePercent.ToString("0.#")%)</div>
+                        <div class="subtle-copy">Discovered @breakdown.DiscoveredUrlCount, confirmed @breakdown.ConfirmedProductTargetCount, promoted @breakdown.PromotedProductTargetCount, processed @breakdown.PromotedProductProcessedCount</div>
+                        <div class="subtle-copy">Yielding @breakdown.ProductYieldingTargetCount, no-product @breakdown.ProductNoExtractionCount, extracted @breakdown.ExtractedProductCount</div>
+                        <div class="subtle-copy">Remaining targets @breakdown.ProductQueueDepth, latest failed @breakdown.ProductFailureCount, source coverage @breakdown.ActiveSourceCoverage (@breakdown.SourceCoveragePercent.ToString("0.#")%)</div>
                         <div class="subtle-copy">Success @breakdown.SuccessCount, skipped @breakdown.SkippedCount, rejected @breakdown.RejectedPageCount, robots blocked @breakdown.BlockedPageCount, failed @breakdown.FailedCount, cancelled @breakdown.CancelledCount</div>
                     </article>
                 }

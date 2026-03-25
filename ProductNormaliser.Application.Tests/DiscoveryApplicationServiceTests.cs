@@ -104,6 +104,7 @@ public sealed class DiscoveryApplicationServiceTests
             Assert.That(second, Is.False);
             Assert.That(queueWriter.Items, Has.Count.EqualTo(1));
             Assert.That(queueWriter.Items[0].JobId, Is.Null);
+            Assert.That(queueWriter.Items[0].InitiatingJobId, Is.EqualTo("job_discovery"));
             Assert.That(queueWriter.Items[0].Id, Does.StartWith("crawl:discovered:alpha:tv:"));
             Assert.That(job, Is.Not.Null);
             Assert.That(job!.ConfirmedProductCount, Is.EqualTo(1));

@@ -37,6 +37,7 @@ public sealed class ProductTargetEnqueuer(
         {
             Id = queueId,
             JobId = null,
+            InitiatingJobId = discoveryJobId,
             SourceName = source.Id,
             SourceUrl = url,
             CategoryKey = categoryKey.Trim(),
