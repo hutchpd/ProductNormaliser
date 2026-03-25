@@ -9,6 +9,7 @@ using ProductNormaliser.AdminApi.OpenApi;
 using ProductNormaliser.AdminApi.Security;
 using ProductNormaliser.Infrastructure.Crawling;
 using ProductNormaliser.Infrastructure.Mongo;
+using ProductNormaliser.Infrastructure.Sources;
 using ProductNormaliser.Infrastructure.StructuredData;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -27,6 +28,7 @@ builder.Services.AddAuthorization(options =>
     });
 });
 builder.Services.Configure<ManagementApiSecurityOptions>(builder.Configuration.GetSection(ManagementApiSecurityOptions.SectionName));
+builder.Services.Configure<SourceCandidateDiscoveryOptions>(builder.Configuration.GetSection(SourceCandidateDiscoveryOptions.SectionName));
 builder.Services.AddOpenApi(options =>
 {
     options.AddOperationTransformer(SourceEndpointOpenApiTransformer.ApplyAsync);
