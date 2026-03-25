@@ -82,6 +82,35 @@
                         <label asp-for="Registration.Description" class="form-label"></label>
                         <textarea asp-for="Registration.Description" rows="2" class="form-control" placeholder="Optional operator note about this source"></textarea>
                     </div>
+                    <div>
+                        <label asp-for="Registration.PreferredLocale" class="form-label"></label>
+                        <input asp-for="Registration.PreferredLocale" class="form-control" placeholder="en-GB" />
+                    </div>
+                </div>
+
+                <div>
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">Market Controls</p>
+                            <h2>Restrict allowed markets</h2>
+                        </div>
+                    </div>
+
+                    <div class="check-grid">
+                        @foreach (var market in new[] { "UK", "IE", "EU", "US" })
+                        {
+                            <label class="check-card">
+                                <input type="checkbox"
+                                       name="Registration.AllowedMarkets"
+                                       value="@market"
+                                       checked="@Model.Registration.AllowedMarkets.Contains(market, StringComparer.OrdinalIgnoreCase)" />
+                                <span>
+                                    <strong>@market</strong>
+                                    <span class="subtle-copy d-block">Approved onboarding market</span>
+                                </span>
+                            </label>
+                        }
+                    </div>
                 </div>
 
                 <div>
@@ -251,6 +280,14 @@
 
                         <div class="chip-row compact-wrap">
                             <span class="chip">@candidate.CandidateType</span>
+                            @foreach (var market in candidate.AllowedMarkets)
+                            {
+                                <span class="chip">@market</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(candidate.PreferredLocale))
+                            {
+                                <span class="chip">@candidate.PreferredLocale</span>
+                            }
                             @foreach (var categoryKey in candidate.MatchedCategoryKeys)
                             {
                                 <span class="chip">@categoryKey</span>
@@ -333,6 +370,11 @@
                                 <input type="hidden" asp-for="CandidateSelection.DisplayName" value="@candidate.DisplayName" />
                                 <input type="hidden" asp-for="CandidateSelection.BaseUrl" value="@candidate.BaseUrl" />
                                 <input type="hidden" asp-for="CandidateSelection.IsEnabled" value="true" />
+                                @foreach (var market in candidate.AllowedMarkets)
+                                {
+                                    <input type="hidden" name="CandidateSelection.AllowedMarkets" value="@market" />
+                                }
+                                <input type="hidden" asp-for="CandidateSelection.PreferredLocale" value="@candidate.PreferredLocale" />
                                 @foreach (var categoryKey in candidate.MatchedCategoryKeys)
                                 {
                                     <input type="hidden" name="CandidateSelection.CategoryKeys" value="@categoryKey" />
@@ -355,6 +397,11 @@
                                     <input type="hidden" asp-for="CandidateSelection.DisplayName" value="@candidate.DisplayName" />
                                     <input type="hidden" asp-for="CandidateSelection.BaseUrl" value="@candidate.BaseUrl" />
                                     <input type="hidden" asp-for="CandidateSelection.IsEnabled" value="true" />
+                                    @foreach (var market in candidate.AllowedMarkets)
+                                    {
+                                        <input type="hidden" name="CandidateSelection.AllowedMarkets" value="@market" />
+                                    }
+                                    <input type="hidden" asp-for="CandidateSelection.PreferredLocale" value="@candidate.PreferredLocale" />
                                     @foreach (var categoryKey in candidate.MatchedCategoryKeys)
                                     {
                                         <input type="hidden" name="CandidateSelection.CategoryKeys" value="@categoryKey" />

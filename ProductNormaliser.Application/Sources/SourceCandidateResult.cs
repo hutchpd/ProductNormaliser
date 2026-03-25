@@ -11,6 +11,8 @@ public sealed class SourceCandidateResult
     public string BaseUrl { get; init; } = string.Empty;
     public string Host { get; init; } = string.Empty;
     public string CandidateType { get; init; } = string.Empty;
+    public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
+    public string? PreferredLocale { get; init; }
     public decimal ConfidenceScore { get; init; }
     public decimal CrawlabilityScore { get; init; }
     public decimal ExtractabilityScore { get; init; }

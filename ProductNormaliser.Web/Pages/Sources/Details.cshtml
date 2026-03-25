@@ -120,10 +120,26 @@
                             <input asp-for="Source.BaseUrl" class="form-control" />
                             <span asp-validation-for="Source.BaseUrl" class="text-danger small"></span>
                         </div>
+                        <div>
+                            <label asp-for="Source.PreferredLocale" class="form-label"></label>
+                            <input asp-for="Source.PreferredLocale" class="form-control" />
+                        </div>
                         <div class="wide">
                             <label asp-for="Source.Description" class="form-label"></label>
                             <textarea asp-for="Source.Description" rows="3" class="form-control"></textarea>
                         </div>
+                    </div>
+                    <div class="check-grid compact-grid">
+                        @foreach (var market in new[] { "UK", "IE", "EU", "US" })
+                        {
+                            <label class="check-card">
+                                <input type="checkbox" name="Source.AllowedMarkets" value="@market" checked="@Model.Source.AllowedMarkets.Contains(market, StringComparer.OrdinalIgnoreCase)" />
+                                <span>
+                                    <strong>@market</strong>
+                                    <span class="subtle-copy d-block">Approved onboarding market</span>
+                                </span>
+                            </label>
+                        }
                     </div>
                     <div class="actions-bar">
                         <button type="submit" class="btn btn-dark">Save Source</button>
@@ -171,6 +187,14 @@
                     <div>
                         <dt>Readiness summary</dt>
                         <dd>@Model.CurrentSource.Readiness.Summary</dd>
+                    </div>
+                    <div>
+                        <dt>Allowed markets</dt>
+                        <dd>@string.Join(", ", Model.CurrentSource.AllowedMarkets)</dd>
+                    </div>
+                    <div>
+                        <dt>Preferred locale</dt>
+                        <dd>@Model.CurrentSource.PreferredLocale</dd>
                     </div>
                     <div>
                         <dt>Last health snapshot</dt>

@@ -36,6 +36,8 @@ public sealed class SourceManagementService(
         var now = DateTime.UtcNow;
         var baseUrl = ValidateBaseUrl(registration.BaseUrl, out var host, crawlGovernanceService);
         var supportedCategoryKeys = await ValidateCategoryKeysAsync(registration.SupportedCategoryKeys, cancellationToken);
+        var allowedMarkets = NormalizeAllowedMarkets(registration.AllowedMarkets);
+        var preferredLocale = NormalizePreferredLocale(registration.PreferredLocale);
         var source = new CrawlSource
         {
             Id = sourceId,
@@ -44,8 +46,10 @@ public sealed class SourceManagementService(
             Host = host,
             Description = NormaliseOptionalText(registration.Description),
             IsEnabled = registration.IsEnabled,
+            AllowedMarkets = allowedMarkets,
+            PreferredLocale = preferredLocale,
             SupportedCategoryKeys = supportedCategoryKeys,
-            DiscoveryProfile = await NormaliseDiscoveryProfileAsync(registration.DiscoveryProfile, supportedCategoryKeys, baseUrl, host, cancellationToken),
+            DiscoveryProfile = await NormaliseDiscoveryProfileAsync(registration.DiscoveryProfile, supportedCategoryKeys, baseUrl, host, allowedMarkets, preferredLocale, cancellationToken),
             ThrottlingPolicy = NormaliseThrottlingPolicy(registration.ThrottlingPolicy),
             CreatedUtc = now,
             UpdatedUtc = now
@@ -64,9 +68,11 @@ public sealed class SourceManagementService(
         existing.BaseUrl = ValidateBaseUrl(update.BaseUrl, out var host, crawlGovernanceService);
         existing.Host = host;
         existing.Description = NormaliseOptionalText(update.Description);
+        existing.AllowedMarkets = update.AllowedMarkets is null ? existing.AllowedMarkets : NormalizeAllowedMarkets(update.AllowedMarkets);
+        existing.PreferredLocale = string.IsNullOrWhiteSpace(update.PreferredLocale) ? existing.PreferredLocale : NormalizePreferredLocale(update.PreferredLocale);
         existing.DiscoveryProfile = update.DiscoveryProfile is null
             ? existing.DiscoveryProfile
-            : await NormaliseDiscoveryProfileAsync(update.DiscoveryProfile, existing.SupportedCategoryKeys, existing.BaseUrl, host, cancellationToken);
+            : await NormaliseDiscoveryProfileAsync(update.DiscoveryProfile, existing.SupportedCategoryKeys, existing.BaseUrl, host, existing.AllowedMarkets, existing.PreferredLocale, cancellationToken);
         existing.UpdatedUtc = DateTime.UtcNow;
 
         await crawlSourceStore.UpsertAsync(existing, cancellationToken);
@@ -239,9 +245,11 @@ public sealed class SourceManagementService(
         IReadOnlyCollection<string> supportedCategoryKeys,
         string baseUrl,
         string host,
+        IReadOnlyCollection<string> allowedMarkets,
+        string preferredLocale,
         CancellationToken cancellationToken)
     {
-        profile ??= CreateDefaultDiscoveryProfile(supportedCategoryKeys);
+        profile ??= CreateDefaultDiscoveryProfile(supportedCategoryKeys, allowedMarkets, preferredLocale);
 
         if (profile.MaxDiscoveryDepth < 0)
         {
@@ -273,6 +281,8 @@ public sealed class SourceManagementService(
 
         return new SourceDiscoveryProfile
         {
+            AllowedMarkets = NormalizeAllowedMarkets(profile.AllowedMarkets.Count == 0 ? allowedMarkets : profile.AllowedMarkets),
+            PreferredLocale = NormalizePreferredLocale(string.IsNullOrWhiteSpace(profile.PreferredLocale) ? preferredLocale : profile.PreferredLocale),
             CategoryEntryPages = categoryEntryPages,
             SitemapHints = NormaliseOrderedValues(profile.SitemapHints, value => NormaliseDiscoveryUrl(value, baseUrl, host)),
             AllowedHosts = NormaliseOrderedValues(profile.AllowedHosts, value => NormaliseAllowedHost(value, host, crawlGovernanceService)),
@@ -288,10 +298,12 @@ public sealed class SourceManagementService(
         };
     }
 
-    private static SourceDiscoveryProfile CreateDefaultDiscoveryProfile(IReadOnlyCollection<string> supportedCategoryKeys)
+    private static SourceDiscoveryProfile CreateDefaultDiscoveryProfile(IReadOnlyCollection<string> supportedCategoryKeys, IReadOnlyCollection<string> allowedMarkets, string preferredLocale)
     {
         var profile = new SourceDiscoveryProfile
         {
+            AllowedMarkets = NormalizeAllowedMarkets(allowedMarkets),
+            PreferredLocale = NormalizePreferredLocale(preferredLocale),
             SitemapHints = ["/sitemap.xml", "/sitemap_index.xml", "/sitemap-products.xml"],
             ExcludedPathPrefixes = ["/support", "/help", "/blog", "/news", "/contact", "/account", "/cart", "/checkout"],
             ProductUrlPatterns = ["/product/", "/products/", "/p/"],
@@ -308,6 +320,33 @@ public sealed class SourceManagementService(
         }
 
         return profile;
+    }
+
+    private static List<string> NormalizeAllowedMarkets(IReadOnlyCollection<string>? markets)
+    {
+        var normalized = (markets ?? [])
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (normalized.Count == 0)
+        {
+            normalized.Add("UK");
+        }
+
+        return normalized;
+    }
+
+    private static string NormalizePreferredLocale(string? locale)
+    {
+        if (string.IsNullOrWhiteSpace(locale))
+        {
+            return "en-GB";
+        }
+
+        return locale.Trim();
     }
 
     private static List<string> BuildDefaultEntryPages(string categoryKey)

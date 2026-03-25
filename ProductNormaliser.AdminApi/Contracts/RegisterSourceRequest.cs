@@ -17,6 +17,10 @@ public sealed class RegisterSourceRequest
 
     public bool IsEnabled { get; init; } = true;
 
+    public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
+
+    public string? PreferredLocale { get; init; }
+
     public IReadOnlyList<string> SupportedCategoryKeys { get; init; } = [];
 
     public SourceDiscoveryProfileDto? DiscoveryProfile { get; init; }

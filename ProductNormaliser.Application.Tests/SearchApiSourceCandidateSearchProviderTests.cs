@@ -64,6 +64,8 @@ public sealed class SearchApiSourceCandidateSearchProviderTests
             Assert.That(result[0].Host, Is.EqualTo("samsung.com"));
             Assert.That(result[0].BaseUrl, Is.EqualTo("https://www.samsung.com/"));
             Assert.That(result[0].CandidateType, Is.EqualTo("manufacturer"));
+          Assert.That(result[0].AllowedMarkets, Is.EqualTo(new[] { "UK" }));
+          Assert.That(result[0].PreferredLocale, Is.EqualTo("en-GB"));
             Assert.That(result[0].MatchedBrandHints, Is.EqualTo(new[] { "Samsung" }));
             Assert.That(result[0].MatchedCategoryKeys, Is.EqualTo(new[] { "tv" }));
         });

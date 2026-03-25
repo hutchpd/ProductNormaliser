@@ -24,6 +24,8 @@ public sealed class SourcesControllerTests
         {
             Assert.That(payload!, Has.Length.EqualTo(1));
             Assert.That(payload[0].SourceId, Is.EqualTo("alpha"));
+            Assert.That(payload[0].AllowedMarkets, Is.EqualTo(new[] { "UK" }));
+            Assert.That(payload[0].PreferredLocale, Is.EqualTo("en-GB"));
             Assert.That(payload[0].DiscoveryProfile.CategoryEntryPages["tv"], Is.EqualTo(new[] { "https://alpha.example/tv" }));
             Assert.That(payload[0].ThrottlingPolicy.MaxConcurrentRequests, Is.EqualTo(1));
             Assert.That(payload[0].Readiness.Status, Is.EqualTo("Ready"));
@@ -52,9 +54,13 @@ public sealed class SourcesControllerTests
             SourceId = "alpha",
             DisplayName = "Alpha",
             BaseUrl = "https://alpha.example",
+            AllowedMarkets = ["UK", "IE"],
+            PreferredLocale = "en-GB",
             SupportedCategoryKeys = ["tv"],
             DiscoveryProfile = new SourceDiscoveryProfileDto
             {
+                AllowedMarkets = ["UK", "IE"],
+                PreferredLocale = "en-GB",
                 CategoryEntryPages = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["tv"] = ["/tv"]
@@ -74,6 +80,8 @@ public sealed class SourcesControllerTests
         Assert.Multiple(() =>
         {
             Assert.That(payload!.SourceId, Is.EqualTo("alpha"));
+            Assert.That(payload.AllowedMarkets, Is.EqualTo(new[] { "UK", "IE" }));
+            Assert.That(payload.PreferredLocale, Is.EqualTo("en-GB"));
             Assert.That(payload.DiscoveryProfile.SitemapHints, Is.EqualTo(new[] { "/sitemap-products.xml" }));
             Assert.That(payload.DiscoveryProfile.MaxUrlsPerRun, Is.EqualTo(250));
         });
@@ -156,9 +164,13 @@ public sealed class SourcesControllerTests
             BaseUrl = $"https://{id}.example",
             Host = $"{id}.example",
             IsEnabled = isEnabled,
+            AllowedMarkets = ["UK"],
+            PreferredLocale = "en-GB",
             SupportedCategoryKeys = ["tv"],
             DiscoveryProfile = new SourceDiscoveryProfile
             {
+                AllowedMarkets = ["UK"],
+                PreferredLocale = "en-GB",
                 CategoryEntryPages = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["tv"] = [ $"https://{id}.example/tv" ]
@@ -213,6 +225,8 @@ public sealed class SourcesControllerTests
             created.BaseUrl = registration.BaseUrl;
             created.Host = new Uri(registration.BaseUrl).Host;
             created.Description = registration.Description;
+            created.AllowedMarkets = registration.AllowedMarkets.ToList();
+            created.PreferredLocale = registration.PreferredLocale ?? created.PreferredLocale;
             created.SupportedCategoryKeys = registration.SupportedCategoryKeys.OrderBy(key => key).ToList();
             if (registration.DiscoveryProfile is not null)
             {
@@ -236,6 +250,14 @@ public sealed class SourcesControllerTests
             existing.BaseUrl = update.BaseUrl;
             existing.Description = update.Description;
             existing.Host = new Uri(update.BaseUrl).Host;
+            if (update.AllowedMarkets is not null)
+            {
+                existing.AllowedMarkets = update.AllowedMarkets.ToList();
+            }
+            if (!string.IsNullOrWhiteSpace(update.PreferredLocale))
+            {
+                existing.PreferredLocale = update.PreferredLocale;
+            }
             if (update.DiscoveryProfile is not null)
             {
                 existing.DiscoveryProfile = update.DiscoveryProfile;

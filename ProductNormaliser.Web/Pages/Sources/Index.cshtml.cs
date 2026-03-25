@@ -386,6 +386,8 @@ public sealed class IndexModel(
                 BaseUrl = registration.BaseUrl,
                 Description = registration.Description,
                 IsEnabled = registration.IsEnabled,
+                AllowedMarkets = registration.AllowedMarkets,
+                PreferredLocale = NormalizeOptionalText(registration.PreferredLocale),
                 SupportedCategoryKeys = registration.CategoryKeys
             }, cancellationToken);
 
@@ -431,8 +433,24 @@ public sealed class IndexModel(
             BaseUrl = NormalizeBaseUrl(candidate.BaseUrl),
             Description = Registration.Description,
             IsEnabled = candidate.IsEnabled,
+            AllowedMarkets = ResolveCandidateAllowedMarkets(candidate),
+            PreferredLocale = NormalizeOptionalText(candidate.PreferredLocale) ?? CandidateDiscovery.Locale ?? "en-GB",
             CategoryKeys = categoryKeys
         };
+    }
+
+    private List<string> ResolveCandidateAllowedMarkets(UseCandidateInput candidate)
+    {
+        var candidateMarkets = NormalizeValues(candidate.AllowedMarkets);
+        if (candidateMarkets.Count > 0)
+        {
+            return candidateMarkets;
+        }
+
+        var discoveryMarket = NormalizeOptionalText(CandidateDiscovery.Market);
+        return string.IsNullOrWhiteSpace(discoveryMarket)
+            ? ["UK"]
+            : [discoveryMarket];
     }
 
     private static string DeriveSourceId(UseCandidateInput candidate)
@@ -536,6 +554,12 @@ public sealed class IndexModel(
 
         public bool IsEnabled { get; set; } = true;
 
+        [Display(Name = "Allowed markets")]
+        public List<string> AllowedMarkets { get; set; } = ["UK"];
+
+        [Display(Name = "Preferred locale")]
+        public string PreferredLocale { get; set; } = "en-GB";
+
         public List<string> CategoryKeys { get; set; } = [];
     }
 
@@ -567,6 +591,10 @@ public sealed class IndexModel(
         public string BaseUrl { get; set; } = string.Empty;
 
         public bool IsEnabled { get; set; } = true;
+
+        public List<string> AllowedMarkets { get; set; } = [];
+
+        public string? PreferredLocale { get; set; }
 
         public List<string> CategoryKeys { get; set; } = [];
     }

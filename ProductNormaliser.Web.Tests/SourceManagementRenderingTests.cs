@@ -34,7 +34,14 @@ public sealed class SourceManagementRenderingTests
                     Host = "ao.example",
                     Description = "TV source",
                     IsEnabled = true,
+                    AllowedMarkets = ["UK"],
+                    PreferredLocale = "en-GB",
                     SupportedCategoryKeys = ["tv"],
+                    DiscoveryProfile = new SourceDiscoveryProfileDto
+                    {
+                        AllowedMarkets = ["UK"],
+                        PreferredLocale = "en-GB"
+                    },
                     ThrottlingPolicy = new SourceThrottlingPolicyDto
                     {
                         MinDelayMs = 1000,
@@ -88,6 +95,7 @@ public sealed class SourceManagementRenderingTests
             Assert.That(html, Does.Contain("Managed source hosts and health"));
             Assert.That(html, Does.Contain("Ready sources"));
             Assert.That(html, Does.Contain("AO UK"));
+            Assert.That(html, Does.Contain("en-GB"));
             Assert.That(html, Does.Contain("Healthy"));
             Assert.That(html, Does.Contain("Ready"));
             Assert.That(html, Does.Contain("Last crawl succeeded"));
@@ -126,9 +134,13 @@ public sealed class SourceManagementRenderingTests
                     Host = "ao.example",
                     Description = "TV source",
                     IsEnabled = true,
+                    AllowedMarkets = ["UK", "IE"],
+                    PreferredLocale = "en-GB",
                     SupportedCategoryKeys = ["tv"],
                     DiscoveryProfile = new SourceDiscoveryProfileDto
                     {
+                        AllowedMarkets = ["UK", "IE"],
+                        PreferredLocale = "en-GB",
                         CategoryEntryPages = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
                         {
                             ["tv"] = ["https://ao.example/tv"]
@@ -180,6 +192,8 @@ public sealed class SourceManagementRenderingTests
         Assert.Multiple(() =>
         {
             Assert.That(html, Does.Contain("Configure sitemap and listing discovery"));
+            Assert.That(html, Does.Contain("Allowed markets"));
+            Assert.That(html, Does.Contain("Preferred locale"));
             Assert.That(html, Does.Contain("Category entry pages"));
             Assert.That(html, Does.Contain("Sitemap hints"));
             Assert.That(html, Does.Contain("Save Discovery Profile"));
@@ -216,8 +230,14 @@ public sealed class SourceManagementRenderingTests
                     BaseUrl = "https://www.currys.co.uk/",
                     Host = "www.currys.co.uk",
                     IsEnabled = true,
+                    AllowedMarkets = ["UK"],
+                    PreferredLocale = "en-GB",
                     SupportedCategoryKeys = ["tv"],
-                    DiscoveryProfile = new SourceDiscoveryProfileDto(),
+                    DiscoveryProfile = new SourceDiscoveryProfileDto
+                    {
+                        AllowedMarkets = ["UK"],
+                        PreferredLocale = "en-GB"
+                    },
                     ThrottlingPolicy = new SourceThrottlingPolicyDto
                     {
                         MinDelayMs = 1000,
@@ -245,6 +265,8 @@ public sealed class SourceManagementRenderingTests
                         BaseUrl = "https://www.currys.co.uk/",
                         Host = "www.currys.co.uk",
                         CandidateType = "retailer",
+                        AllowedMarkets = ["UK"],
+                        PreferredLocale = "en-GB",
                         ConfidenceScore = 82m,
                         CrawlabilityScore = 40m,
                         ExtractabilityScore = 10m,
@@ -301,6 +323,7 @@ public sealed class SourceManagementRenderingTests
             Assert.That(html, Does.Contain("Use candidate"));
             Assert.That(html, Does.Not.Contain("<button type=\"submit\" class=\"btn btn-dark\">Accept candidate</button>"));
             Assert.That(html, Does.Contain("Do not accept"));
+            Assert.That(html, Does.Contain("en-GB"));
             Assert.That(html, Does.Contain("Duplicate match: Currys"));
         });
     }

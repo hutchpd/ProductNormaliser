@@ -73,14 +73,16 @@ public sealed class SourceCandidateDiscoveryService(
                 BaseUrl = searchResult.BaseUrl,
                 Host = searchResult.Host,
                 CandidateType = searchResult.CandidateType,
-                ConfidenceScore = CalculateConfidenceScore(probe, duplicateRiskScore, allowedByGovernance),
+                AllowedMarkets = NormalizeValues(searchResult.AllowedMarkets),
+                PreferredLocale = NormalizeOptionalText(searchResult.PreferredLocale),
+                ConfidenceScore = CalculateConfidenceScore(probe, duplicateRiskScore, allowedByGovernance, searchResult, normalizedRequest),
                 CrawlabilityScore = probe.CrawlabilityScore,
                 ExtractabilityScore = probe.ExtractabilityScore,
                 DuplicateRiskScore = duplicateRiskScore,
                 RecommendationStatus = recommendationStatus,
                 MatchedCategoryKeys = NormalizeValues(searchResult.MatchedCategoryKeys),
                 MatchedBrandHints = NormalizeValues(searchResult.MatchedBrandHints),
-                AlreadyRegistered = duplicateSources.Any(source => string.Equals(source.Host, searchResult.Host, StringComparison.OrdinalIgnoreCase)),
+                AlreadyRegistered = duplicateSources.Any(),
                 DuplicateSourceIds = duplicateSources.Select(source => source.Id).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray(),
                 DuplicateSourceDisplayNames = duplicateSources.Select(source => source.DisplayName).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray(),
                 AllowedByGovernance = allowedByGovernance,
@@ -98,7 +100,8 @@ public sealed class SourceCandidateDiscoveryService(
             BrandHints = NormalizeValues(normalizedRequest.BrandHints),
             GeneratedUtc = DateTime.UtcNow,
             Candidates = candidates
-                .OrderByDescending(candidate => candidate.ConfidenceScore)
+                .OrderByDescending(candidate => ScoreMarketAlignment(candidate, normalizedRequest))
+                .ThenByDescending(candidate => candidate.ConfidenceScore)
                 .ThenBy(candidate => candidate.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .Take(normalizedRequest.MaxCandidates)
                 .ToArray()
@@ -132,6 +135,13 @@ public sealed class SourceCandidateDiscoveryService(
                 CandidateType = ordered.Any(candidate => string.Equals(candidate.CandidateType, "manufacturer", StringComparison.OrdinalIgnoreCase))
                     ? "manufacturer"
                     : preferred.CandidateType,
+                AllowedMarkets = ordered.SelectMany(candidate => candidate.AllowedMarkets)
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                PreferredLocale = ordered.Select(candidate => candidate.PreferredLocale)
+                    .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)),
                 MatchedCategoryKeys = ordered.SelectMany(candidate => candidate.MatchedCategoryKeys)
                     .Where(value => !string.IsNullOrWhiteSpace(value))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -276,13 +286,15 @@ public sealed class SourceCandidateDiscoveryService(
             .ToArray();
     }
 
-    private static decimal CalculateConfidenceScore(SourceCandidateProbeResult probe, decimal duplicateRiskScore, bool allowedByGovernance)
+    private static decimal CalculateConfidenceScore(SourceCandidateProbeResult probe, decimal duplicateRiskScore, bool allowedByGovernance, SourceCandidateSearchResult searchResult, DiscoverSourceCandidatesRequest request)
     {
         var score = probe.CrawlabilityScore * 0.30m
             + probe.CategoryRelevanceScore * 0.25m
             + probe.ExtractabilityScore * 0.35m
             + probe.CatalogLikelihoodScore * 0.10m
             - (duplicateRiskScore * 0.35m);
+
+        score += ScoreMarketAlignment(searchResult, request);
 
         if (!allowedByGovernance)
         {
@@ -340,9 +352,23 @@ public sealed class SourceCandidateDiscoveryService(
             return true;
         }
 
+        if (!string.IsNullOrWhiteSpace(source.DisplayName)
+            && string.Equals(NormalizeName(source.DisplayName), NormalizeName(candidate.DisplayName), StringComparison.OrdinalIgnoreCase)
+            && ShareAnyMarket(source.AllowedMarkets, candidate.AllowedMarkets))
+        {
+            return true;
+        }
+
         if (string.Equals(NormalizeBaseUrl(source.BaseUrl), NormalizeBaseUrl(candidate.BaseUrl), StringComparison.OrdinalIgnoreCase))
         {
             return true;
+        }
+
+        var sourceMarkets = NormalizeValues(source.AllowedMarkets);
+        var candidateMarkets = NormalizeValues(candidate.AllowedMarkets);
+        if (sourceMarkets.Count != 0 && candidateMarkets.Count != 0)
+        {
+            return false;
         }
 
         return string.Equals(NormalizeName(source.DisplayName), NormalizeName(candidate.DisplayName), StringComparison.OrdinalIgnoreCase);
@@ -354,6 +380,53 @@ public sealed class SourceCandidateDiscoveryService(
             .Where(char.IsLetterOrDigit)
             .Select(char.ToLowerInvariant)
             .ToArray());
+    }
+
+    private static bool ShareAnyMarket(IReadOnlyCollection<string> sourceMarkets, IReadOnlyCollection<string> candidateMarkets)
+    {
+        var normalizedSourceMarkets = NormalizeValues(sourceMarkets);
+        var normalizedCandidateMarkets = NormalizeValues(candidateMarkets);
+        if (normalizedSourceMarkets.Count == 0 || normalizedCandidateMarkets.Count == 0)
+        {
+            return false;
+        }
+
+        return normalizedSourceMarkets.Any(market => normalizedCandidateMarkets.Contains(market, StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static decimal ScoreMarketAlignment(SourceCandidateResult candidate, DiscoverSourceCandidatesRequest request)
+    {
+        return ScoreMarketAlignment(new SourceCandidateSearchResult
+        {
+            AllowedMarkets = candidate.AllowedMarkets,
+            PreferredLocale = candidate.PreferredLocale
+        }, request);
+    }
+
+    private static decimal ScoreMarketAlignment(SourceCandidateSearchResult candidate, DiscoverSourceCandidatesRequest request)
+    {
+        var score = 0m;
+        var candidateMarkets = NormalizeValues(candidate.AllowedMarkets);
+        var requestedMarket = NormalizeOptionalText(request.Market);
+        if (!string.IsNullOrWhiteSpace(requestedMarket))
+        {
+            if (candidateMarkets.Contains(requestedMarket, StringComparer.OrdinalIgnoreCase))
+            {
+                score += 8m;
+            }
+            else if (candidateMarkets.Count > 0)
+            {
+                score -= 12m;
+            }
+        }
+
+        var preferredLocale = NormalizeOptionalText(candidate.PreferredLocale);
+        if (!string.IsNullOrWhiteSpace(request.Locale) && !string.IsNullOrWhiteSpace(preferredLocale))
+        {
+            score += string.Equals(preferredLocale, request.Locale, StringComparison.OrdinalIgnoreCase) ? 4m : -6m;
+        }
+
+        return score;
     }
 
     private static string GetCandidateEquivalenceKey(SourceCandidateSearchResult candidate)

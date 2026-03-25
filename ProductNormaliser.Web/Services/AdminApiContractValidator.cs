@@ -237,6 +237,8 @@ internal static class AdminApiContractValidator
         ValidateRequiredString(payload.DisplayName, $"{path}.displayName");
         ValidateRequiredString(payload.BaseUrl, $"{path}.baseUrl");
         ValidateRequiredString(payload.Host, $"{path}.host");
+        ValidateStringItems(payload.AllowedMarkets, $"{path}.allowedMarkets");
+        ValidateRequiredString(payload.PreferredLocale, $"{path}.preferredLocale");
         ValidateSourceDiscoveryProfile(payload.DiscoveryProfile, $"{path}.discoveryProfile");
         ValidateSourceThrottlingPolicy(payload.ThrottlingPolicy, $"{path}.throttlingPolicy");
         ValidateStringItems(payload.SupportedCategoryKeys, $"{path}.supportedCategoryKeys");
@@ -249,6 +251,8 @@ internal static class AdminApiContractValidator
     private static void ValidateSourceDiscoveryProfile(SourceDiscoveryProfileDto payload, string path)
     {
         ArgumentNullException.ThrowIfNull(payload);
+        ValidateStringItems(payload.AllowedMarkets, $"{path}.allowedMarkets");
+        ValidateRequiredString(payload.PreferredLocale, $"{path}.preferredLocale");
         foreach (var entry in payload.CategoryEntryPages)
         {
             ValidateRequiredString(entry.Key, $"{path}.categoryEntryPages.key");
@@ -270,6 +274,7 @@ internal static class AdminApiContractValidator
         ValidateRequiredString(payload.BaseUrl, $"{path}.baseUrl");
         ValidateRequiredString(payload.Host, $"{path}.host");
         ValidateRequiredString(payload.CandidateType, $"{path}.candidateType");
+        ValidateStringItems(payload.AllowedMarkets, $"{path}.allowedMarkets");
         ValidateEnumValue(payload.RecommendationStatus, CandidateRecommendationStatuses, $"{path}.recommendationStatus", value => value);
         ValidateStringItems(payload.MatchedCategoryKeys, $"{path}.matchedCategoryKeys");
         ValidateStringItems(payload.MatchedBrandHints, $"{path}.matchedBrandHints");

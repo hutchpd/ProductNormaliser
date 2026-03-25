@@ -19,9 +19,13 @@ public sealed class SourceManagementServiceTests
             SourceId = "Retailer One",
             DisplayName = "Retailer One",
             BaseUrl = "https://www.retailer-one.example/",
+            AllowedMarkets = ["uk", "ie"],
+            PreferredLocale = " en-GB ",
             SupportedCategoryKeys = ["tv", "refrigerator"],
             DiscoveryProfile = new SourceDiscoveryProfile
             {
+                AllowedMarkets = ["UK", "IE"],
+                PreferredLocale = "en-GB",
                 CategoryEntryPages = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["tv"] = ["/televisions", "https://www.retailer-one.example/televisions/"],
@@ -45,7 +49,11 @@ public sealed class SourceManagementServiceTests
         {
             Assert.That(result.Id, Is.EqualTo("retailer_one"));
             Assert.That(result.Host, Is.EqualTo("www.retailer-one.example"));
+            Assert.That(result.AllowedMarkets, Is.EqualTo(new[] { "IE", "UK" }));
+            Assert.That(result.PreferredLocale, Is.EqualTo("en-GB"));
             Assert.That(result.SupportedCategoryKeys, Is.EqualTo(new[] { "refrigerator", "tv" }));
+            Assert.That(result.DiscoveryProfile.AllowedMarkets, Is.EqualTo(new[] { "IE", "UK" }));
+            Assert.That(result.DiscoveryProfile.PreferredLocale, Is.EqualTo("en-GB"));
             Assert.That(result.DiscoveryProfile.CategoryEntryPages["tv"], Is.EqualTo(new[] { "https://www.retailer-one.example/televisions" }));
             Assert.That(result.DiscoveryProfile.CategoryEntryPages["refrigerator"], Is.EqualTo(new[] { "https://www.retailer-one.example/cooling" }));
             Assert.That(result.DiscoveryProfile.SitemapHints, Is.EqualTo(new[] { "https://www.retailer-one.example/sitemap.xml" }));
@@ -130,11 +138,55 @@ public sealed class SourceManagementServiceTests
 
         Assert.Multiple(() =>
         {
+            Assert.That(result.AllowedMarkets, Is.EqualTo(new[] { "UK" }));
+            Assert.That(result.PreferredLocale, Is.EqualTo("en-GB"));
             Assert.That(result.DiscoveryProfile.SitemapHints, Is.Not.Empty);
+            Assert.That(result.DiscoveryProfile.AllowedMarkets, Is.EqualTo(new[] { "UK" }));
+            Assert.That(result.DiscoveryProfile.PreferredLocale, Is.EqualTo("en-GB"));
             Assert.That(result.DiscoveryProfile.CategoryEntryPages["tv"], Does.Contain("https://www.northwind.example/tv"));
             Assert.That(result.DiscoveryProfile.CategoryEntryPages["laptop"], Does.Contain("https://www.northwind.example/laptops"));
             Assert.That(result.DiscoveryProfile.ProductUrlPatterns, Does.Contain("/product/"));
             Assert.That(result.DiscoveryProfile.ExcludedPathPrefixes, Does.Contain("/support"));
+        });
+    }
+
+    [Test]
+    public async Task UpdateAsync_UpdatesAllowedMarketsAndPreferredLocale()
+    {
+        var store = new FakeCrawlSourceStore(new CrawlSource
+        {
+            Id = "alpha",
+            DisplayName = "Alpha",
+            BaseUrl = "https://alpha.example",
+            Host = "alpha.example",
+            IsEnabled = true,
+            AllowedMarkets = ["UK"],
+            PreferredLocale = "en-GB",
+            SupportedCategoryKeys = ["tv"],
+            DiscoveryProfile = new SourceDiscoveryProfile
+            {
+                AllowedMarkets = ["UK"],
+                PreferredLocale = "en-GB"
+            },
+            ThrottlingPolicy = new SourceThrottlingPolicy(),
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow
+        });
+        var service = CreateService(store, new FakeCategoryMetadataService(CreateCategory("tv")));
+
+        var result = await service.UpdateAsync("alpha", new CrawlSourceUpdate
+        {
+            DisplayName = "Alpha UK",
+            BaseUrl = "https://alpha.example/uk/",
+            Description = "Updated",
+            AllowedMarkets = ["UK", "IE"],
+            PreferredLocale = "en-IE"
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.AllowedMarkets, Is.EqualTo(new[] { "IE", "UK" }));
+            Assert.That(result.PreferredLocale, Is.EqualTo("en-IE"));
         });
     }
 

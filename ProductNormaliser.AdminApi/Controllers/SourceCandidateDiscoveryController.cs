@@ -39,6 +39,8 @@ public sealed class SourceCandidateDiscoveryController(ISourceCandidateDiscovery
                     BaseUrl = candidate.BaseUrl,
                     Host = candidate.Host,
                     CandidateType = candidate.CandidateType,
+                    AllowedMarkets = candidate.AllowedMarkets,
+                    PreferredLocale = candidate.PreferredLocale,
                     ConfidenceScore = candidate.ConfidenceScore,
                     CrawlabilityScore = candidate.CrawlabilityScore,
                     ExtractabilityScore = candidate.ExtractabilityScore,

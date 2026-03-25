@@ -567,6 +567,73 @@ public sealed class SourceCandidateDiscoveryServiceTests
         Assert.That(result.Candidates.Select(candidate => candidate.DisplayName), Is.EqualTo(new[] { "Alpha Store", "Beta Store" }));
     }
 
+    [Test]
+    public async Task DiscoverAsync_PrefersRequestedMarketAndFlagsRegionalDuplicateVariants()
+    {
+        var store = new FakeCrawlSourceStore(new CrawlSource
+        {
+            Id = "currys_uk",
+            DisplayName = "Currys",
+            BaseUrl = "https://www.currys.co.uk/",
+            Host = "www.currys.co.uk",
+            AllowedMarkets = ["UK"],
+            PreferredLocale = "en-GB",
+            IsEnabled = true,
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow
+        });
+        var service = CreateService(
+            store,
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "currys_com",
+                    DisplayName = "Currys",
+                    BaseUrl = "https://www.currys.com/",
+                    Host = "currys.com",
+                    CandidateType = "retailer",
+                    AllowedMarkets = ["US"],
+                    PreferredLocale = "en-US",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["US retail result"]
+                },
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "currys_co_uk",
+                    DisplayName = "Currys",
+                    BaseUrl = "https://www.currys.co.uk/",
+                    Host = "currys.co.uk",
+                    CandidateType = "retailer",
+                    AllowedMarkets = ["UK"],
+                    PreferredLocale = "en-GB",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["UK retail result"]
+                }),
+            new FakeSourceCandidateProbeService(
+                new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["currys.com"] = new SourceCandidateProbeResult { CrawlabilityScore = 70m, CategoryRelevanceScore = 55m, ExtractabilityScore = 60m, CatalogLikelihoodScore = 60m },
+                    ["currys.co.uk"] = new SourceCandidateProbeResult { CrawlabilityScore = 70m, CategoryRelevanceScore = 55m, ExtractabilityScore = 60m, CatalogLikelihoodScore = 60m }
+                }),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"],
+            Market = "UK",
+            Locale = "en-GB"
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Candidates.Select(candidate => candidate.Host), Is.EqualTo(new[] { "currys.co.uk", "currys.com" }));
+            Assert.That(result.Candidates[0].AllowedMarkets, Is.EqualTo(new[] { "UK" }));
+            Assert.That(result.Candidates[0].AlreadyRegistered, Is.True);
+            Assert.That(result.Candidates[1].AlreadyRegistered, Is.False);
+        });
+    }
+
     private static SourceCandidateDiscoveryService CreateService(
         FakeCrawlSourceStore store,
         FakeCategoryMetadataService categoryService,

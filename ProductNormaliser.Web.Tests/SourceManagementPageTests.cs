@@ -85,6 +85,8 @@ public sealed class SourceManagementPageTests
                 SourceId = "northwind",
                 DisplayName = "Northwind",
                 BaseUrl = "https://www.northwind.example/",
+                AllowedMarkets = ["UK"],
+                PreferredLocale = "en-GB",
                 CategoryKeys = ["tv", "monitor"],
                 IsEnabled = true
             }
@@ -95,6 +97,8 @@ public sealed class SourceManagementPageTests
         Assert.Multiple(() =>
         {
             Assert.That(client.LastRegisteredSourceRequest, Is.Not.Null);
+            Assert.That(client.LastRegisteredSourceRequest!.AllowedMarkets, Is.EqualTo(new[] { "UK" }));
+            Assert.That(client.LastRegisteredSourceRequest.PreferredLocale, Is.EqualTo("en-GB"));
             Assert.That(client.LastRegisteredSourceRequest!.SupportedCategoryKeys, Is.EqualTo(new[] { "tv", "monitor" }));
             Assert.That(result, Is.TypeOf<RedirectToPageResult>());
             Assert.That(((RedirectToPageResult)result).PageName, Is.EqualTo("/Sources/Details"));
@@ -135,6 +139,7 @@ public sealed class SourceManagementPageTests
             {
                 CategoryKeys = ["tv"],
                 Locale = "en-GB",
+                Market = "UK",
                 BrandHints = "Samsung"
             }
         };
@@ -146,6 +151,7 @@ public sealed class SourceManagementPageTests
             Assert.That(result, Is.TypeOf<PageResult>());
             Assert.That(client.LastSourceCandidateDiscoveryRequest, Is.Not.Null);
             Assert.That(client.LastSourceCandidateDiscoveryRequest!.CategoryKeys, Is.EqualTo(new[] { "tv" }));
+            Assert.That(client.LastSourceCandidateDiscoveryRequest.Market, Is.EqualTo("UK"));
             Assert.That(model.CandidateDiscoveryResult, Is.Not.Null);
             Assert.That(model.CandidateDiscoveryResult!.Candidates.Select(candidate => candidate.DisplayName), Is.EqualTo(new[] { "Currys" }));
         });
@@ -205,6 +211,8 @@ public sealed class SourceManagementPageTests
                         BaseUrl = "https://www.currys.co.uk/",
                         Host = "www.currys.co.uk",
                         CandidateType = "retailer",
+                        AllowedMarkets = ["UK"],
+                        PreferredLocale = "en-GB",
                         ConfidenceScore = 82m,
                         MatchedCategoryKeys = ["tv", "monitor"],
                         Probe = new SourceCandidateProbeDto(),
@@ -247,6 +255,8 @@ public sealed class SourceManagementPageTests
             Assert.That(model.Registration.SourceId, Is.EqualTo("currys_co_uk"));
             Assert.That(model.Registration.DisplayName, Is.EqualTo("Currys"));
             Assert.That(model.Registration.BaseUrl, Is.EqualTo("https://www.currys.co.uk/"));
+            Assert.That(model.Registration.AllowedMarkets, Is.EqualTo(new[] { "UK" }));
+            Assert.That(model.Registration.PreferredLocale, Is.EqualTo("en-GB"));
             Assert.That(model.Registration.CategoryKeys, Is.EqualTo(new[] { "monitor", "tv" }));
         });
     }
@@ -284,6 +294,8 @@ public sealed class SourceManagementPageTests
         model.Registration.SourceId = "currys_uk";
         model.Registration.DisplayName = "Currys UK";
         model.Registration.BaseUrl = "https://www.currys.co.uk/";
+        model.Registration.AllowedMarkets = ["UK", "IE"];
+        model.Registration.PreferredLocale = "en-GB";
         model.Registration.CategoryKeys = ["tv", "monitor"];
 
         var result = await model.OnPostRegisterAsync(CancellationToken.None);
@@ -294,6 +306,7 @@ public sealed class SourceManagementPageTests
             Assert.That(client.LastRegisteredSourceRequest, Is.Not.Null);
             Assert.That(client.LastRegisteredSourceRequest!.SourceId, Is.EqualTo("currys_uk"));
             Assert.That(client.LastRegisteredSourceRequest.DisplayName, Is.EqualTo("Currys UK"));
+            Assert.That(client.LastRegisteredSourceRequest.AllowedMarkets, Is.EqualTo(new[] { "UK", "IE" }));
             Assert.That(client.LastRegisteredSourceRequest.SupportedCategoryKeys, Is.EqualTo(new[] { "tv", "monitor" }));
         });
     }
@@ -318,6 +331,8 @@ public sealed class SourceManagementPageTests
                         BaseUrl = "https://www.currys.co.uk/",
                         Host = "www.currys.co.uk",
                         CandidateType = "retailer",
+                        AllowedMarkets = ["UK"],
+                        PreferredLocale = "en-GB",
                         ConfidenceScore = 82m,
                         MatchedCategoryKeys = ["tv"],
                         AllowedByGovernance = true,
@@ -355,6 +370,8 @@ public sealed class SourceManagementPageTests
             Assert.That(client.LastRegisteredSourceRequest!.SourceId, Is.EqualTo("currys_co_uk"));
             Assert.That(client.LastRegisteredSourceRequest.DisplayName, Is.EqualTo("Currys"));
             Assert.That(client.LastRegisteredSourceRequest.BaseUrl, Is.EqualTo("https://www.currys.co.uk/"));
+            Assert.That(client.LastRegisteredSourceRequest.AllowedMarkets, Is.EqualTo(new[] { "UK" }));
+            Assert.That(client.LastRegisteredSourceRequest.PreferredLocale, Is.EqualTo("en-GB"));
             Assert.That(client.LastRegisteredSourceRequest.SupportedCategoryKeys, Is.EqualTo(new[] { "tv" }));
         });
     }
@@ -542,6 +559,38 @@ public sealed class SourceManagementPageTests
     }
 
     [Test]
+    public async Task SourceDetails_OnPostUpdateAsync_SubmitsMarketMetadataAndRedirects()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            Sources = [CreateSource("ao_uk", "AO UK", isEnabled: true, categoryKeys: ["tv"], readinessStatus: "Ready", healthStatus: "Healthy")]
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.DetailsModel>.Instance)
+        {
+            Source = new ProductNormaliser.Web.Pages.Sources.DetailsModel.EditSourceInput
+            {
+                DisplayName = "AO UK",
+                BaseUrl = "https://ao.example/uk/",
+                Description = "Updated source",
+                AllowedMarkets = ["UK", "IE"],
+                PreferredLocale = "en-GB"
+            }
+        };
+
+        var result = await model.OnPostUpdateAsync("ao_uk", CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
+            Assert.That(client.LastUpdatedSourceRequest, Is.Not.Null);
+            Assert.That(client.LastUpdatedSourceRequest!.AllowedMarkets, Is.EqualTo(new[] { "UK", "IE" }));
+            Assert.That(client.LastUpdatedSourceRequest.PreferredLocale, Is.EqualTo("en-GB"));
+        });
+    }
+
+    [Test]
     public async Task SourceDetails_OnPostDiscoveryAsync_SubmitsDiscoveryProfileAndRedirects()
     {
         var client = new FakeAdminApiClient
@@ -664,9 +713,13 @@ public sealed class SourceManagementPageTests
             Host = $"{sourceId}.example",
             Description = $"{displayName} source",
             IsEnabled = isEnabled,
+            AllowedMarkets = ["UK"],
+            PreferredLocale = "en-GB",
             SupportedCategoryKeys = categoryKeys,
             DiscoveryProfile = new SourceDiscoveryProfileDto
             {
+                AllowedMarkets = ["UK"],
+                PreferredLocale = "en-GB",
                 CategoryEntryPages = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
                 {
                     [categoryKeys[0]] = [ $"https://{sourceId}.example/{categoryKeys[0]}" ]

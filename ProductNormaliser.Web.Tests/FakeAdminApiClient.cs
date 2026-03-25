@@ -231,8 +231,14 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             Host = new Uri(request.BaseUrl).Host,
             Description = request.Description,
             IsEnabled = request.IsEnabled,
+            AllowedMarkets = request.AllowedMarkets.ToArray(),
+            PreferredLocale = request.PreferredLocale ?? "en-GB",
             SupportedCategoryKeys = request.SupportedCategoryKeys.ToArray(),
-            DiscoveryProfile = request.DiscoveryProfile ?? new SourceDiscoveryProfileDto(),
+            DiscoveryProfile = request.DiscoveryProfile ?? new SourceDiscoveryProfileDto
+            {
+                AllowedMarkets = request.AllowedMarkets.ToArray(),
+                PreferredLocale = request.PreferredLocale ?? "en-GB"
+            },
             ThrottlingPolicy = request.ThrottlingPolicy ?? new SourceThrottlingPolicyDto
             {
                 MinDelayMs = 1000,
@@ -266,7 +272,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         LastUpdatedSourceId = sourceId;
         LastUpdatedSourceRequest = request;
         var source = RequireSource(sourceId);
-        var updated = Clone(source, request.DisplayName, request.BaseUrl, new Uri(request.BaseUrl).Host, request.Description, source.IsEnabled, source.SupportedCategoryKeys, request.DiscoveryProfile ?? source.DiscoveryProfile, source.ThrottlingPolicy, DateTime.UtcNow);
+        var updated = Clone(source, request.DisplayName, request.BaseUrl, new Uri(request.BaseUrl).Host, request.Description, source.IsEnabled, request.AllowedMarkets.Count == 0 ? source.AllowedMarkets : request.AllowedMarkets, request.PreferredLocale ?? source.PreferredLocale, source.SupportedCategoryKeys, request.DiscoveryProfile ?? source.DiscoveryProfile, source.ThrottlingPolicy, DateTime.UtcNow);
         UpsertSource(updated);
         return Task.FromResult(updated);
     }
@@ -275,7 +281,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     {
         LastEnabledSourceId = sourceId;
         var source = RequireSource(sourceId);
-        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, true, source.SupportedCategoryKeys, source.DiscoveryProfile, source.ThrottlingPolicy, DateTime.UtcNow);
+        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, true, source.AllowedMarkets, source.PreferredLocale, source.SupportedCategoryKeys, source.DiscoveryProfile, source.ThrottlingPolicy, DateTime.UtcNow);
         UpsertSource(updated);
         return Task.FromResult(updated);
     }
@@ -284,7 +290,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     {
         LastDisabledSourceId = sourceId;
         var source = RequireSource(sourceId);
-        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, false, source.SupportedCategoryKeys, source.DiscoveryProfile, source.ThrottlingPolicy, DateTime.UtcNow);
+        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, false, source.AllowedMarkets, source.PreferredLocale, source.SupportedCategoryKeys, source.DiscoveryProfile, source.ThrottlingPolicy, DateTime.UtcNow);
         UpsertSource(updated);
         return Task.FromResult(updated);
     }
@@ -299,7 +305,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, source.IsEnabled, categoryKeys, source.DiscoveryProfile, source.ThrottlingPolicy, DateTime.UtcNow);
+        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, source.IsEnabled, source.AllowedMarkets, source.PreferredLocale, categoryKeys, source.DiscoveryProfile, source.ThrottlingPolicy, DateTime.UtcNow);
         UpsertSource(updated);
         return Task.FromResult(updated);
     }
@@ -317,7 +323,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             RequestsPerMinute = request.RequestsPerMinute,
             RespectRobotsTxt = request.RespectRobotsTxt
         };
-        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, source.IsEnabled, source.SupportedCategoryKeys, source.DiscoveryProfile, throttling, DateTime.UtcNow);
+        var updated = Clone(source, source.DisplayName, source.BaseUrl, source.Host, source.Description, source.IsEnabled, source.AllowedMarkets, source.PreferredLocale, source.SupportedCategoryKeys, source.DiscoveryProfile, throttling, DateTime.UtcNow);
         UpsertSource(updated);
         return Task.FromResult(updated);
     }
@@ -481,6 +487,8 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         string host,
         string? description,
         bool isEnabled,
+        IReadOnlyList<string> allowedMarkets,
+        string preferredLocale,
         IReadOnlyList<string> supportedCategoryKeys,
         SourceDiscoveryProfileDto discoveryProfile,
         SourceThrottlingPolicyDto throttlingPolicy,
@@ -494,9 +502,13 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             Host = host,
             Description = description,
             IsEnabled = isEnabled,
+            AllowedMarkets = allowedMarkets.ToArray(),
+            PreferredLocale = preferredLocale,
             SupportedCategoryKeys = supportedCategoryKeys.ToArray(),
             DiscoveryProfile = new SourceDiscoveryProfileDto
             {
+                AllowedMarkets = discoveryProfile.AllowedMarkets.ToArray(),
+                PreferredLocale = string.IsNullOrWhiteSpace(discoveryProfile.PreferredLocale) ? preferredLocale : discoveryProfile.PreferredLocale,
                 CategoryEntryPages = discoveryProfile.CategoryEntryPages.ToDictionary(
                     entry => entry.Key,
                     entry => (IReadOnlyList<string>)entry.Value.ToArray(),

@@ -8,6 +8,8 @@ public sealed class CrawlSource
     public string Host { get; set; } = default!;
     public string? Description { get; set; }
     public bool IsEnabled { get; set; }
+    public List<string> AllowedMarkets { get; set; } = ["UK"];
+    public string PreferredLocale { get; set; } = "en-GB";
     public List<string> SupportedCategoryKeys { get; set; } = [];
     public SourceDiscoveryProfile DiscoveryProfile { get; set; } = new();
     public SourceThrottlingPolicy ThrottlingPolicy { get; set; } = new();

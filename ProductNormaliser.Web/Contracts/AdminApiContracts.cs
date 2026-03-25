@@ -168,6 +168,8 @@ public sealed class SourceDto
     public string Host { get; init; } = string.Empty;
     public string? Description { get; init; }
     public bool IsEnabled { get; init; }
+    public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
+    public string PreferredLocale { get; init; } = string.Empty;
     public IReadOnlyList<string> SupportedCategoryKeys { get; init; } = [];
     public SourceDiscoveryProfileDto DiscoveryProfile { get; init; } = new();
     public SourceThrottlingPolicyDto ThrottlingPolicy { get; init; } = new();
@@ -227,6 +229,8 @@ public sealed class SourceThrottlingPolicyDto
 
 public sealed class SourceDiscoveryProfileDto
 {
+    public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
+    public string PreferredLocale { get; init; } = string.Empty;
     public IReadOnlyDictionary<string, IReadOnlyList<string>> CategoryEntryPages { get; init; } = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
     public IReadOnlyList<string> SitemapHints { get; init; } = [];
     public IReadOnlyList<string> AllowedHosts { get; init; } = [];
@@ -248,6 +252,8 @@ public sealed class RegisterSourceRequest
     public string BaseUrl { get; init; } = string.Empty;
     public string? Description { get; init; }
     public bool IsEnabled { get; init; } = true;
+    public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
+    public string? PreferredLocale { get; init; }
     public IReadOnlyList<string> SupportedCategoryKeys { get; init; } = [];
     public SourceDiscoveryProfileDto? DiscoveryProfile { get; init; }
     public SourceThrottlingPolicyDto? ThrottlingPolicy { get; init; }
@@ -258,6 +264,8 @@ public sealed class UpdateSourceRequest
     public string DisplayName { get; init; } = string.Empty;
     public string BaseUrl { get; init; } = string.Empty;
     public string? Description { get; init; }
+    public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
+    public string? PreferredLocale { get; init; }
     public SourceDiscoveryProfileDto? DiscoveryProfile { get; init; }
 }
 
@@ -301,6 +309,8 @@ public sealed class SourceCandidateDto
     public string BaseUrl { get; init; } = string.Empty;
     public string Host { get; init; } = string.Empty;
     public string CandidateType { get; init; } = string.Empty;
+    public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
+    public string? PreferredLocale { get; init; }
     public decimal ConfidenceScore { get; init; }
     public decimal CrawlabilityScore { get; init; }
     public decimal ExtractabilityScore { get; init; }

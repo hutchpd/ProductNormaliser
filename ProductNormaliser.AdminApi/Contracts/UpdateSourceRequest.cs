@@ -12,5 +12,9 @@ public sealed class UpdateSourceRequest
 
     public string? Description { get; init; }
 
+    public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
+
+    public string? PreferredLocale { get; init; }
+
     public SourceDiscoveryProfileDto? DiscoveryProfile { get; init; }
 }

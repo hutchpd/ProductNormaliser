@@ -86,7 +86,9 @@ public sealed class DetailsModel(
             {
                 DisplayName = Source.DisplayName,
                 BaseUrl = Source.BaseUrl,
-                Description = Source.Description
+                Description = Source.Description,
+                AllowedMarkets = Source.AllowedMarkets,
+                PreferredLocale = Source.PreferredLocale
             }, cancellationToken);
 
             StatusMessage = $"Updated source '{sourceId}'.";
@@ -318,7 +320,9 @@ public sealed class DetailsModel(
                 {
                     DisplayName = CurrentSource.DisplayName,
                     BaseUrl = CurrentSource.BaseUrl,
-                    Description = CurrentSource.Description
+                    Description = CurrentSource.Description,
+                    AllowedMarkets = CurrentSource.AllowedMarkets.ToList(),
+                    PreferredLocale = CurrentSource.PreferredLocale
                 };
             }
 
@@ -492,6 +496,12 @@ public sealed class DetailsModel(
         public string BaseUrl { get; set; } = string.Empty;
 
         public string? Description { get; set; }
+
+        [Display(Name = "Allowed markets")]
+        public List<string> AllowedMarkets { get; set; } = ["UK"];
+
+        [Display(Name = "Preferred locale")]
+        public string PreferredLocale { get; set; } = "en-GB";
     }
 
     public sealed class CategoryAssignmentInput

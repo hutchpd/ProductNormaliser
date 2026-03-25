@@ -7,6 +7,8 @@ public sealed class SourceCandidateDto
     public string BaseUrl { get; init; } = default!;
     public string Host { get; init; } = default!;
     public string CandidateType { get; init; } = default!;
+    public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
+    public string? PreferredLocale { get; init; }
     public decimal ConfidenceScore { get; init; }
     public decimal CrawlabilityScore { get; init; }
     public decimal ExtractabilityScore { get; init; }

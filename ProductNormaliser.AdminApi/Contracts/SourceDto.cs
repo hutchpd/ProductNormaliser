@@ -8,6 +8,8 @@ public sealed class SourceDto
     public string Host { get; init; } = default!;
     public string? Description { get; init; }
     public bool IsEnabled { get; init; }
+    public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
+    public string PreferredLocale { get; init; } = string.Empty;
     public IReadOnlyList<string> SupportedCategoryKeys { get; init; } = [];
     public SourceDiscoveryProfileDto DiscoveryProfile { get; init; } = new();
     public SourceThrottlingPolicyDto ThrottlingPolicy { get; init; } = default!;

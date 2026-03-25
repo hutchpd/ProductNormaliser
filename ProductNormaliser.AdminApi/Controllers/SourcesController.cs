@@ -52,6 +52,8 @@ public sealed class SourcesController(
                 BaseUrl = request.BaseUrl,
                 Description = request.Description,
                 IsEnabled = request.IsEnabled,
+                AllowedMarkets = request.AllowedMarkets,
+                PreferredLocale = request.PreferredLocale,
                 SupportedCategoryKeys = request.SupportedCategoryKeys,
                 DiscoveryProfile = request.DiscoveryProfile is null ? null : Map(request.DiscoveryProfile),
                 ThrottlingPolicy = request.ThrottlingPolicy is null ? null : Map(request.ThrottlingPolicy)
@@ -80,6 +82,8 @@ public sealed class SourcesController(
                 DisplayName = request.DisplayName,
                 BaseUrl = request.BaseUrl,
                 Description = request.Description,
+                AllowedMarkets = request.AllowedMarkets,
+                PreferredLocale = request.PreferredLocale,
                 DiscoveryProfile = request.DiscoveryProfile is null ? null : Map(request.DiscoveryProfile)
             }, cancellationToken);
 
@@ -196,9 +200,13 @@ public sealed class SourcesController(
             Host = source.Host,
             Description = source.Description,
             IsEnabled = source.IsEnabled,
+            AllowedMarkets = source.AllowedMarkets.ToArray(),
+            PreferredLocale = source.PreferredLocale,
             SupportedCategoryKeys = source.SupportedCategoryKeys.ToArray(),
             DiscoveryProfile = new SourceDiscoveryProfileDto
             {
+                AllowedMarkets = source.DiscoveryProfile.AllowedMarkets.ToArray(),
+                PreferredLocale = source.DiscoveryProfile.PreferredLocale,
                 CategoryEntryPages = source.DiscoveryProfile.CategoryEntryPages.ToDictionary(
                     entry => entry.Key,
                     entry => (IReadOnlyList<string>)entry.Value.ToArray(),
@@ -254,6 +262,8 @@ public sealed class SourcesController(
     {
         return new SourceDiscoveryProfile
         {
+            AllowedMarkets = discoveryProfile.AllowedMarkets.Where(value => !string.IsNullOrWhiteSpace(value)).ToList(),
+            PreferredLocale = discoveryProfile.PreferredLocale ?? string.Empty,
             CategoryEntryPages = discoveryProfile.CategoryEntryPages.ToDictionary(
                 entry => entry.Key,
                 entry => entry.Value.Where(value => !string.IsNullOrWhiteSpace(value)).ToList(),

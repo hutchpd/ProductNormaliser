@@ -2,6 +2,8 @@ namespace ProductNormaliser.Core.Models;
 
 public sealed class SourceDiscoveryProfile
 {
+    public List<string> AllowedMarkets { get; set; } = ["UK"];
+    public string PreferredLocale { get; set; } = "en-GB";
     public Dictionary<string, List<string>> CategoryEntryPages { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<string> SitemapHints { get; set; } = [];
     public List<string> AllowedHosts { get; set; } = [];

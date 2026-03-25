@@ -2,6 +2,8 @@ namespace ProductNormaliser.AdminApi.Contracts;
 
 public sealed class SourceDiscoveryProfileDto
 {
+    public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
+    public string PreferredLocale { get; init; } = string.Empty;
     public IReadOnlyDictionary<string, IReadOnlyList<string>> CategoryEntryPages { get; init; } = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
     public IReadOnlyList<string> SitemapHints { get; init; } = [];
     public IReadOnlyList<string> AllowedHosts { get; init; } = [];

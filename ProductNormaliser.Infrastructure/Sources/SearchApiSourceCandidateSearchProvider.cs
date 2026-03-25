@@ -22,9 +22,10 @@ public sealed class SearchApiSourceCandidateSearchProvider(HttpClient httpClient
         {
             foreach (var candidate in await SearchQueryAsync(query, request, timeoutCts.Token))
             {
-                if (candidatesByHost.TryGetValue(candidate.Host, out var existing))
+                var candidateKey = BuildCandidateGroupingKey(candidate);
+                if (candidatesByHost.TryGetValue(candidateKey, out var existing))
                 {
-                    candidatesByHost[candidate.Host] = new SourceCandidateSearchResult
+                    candidatesByHost[candidateKey] = new SourceCandidateSearchResult
                     {
                         CandidateKey = existing.CandidateKey,
                         DisplayName = existing.DisplayName.Length >= candidate.DisplayName.Length ? existing.DisplayName : candidate.DisplayName,
@@ -34,6 +35,14 @@ public sealed class SearchApiSourceCandidateSearchProvider(HttpClient httpClient
                             || string.Equals(candidate.CandidateType, "manufacturer", StringComparison.OrdinalIgnoreCase)
                             ? "manufacturer"
                             : "retailer",
+                        AllowedMarkets = existing.AllowedMarkets
+                            .Concat(candidate.AllowedMarkets)
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                            .ToArray(),
+                        PreferredLocale = string.Equals(existing.PreferredLocale, request.Locale, StringComparison.OrdinalIgnoreCase)
+                            ? existing.PreferredLocale
+                            : candidate.PreferredLocale,
                         MatchedCategoryKeys = existing.MatchedCategoryKeys
                             .Concat(candidate.MatchedCategoryKeys)
                             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -53,7 +62,7 @@ public sealed class SearchApiSourceCandidateSearchProvider(HttpClient httpClient
                 }
                 else
                 {
-                    candidatesByHost[candidate.Host] = candidate;
+                    candidatesByHost[candidateKey] = candidate;
                 }
             }
         }
@@ -162,10 +171,54 @@ public sealed class SearchApiSourceCandidateSearchProvider(HttpClient httpClient
             BaseUrl = uri.GetLeftPart(UriPartial.Authority).TrimEnd('/') + "/",
             Host = host,
             CandidateType = candidateType,
+            AllowedMarkets = InferAllowedMarkets(uri, request),
+            PreferredLocale = InferPreferredLocale(uri, request),
             MatchedCategoryKeys = matchedCategoryKeys.Length > 0 ? matchedCategoryKeys : request.CategoryKeys.ToArray(),
             MatchedBrandHints = matchedBrandHints,
             SearchReasons = [$"Search query '{query}' matched '{title}'."]
         };
+    }
+
+    private static string BuildCandidateGroupingKey(SourceCandidateSearchResult candidate)
+    {
+        var marketKey = candidate.AllowedMarkets.Count == 0
+            ? "global"
+            : string.Join('+', candidate.AllowedMarkets.OrderBy(value => value, StringComparer.OrdinalIgnoreCase));
+        return $"{candidate.Host}::{marketKey}";
+    }
+
+    private static IReadOnlyList<string> InferAllowedMarkets(Uri uri, DiscoverSourceCandidatesRequest request)
+    {
+        var markets = new List<string>();
+        if (!string.IsNullOrWhiteSpace(request.Market))
+        {
+            markets.Add(request.Market.Trim().ToUpperInvariant());
+        }
+
+        var host = uri.Host.ToLowerInvariant();
+        if (host.EndsWith(".co.uk", StringComparison.OrdinalIgnoreCase) || host.EndsWith(".uk", StringComparison.OrdinalIgnoreCase))
+        {
+            markets.Add("UK");
+        }
+
+        if (uri.AbsolutePath.Contains("/uk", StringComparison.OrdinalIgnoreCase))
+        {
+            markets.Add("UK");
+        }
+
+        return markets.Count == 0
+            ? ["UK"]
+            : markets.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static string InferPreferredLocale(Uri uri, DiscoverSourceCandidatesRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.Locale))
+        {
+            return request.Locale.Trim();
+        }
+
+        return uri.AbsolutePath.Contains("/uk", StringComparison.OrdinalIgnoreCase) ? "en-GB" : "en-GB";
     }
 
     private static bool IsSupportedCandidateUri(Uri uri)
