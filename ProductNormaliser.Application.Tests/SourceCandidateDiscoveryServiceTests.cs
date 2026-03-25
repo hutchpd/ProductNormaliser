@@ -230,6 +230,102 @@ public sealed class SourceCandidateDiscoveryServiceTests
         });
     }
 
+    [Test]
+    public async Task DiscoverAsync_IncludesProbeSignalsInReasonsAndConfidence()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "rich_probe",
+                    DisplayName = "Rich Probe",
+                    BaseUrl = "https://rich.example/",
+                    Host = "rich.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new FakeSourceCandidateProbeService(
+                new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["rich.example"] = new SourceCandidateProbeResult
+                    {
+                        HomePageReachable = true,
+                        RobotsTxtReachable = true,
+                        SitemapDetected = true,
+                        SitemapUrls = ["https://rich.example/sitemap.xml"],
+                        CategoryRelevanceScore = 18m,
+                        CategoryPageHints = ["https://rich.example/tv/"],
+                        LikelyListingUrlPatterns = ["/tv/"],
+                        LikelyProductUrlPatterns = ["/product/"]
+                    }
+                }),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"]
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Candidates, Has.Count.EqualTo(1));
+            Assert.That(result.Candidates[0].ConfidenceScore, Is.EqualTo(78m));
+            Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("robots"));
+            Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("sitemap"));
+            Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("category_relevance"));
+            Assert.That(result.Candidates[0].Probe.SitemapUrls, Is.EqualTo(new[] { "https://rich.example/sitemap.xml" }));
+            Assert.That(result.Candidates[0].Probe.LikelyListingUrlPatterns, Is.EqualTo(new[] { "/tv/" }));
+            Assert.That(result.Candidates[0].Probe.LikelyProductUrlPatterns, Is.EqualTo(new[] { "/product/" }));
+        });
+    }
+
+    [Test]
+    public async Task DiscoverAsync_CapsConfidenceWhenGovernanceRejectsCandidate()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "blocked_rich_probe",
+                    DisplayName = "Blocked Rich Probe",
+                    BaseUrl = "https://blocked.example/",
+                    Host = "blocked.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new FakeSourceCandidateProbeService(
+                new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["blocked.example"] = new SourceCandidateProbeResult
+                    {
+                        HomePageReachable = true,
+                        RobotsTxtReachable = true,
+                        SitemapDetected = true,
+                        CategoryRelevanceScore = 40m
+                    }
+                }),
+            new BlockingGovernanceService("blocked.example"));
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"]
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Candidates, Has.Count.EqualTo(1));
+            Assert.That(result.Candidates[0].AllowedByGovernance, Is.False);
+            Assert.That(result.Candidates[0].ConfidenceScore, Is.EqualTo(10m));
+            Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("governance"));
+        });
+    }
+
     private static SourceCandidateDiscoveryService CreateService(
         FakeCrawlSourceStore store,
         FakeCategoryMetadataService categoryService,
