@@ -193,6 +193,43 @@ public sealed class SourceCandidateDiscoveryServiceTests
         });
     }
 
+    [Test]
+    public async Task DiscoverAsync_UsesSearchResults_ToBuildCandidatesWithoutProbeSignals()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "ao_example",
+                    DisplayName = "AO Example",
+                    BaseUrl = "https://ao.example/",
+                    Host = "ao.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new FakeSourceCandidateProbeService(),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"]
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Candidates, Has.Count.EqualTo(1));
+            Assert.That(result.Candidates[0].DisplayName, Is.EqualTo("AO Example"));
+            Assert.That(result.Candidates[0].ConfidenceScore, Is.EqualTo(15m));
+            Assert.That(result.Candidates[0].AllowedByGovernance, Is.True);
+            Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Is.EqualTo(new[] { "search_match" }));
+            Assert.That(result.Candidates[0].Probe.RobotsTxtReachable, Is.False);
+            Assert.That(result.Candidates[0].Probe.SitemapDetected, Is.False);
+        });
+    }
+
     private static SourceCandidateDiscoveryService CreateService(
         FakeCrawlSourceStore store,
         FakeCategoryMetadataService categoryService,
