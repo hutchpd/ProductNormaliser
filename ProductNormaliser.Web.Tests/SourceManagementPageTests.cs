@@ -187,6 +187,118 @@ public sealed class SourceManagementPageTests
     }
 
     [Test]
+    public async Task SourcesIndex_OnPostUseCandidateAsync_PrefillsRegistrationFromCandidate()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            SourceCandidateDiscoveryResponse = new SourceCandidateDiscoveryResponseDto
+            {
+                RequestedCategoryKeys = ["tv", "monitor"],
+                GeneratedUtc = new DateTime(2026, 03, 25, 11, 00, 00, DateTimeKind.Utc),
+                Candidates =
+                [
+                    new SourceCandidateDto
+                    {
+                        CandidateKey = "currys_co_uk",
+                        DisplayName = "Currys",
+                        BaseUrl = "https://www.currys.co.uk/",
+                        Host = "www.currys.co.uk",
+                        CandidateType = "retailer",
+                        ConfidenceScore = 82m,
+                        MatchedCategoryKeys = ["tv", "monitor"],
+                        Probe = new SourceCandidateProbeDto(),
+                        Reasons = []
+                    }
+                ]
+            }
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IndexModel>.Instance)
+        {
+            CandidateDiscovery = new ProductNormaliser.Web.Pages.Sources.IndexModel.DiscoverSourceCandidatesInput
+            {
+                CategoryKeys = ["tv", "monitor"],
+                Locale = "en-GB",
+                Market = "UK",
+                BrandHints = "Samsung",
+                MaxCandidates = 8
+            },
+            CandidateSelection = new ProductNormaliser.Web.Pages.Sources.IndexModel.UseCandidateInput
+            {
+                CandidateKey = "currys_co_uk",
+                DisplayName = "Currys",
+                BaseUrl = "https://www.currys.co.uk/",
+                CategoryKeys = ["tv", "monitor"]
+            },
+            Registration = new ProductNormaliser.Web.Pages.Sources.IndexModel.RegisterSourceInput
+            {
+                IsEnabled = true
+            }
+        };
+
+        var result = await model.OnPostUseCandidateAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<PageResult>());
+            Assert.That(client.LastSourceCandidateDiscoveryRequest, Is.Not.Null);
+            Assert.That(model.CandidateDiscoveryResult, Is.Not.Null);
+            Assert.That(model.Registration.SourceId, Is.EqualTo("currys_co_uk"));
+            Assert.That(model.Registration.DisplayName, Is.EqualTo("Currys"));
+            Assert.That(model.Registration.BaseUrl, Is.EqualTo("https://www.currys.co.uk/"));
+            Assert.That(model.Registration.CategoryKeys, Is.EqualTo(new[] { "monitor", "tv" }));
+        });
+    }
+
+    [Test]
+    public async Task SourcesIndex_OnPostRegisterAsync_SubmitsEditedPrefilledRegistration()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            Sources = []
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IndexModel>.Instance)
+        {
+            CandidateSelection = new ProductNormaliser.Web.Pages.Sources.IndexModel.UseCandidateInput
+            {
+                CandidateKey = "currys_co_uk",
+                DisplayName = "Currys",
+                BaseUrl = "https://www.currys.co.uk/",
+                CategoryKeys = ["tv"]
+            },
+            CandidateDiscovery = new ProductNormaliser.Web.Pages.Sources.IndexModel.DiscoverSourceCandidatesInput
+            {
+                CategoryKeys = ["tv"]
+            },
+            Registration = new ProductNormaliser.Web.Pages.Sources.IndexModel.RegisterSourceInput
+            {
+                IsEnabled = true
+            }
+        };
+
+        await model.OnPostUseCandidateAsync(CancellationToken.None);
+
+        model.Registration.SourceId = "currys_uk";
+        model.Registration.DisplayName = "Currys UK";
+        model.Registration.BaseUrl = "https://www.currys.co.uk/";
+        model.Registration.CategoryKeys = ["tv", "monitor"];
+
+        var result = await model.OnPostRegisterAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
+            Assert.That(client.LastRegisteredSourceRequest, Is.Not.Null);
+            Assert.That(client.LastRegisteredSourceRequest!.SourceId, Is.EqualTo("currys_uk"));
+            Assert.That(client.LastRegisteredSourceRequest.DisplayName, Is.EqualTo("Currys UK"));
+            Assert.That(client.LastRegisteredSourceRequest.SupportedCategoryKeys, Is.EqualTo(new[] { "tv", "monitor" }));
+        });
+    }
+
+    [Test]
     public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_AddsModelErrorsForValidationProblem()
     {
         var client = new FakeAdminApiClient

@@ -285,7 +285,8 @@ public sealed class SourceManagementRenderingTests
             Assert.That(html, Does.Contain("Ephemeral source candidates"));
             Assert.That(html, Does.Contain("Matches registered source"));
             Assert.That(html, Does.Contain("Governance review needed before registration."));
-            Assert.That(html, Does.Contain("Register accepted host below"));
+            Assert.That(html, Does.Contain("Use candidate"));
+            Assert.That(html, Does.Contain("Nothing is registered until you submit the normal source registration form."));
             Assert.That(html, Does.Contain("Duplicate match: Currys"));
         });
     }

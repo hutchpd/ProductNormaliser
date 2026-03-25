@@ -4,6 +4,7 @@ using ProductNormaliser.Web.Contracts;
 using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
 using System.ComponentModel.DataAnnotations;
+using System.Text;
 
 namespace ProductNormaliser.Web.Pages.Sources;
 
@@ -28,6 +29,9 @@ public sealed class IndexModel(
 
     [BindProperty]
     public DiscoverSourceCandidatesInput CandidateDiscovery { get; set; } = new();
+
+    [BindProperty]
+    public UseCandidateInput CandidateSelection { get; set; } = new();
 
     public string? ErrorMessage { get; private set; }
 
@@ -123,48 +127,18 @@ public sealed class IndexModel(
     {
         await LoadAsync(cancellationToken);
 
-        var categoryKeys = NormalizeValues(CandidateDiscovery.CategoryKeys);
-        if (categoryKeys.Count == 0 && !string.IsNullOrWhiteSpace(CategoryKey))
-        {
-            categoryKeys = [CategoryKey];
-        }
+        await DiscoverCandidatesAsync(addValidationErrorWhenEmpty: true, cancellationToken);
 
-        if (categoryKeys.Count == 0)
-        {
-            ModelState.AddModelError($"{nameof(CandidateDiscovery)}.{nameof(CandidateDiscovery.CategoryKeys)}", "Choose at least one category before discovering source candidates.");
-            return Page();
-        }
+        return Page();
+    }
 
-        CandidateDiscovery.CategoryKeys = categoryKeys;
+    public async Task<IActionResult> OnPostUseCandidateAsync(CancellationToken cancellationToken)
+    {
+        await LoadAsync(cancellationToken);
+        await DiscoverCandidatesAsync(addValidationErrorWhenEmpty: false, cancellationToken);
 
-        try
-        {
-            CandidateDiscoveryErrorMessage = null;
-            CandidateDiscoveryResult = null;
-            CandidateDiscoveryResult = await adminApiClient.DiscoverSourceCandidatesAsync(new DiscoverSourceCandidatesRequest
-            {
-                CategoryKeys = categoryKeys,
-                Locale = NormalizeOptionalText(CandidateDiscovery.Locale),
-                Market = NormalizeOptionalText(CandidateDiscovery.Market),
-                BrandHints = ParseDelimitedValues(CandidateDiscovery.BrandHints),
-                MaxCandidates = NormalizeMaxCandidates(CandidateDiscovery.MaxCandidates)
-            }, cancellationToken);
-        }
-        catch (AdminApiValidationException exception)
-        {
-            foreach (var entry in exception.Errors)
-            {
-                foreach (var message in entry.Value)
-                {
-                    ModelState.AddModelError(string.Empty, message);
-                }
-            }
-        }
-        catch (AdminApiException exception)
-        {
-            logger.LogWarning(exception, "Failed to discover source candidates from sources index.");
-            CandidateDiscoveryErrorMessage = exception.Message;
-        }
+        ApplyCandidateToRegistration(CandidateSelection);
+        StatusMessage = $"Prefilled registration from candidate '{Registration.DisplayName}'. Review and submit to register the source.";
 
         return Page();
     }
@@ -346,6 +320,147 @@ public sealed class IndexModel(
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
+    private async Task DiscoverCandidatesAsync(bool addValidationErrorWhenEmpty, CancellationToken cancellationToken)
+    {
+        var categoryKeys = NormalizeValues(CandidateDiscovery.CategoryKeys);
+        if (categoryKeys.Count == 0 && !string.IsNullOrWhiteSpace(CategoryKey))
+        {
+            categoryKeys = [CategoryKey];
+        }
+
+        if (categoryKeys.Count == 0)
+        {
+            if (addValidationErrorWhenEmpty)
+            {
+                ModelState.AddModelError($"{nameof(CandidateDiscovery)}.{nameof(CandidateDiscovery.CategoryKeys)}", "Choose at least one category before discovering source candidates.");
+            }
+
+            CandidateDiscoveryResult = null;
+            return;
+        }
+
+        CandidateDiscovery.CategoryKeys = categoryKeys;
+
+        try
+        {
+            CandidateDiscoveryErrorMessage = null;
+            CandidateDiscoveryResult = null;
+            CandidateDiscoveryResult = await adminApiClient.DiscoverSourceCandidatesAsync(new DiscoverSourceCandidatesRequest
+            {
+                CategoryKeys = categoryKeys,
+                Locale = NormalizeOptionalText(CandidateDiscovery.Locale),
+                Market = NormalizeOptionalText(CandidateDiscovery.Market),
+                BrandHints = ParseDelimitedValues(CandidateDiscovery.BrandHints),
+                MaxCandidates = NormalizeMaxCandidates(CandidateDiscovery.MaxCandidates)
+            }, cancellationToken);
+        }
+        catch (AdminApiValidationException exception)
+        {
+            foreach (var entry in exception.Errors)
+            {
+                foreach (var message in entry.Value)
+                {
+                    ModelState.AddModelError(string.Empty, message);
+                }
+            }
+        }
+        catch (AdminApiException exception)
+        {
+            logger.LogWarning(exception, "Failed to discover source candidates from sources index.");
+            CandidateDiscoveryErrorMessage = exception.Message;
+        }
+    }
+
+    private void ApplyCandidateToRegistration(UseCandidateInput candidate)
+    {
+        var categoryKeys = NormalizeValues(candidate.CategoryKeys);
+        if (categoryKeys.Count == 0)
+        {
+            categoryKeys = NormalizeValues(CandidateDiscovery.CategoryKeys);
+        }
+
+        Registration = new RegisterSourceInput
+        {
+            SourceId = DeriveSourceId(candidate),
+            DisplayName = candidate.DisplayName.Trim(),
+            BaseUrl = NormalizeBaseUrl(candidate.BaseUrl),
+            Description = Registration.Description,
+            IsEnabled = Registration.IsEnabled,
+            CategoryKeys = categoryKeys
+        };
+    }
+
+    private static string DeriveSourceId(UseCandidateInput candidate)
+    {
+        var candidates = new[]
+        {
+            TryBuildSourceIdFromBaseUrl(candidate.BaseUrl),
+            NormalizeSourceId(candidate.CandidateKey),
+            NormalizeSourceId(candidate.DisplayName)
+        };
+
+        return candidates.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
+    }
+
+    private static string? TryBuildSourceIdFromBaseUrl(string? baseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(baseUrl)
+            || !Uri.TryCreate(baseUrl.Trim(), UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        var host = uri.Host.Trim();
+        if (host.StartsWith("www.", StringComparison.OrdinalIgnoreCase))
+        {
+            host = host[4..];
+        }
+
+        return NormalizeSourceId(host);
+    }
+
+    private static string NormalizeSourceId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder(value.Trim().Length);
+        var lastWasSeparator = false;
+
+        foreach (var character in value.Trim().ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(character))
+            {
+                builder.Append(character);
+                lastWasSeparator = false;
+                continue;
+            }
+
+            if (character is '.' or '-' or '_' or ' ')
+            {
+                if (!lastWasSeparator && builder.Length > 0)
+                {
+                    builder.Append('_');
+                    lastWasSeparator = true;
+                }
+            }
+        }
+
+        return builder.ToString().Trim('_');
+    }
+
+    private static string NormalizeBaseUrl(string value)
+    {
+        if (Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri))
+        {
+            return uri.ToString();
+        }
+
+        return value.Trim();
+    }
+
     private static int NormalizeMaxCandidates(int value)
     {
         if (value <= 0)
@@ -396,5 +511,16 @@ public sealed class IndexModel(
         [Range(1, 25)]
         [Display(Name = "Max candidates")]
         public int MaxCandidates { get; set; } = 10;
+    }
+
+    public sealed class UseCandidateInput
+    {
+        public string CandidateKey { get; set; } = string.Empty;
+
+        public string DisplayName { get; set; } = string.Empty;
+
+        public string BaseUrl { get; set; } = string.Empty;
+
+        public List<string> CategoryKeys { get; set; } = [];
     }
 }

@@ -131,7 +131,7 @@
         </div>
 
         <div class="empty-panel mt-3">
-            <p class="empty-state">Discover likely retailer or manufacturer hosts for the selected categories, review their probe signals, then decide what to register.</p>
+            <p class="empty-state">Discover likely retailer or manufacturer hosts for the selected categories, review their probe signals, then move promising candidates into the registration form.</p>
             <p class="subtle-copy">This MVP is intentionally stateless: results are ephemeral, stay separate from the registry, and do not create or modify registered sources until you use the existing registration flow.</p>
         </div>
 
@@ -305,7 +305,29 @@
                             </ul>
                         }
 
-                        <p class="subtle-copy mt-3 mb-0">Register accepted host below using the candidate name and base URL if you decide it belongs in the managed source registry.</p>
+                        <form method="post" asp-page-handler="UseCandidate" class="mt-3">
+                            <input type="hidden" asp-for="CandidateSelection.CandidateKey" value="@candidate.CandidateKey" />
+                            <input type="hidden" asp-for="CandidateSelection.DisplayName" value="@candidate.DisplayName" />
+                            <input type="hidden" asp-for="CandidateSelection.BaseUrl" value="@candidate.BaseUrl" />
+                            @foreach (var categoryKey in candidate.MatchedCategoryKeys)
+                            {
+                                <input type="hidden" name="CandidateSelection.CategoryKeys" value="@categoryKey" />
+                            }
+                            @foreach (var categoryKey in Model.CandidateDiscovery.CategoryKeys)
+                            {
+                                <input type="hidden" name="CandidateDiscovery.CategoryKeys" value="@categoryKey" />
+                            }
+                            <input type="hidden" asp-for="CandidateDiscovery.Locale" />
+                            <input type="hidden" asp-for="CandidateDiscovery.Market" />
+                            <input type="hidden" asp-for="CandidateDiscovery.BrandHints" />
+                            <input type="hidden" asp-for="CandidateDiscovery.MaxCandidates" />
+
+                            <div class="actions-bar">
+                                <button type="submit" class="btn btn-outline-secondary">Use candidate</button>
+                            </div>
+                        </form>
+
+                        <p class="subtle-copy mt-2 mb-0">This pre-fills the existing registration form with editable values only. Nothing is registered until you submit the normal source registration form.</p>
                     </article>
                 }
                 </div>
