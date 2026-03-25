@@ -132,7 +132,7 @@
 
         <div class="empty-panel mt-3">
             <p class="empty-state">Discover likely retailer or manufacturer hosts for the selected categories, review their probe signals, then decide what to register.</p>
-            <p class="subtle-copy">This MVP is intentionally stateless: results are ephemeral and do not create or modify registered sources until you use the existing registration flow.</p>
+            <p class="subtle-copy">This MVP is intentionally stateless: results are ephemeral, stay separate from the registry, and do not create or modify registered sources until you use the existing registration flow.</p>
         </div>
 
         @if (!string.IsNullOrWhiteSpace(Model.CandidateDiscoveryErrorMessage))
@@ -227,8 +227,8 @@
             @if (Model.CandidateDiscoveryResult.Candidates.Count == 0)
             {
                 <div class="empty-panel mt-3">
-                    <p class="empty-state">No source candidates are available yet.</p>
-                    <p class="subtle-copy">Provider integrations are still a skeleton in this MVP, so empty results are expected until search and probing providers are connected.</p>
+                    <p class="empty-state">No candidate hosts matched this discovery request.</p>
+                    <p class="subtle-copy">Try broadening the category scope, reducing brand hints, or using a different market or locale. Registered sources remain unchanged.</p>
                 </div>
             }
             else
@@ -254,13 +254,18 @@
                             }
                             @if (candidate.AlreadyRegistered)
                             {
-                                <span class="chip">Already registered</span>
+                                <span class="chip">Matches registered source</span>
                             }
                         </div>
 
+                        @if (candidate.DuplicateSourceDisplayNames.Count > 0)
+                        {
+                            <p class="subtle-copy mt-2">Duplicate match: @string.Join(", ", candidate.DuplicateSourceDisplayNames)</p>
+                        }
+
                         @if (!string.IsNullOrWhiteSpace(candidate.GovernanceWarning))
                         {
-                            <p class="text-danger small mt-2">@candidate.GovernanceWarning</p>
+                            <p class="text-danger small mt-2">Governance warning: @candidate.GovernanceWarning</p>
                         }
 
                         <dl class="job-meta-grid compact mt-3">
@@ -300,7 +305,7 @@
                             </ul>
                         }
 
-                        <p class="subtle-copy mt-3 mb-0">Registration remains explicit. Use the existing source registration form below to add accepted hosts.</p>
+                        <p class="subtle-copy mt-3 mb-0">Register accepted host below using the candidate name and base URL if you decide it belongs in the managed source registry.</p>
                     </article>
                 }
                 </div>

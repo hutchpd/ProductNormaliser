@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Logging.Abstractions;
 using ProductNormaliser.Web.Contracts;
 using ProductNormaliser.Web.Models;
+using ProductNormaliser.Web.Services;
 
 namespace ProductNormaliser.Web.Tests;
 
@@ -147,6 +148,100 @@ public sealed class SourceManagementPageTests
             Assert.That(client.LastSourceCandidateDiscoveryRequest!.CategoryKeys, Is.EqualTo(new[] { "tv" }));
             Assert.That(model.CandidateDiscoveryResult, Is.Not.Null);
             Assert.That(model.CandidateDiscoveryResult!.Candidates.Select(candidate => candidate.DisplayName), Is.EqualTo(new[] { "Currys" }));
+        });
+    }
+
+    [Test]
+    public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_UsesCategoryQueryFallback()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            SourceCandidateDiscoveryResponse = new SourceCandidateDiscoveryResponseDto
+            {
+                RequestedCategoryKeys = ["tv"],
+                GeneratedUtc = DateTime.UtcNow,
+                Candidates = []
+            }
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IndexModel>.Instance)
+        {
+            CategoryKey = "tv",
+            CandidateDiscovery = new ProductNormaliser.Web.Pages.Sources.IndexModel.DiscoverSourceCandidatesInput
+            {
+                CategoryKeys = [],
+                BrandHints = "Samsung"
+            }
+        };
+
+        var result = await model.OnPostDiscoverCandidatesAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<PageResult>());
+            Assert.That(client.LastSourceCandidateDiscoveryRequest, Is.Not.Null);
+            Assert.That(client.LastSourceCandidateDiscoveryRequest!.CategoryKeys, Is.EqualTo(new[] { "tv" }));
+            Assert.That(model.CandidateDiscovery.CategoryKeys, Is.EqualTo(new[] { "tv" }));
+        });
+    }
+
+    [Test]
+    public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_AddsModelErrorsForValidationProblem()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            SourceCandidateDiscoveryException = new AdminApiValidationException(
+                "Validation failed.",
+                new Dictionary<string, string[]>
+                {
+                    ["request"] = ["Choose at least one category before discovering source candidates."]
+                })
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IndexModel>.Instance)
+        {
+            CandidateDiscovery = new ProductNormaliser.Web.Pages.Sources.IndexModel.DiscoverSourceCandidatesInput
+            {
+                CategoryKeys = ["tv"]
+            }
+        };
+
+        var result = await model.OnPostDiscoverCandidatesAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<PageResult>());
+            Assert.That(model.ModelState[string.Empty]!.Errors.Select(error => error.ErrorMessage), Does.Contain("Choose at least one category before discovering source candidates."));
+            Assert.That(model.CandidateDiscoveryResult, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_SetsErrorMessageForAdminApiFailure()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            SourceCandidateDiscoveryException = new AdminApiException("Candidate discovery is temporarily unavailable.")
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IndexModel>.Instance)
+        {
+            CandidateDiscovery = new ProductNormaliser.Web.Pages.Sources.IndexModel.DiscoverSourceCandidatesInput
+            {
+                CategoryKeys = ["tv"]
+            }
+        };
+
+        var result = await model.OnPostDiscoverCandidatesAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<PageResult>());
+            Assert.That(model.CandidateDiscoveryErrorMessage, Is.EqualTo("Candidate discovery is temporarily unavailable."));
+            Assert.That(model.CandidateDiscoveryResult, Is.Null);
         });
     }
 

@@ -492,6 +492,61 @@ public sealed class AdminApiClientTests
         });
     }
 
+        [Test]
+        public void DiscoverSourceCandidatesAsync_ThrowsWhenCandidatePayloadIsInvalid()
+        {
+                const string payload = """
+                        {
+                            "requestedCategoryKeys": ["tv"],
+                            "generatedUtc": "2026-03-25T10:00:00Z",
+                            "candidates": [
+                                {
+                                    "displayName": "Currys",
+                                    "baseUrl": "https://www.currys.co.uk/",
+                                    "host": "www.currys.co.uk",
+                                    "candidateType": "retailer",
+                                    "matchedCategoryKeys": ["tv"],
+                                    "probe": {
+                                        "robotsTxtReachable": true,
+                                        "sitemapDetected": true,
+                                        "sitemapUrls": ["https://www.currys.co.uk/sitemap.xml"]
+                                    },
+                                    "reasons": []
+                                }
+                            ]
+                        }
+                        """;
+
+                var client = CreateRawClient(HttpStatusCode.OK, payload);
+
+                var action = async () => await client.DiscoverSourceCandidatesAsync(new DiscoverSourceCandidatesRequest
+                {
+                        CategoryKeys = ["tv"]
+                });
+
+                Assert.That(action, Throws.TypeOf<AdminApiException>()
+                        .With.Message.Contains("candidateKey"));
+        }
+
+        [Test]
+        public void DiscoverSourceCandidatesAsync_ThrowsValidationExceptionForProblemResponse()
+        {
+                var validation = new ValidationProblemDetails(new Dictionary<string, string[]>
+                {
+                        ["request"] = ["Choose at least one category before discovering source candidates."]
+                })
+                {
+                        Status = 400,
+                        Title = "One or more validation errors occurred."
+                };
+
+                var client = CreateClient(HttpStatusCode.BadRequest, validation, "application/problem+json");
+
+                var action = async () => await client.DiscoverSourceCandidatesAsync(new DiscoverSourceCandidatesRequest());
+
+                Assert.That(action, Throws.TypeOf<AdminApiValidationException>());
+        }
+
     [Test]
     public async Task CancelCrawlJobAsync_PostsToCancelEndpoint()
     {

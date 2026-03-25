@@ -1,4 +1,5 @@
 using ProductNormaliser.Web.Contracts;
+using System.Text.RegularExpressions;
 
 namespace ProductNormaliser.Web.Tests;
 
@@ -177,6 +178,115 @@ public sealed class SourceManagementRenderingTests
             Assert.That(html, Does.Contain("Category entry pages"));
             Assert.That(html, Does.Contain("Sitemap hints"));
             Assert.That(html, Does.Contain("Save Discovery Profile"));
+        });
+    }
+
+    [Test]
+    public async Task SourcesIndex_RendersCandidateDiscoveryResults_WithGovernanceAndDuplicateSignals()
+    {
+        var fakeAdminApiClient = new FakeAdminApiClient
+        {
+            Categories =
+            [
+                new CategoryMetadataDto
+                {
+                    CategoryKey = "tv",
+                    DisplayName = "TVs",
+                    FamilyKey = "display",
+                    FamilyDisplayName = "Display",
+                    IconKey = "tv",
+                    CrawlSupportStatus = "Supported",
+                    SchemaCompletenessScore = 0.95m,
+                    IsEnabled = true
+                }
+            ],
+            Sources =
+            [
+                new SourceDto
+                {
+                    SourceId = "currys_uk",
+                    DisplayName = "Currys",
+                    BaseUrl = "https://www.currys.co.uk/",
+                    Host = "www.currys.co.uk",
+                    IsEnabled = true,
+                    SupportedCategoryKeys = ["tv"],
+                    DiscoveryProfile = new SourceDiscoveryProfileDto(),
+                    ThrottlingPolicy = new SourceThrottlingPolicyDto
+                    {
+                        MinDelayMs = 1000,
+                        MaxDelayMs = 3000,
+                        MaxConcurrentRequests = 1,
+                        RequestsPerMinute = 30,
+                        RespectRobotsTxt = true
+                    },
+                    Readiness = new SourceReadinessDto { Status = "Ready", AssignedCategoryCount = 1, CrawlableCategoryCount = 1, Summary = "Ready" },
+                    Health = new SourceHealthSummaryDto { Status = "Healthy" },
+                    CreatedUtc = DateTime.UtcNow,
+                    UpdatedUtc = DateTime.UtcNow
+                }
+            ],
+            SourceCandidateDiscoveryResponse = new SourceCandidateDiscoveryResponseDto
+            {
+                RequestedCategoryKeys = ["tv"],
+                GeneratedUtc = new DateTime(2026, 03, 25, 12, 00, 00, DateTimeKind.Utc),
+                Candidates =
+                [
+                    new SourceCandidateDto
+                    {
+                        CandidateKey = "currys_co_uk",
+                        DisplayName = "Currys",
+                        BaseUrl = "https://www.currys.co.uk/",
+                        Host = "www.currys.co.uk",
+                        CandidateType = "retailer",
+                        ConfidenceScore = 82m,
+                        MatchedCategoryKeys = ["tv"],
+                        AlreadyRegistered = true,
+                        DuplicateSourceIds = ["currys_uk"],
+                        DuplicateSourceDisplayNames = ["Currys"],
+                        AllowedByGovernance = false,
+                        GovernanceWarning = "Governance review needed before registration.",
+                        Probe = new SourceCandidateProbeDto
+                        {
+                            RobotsTxtReachable = true,
+                            SitemapDetected = true,
+                            SitemapUrls = ["https://www.currys.co.uk/sitemap.xml"]
+                        },
+                        Reasons =
+                        [
+                            new SourceCandidateReasonDto
+                            {
+                                Code = "duplicate",
+                                Message = "Potential duplicate of a registered source.",
+                                Weight = -40m
+                            }
+                        ]
+                    }
+                ]
+            }
+        };
+
+        await using var factory = new ProductWebApplicationFactory(fakeAdminApiClient);
+        using var client = await factory.CreateOperatorClientAsync();
+
+        var initialHtml = await client.GetStringAsync("/Sources/Index?category=tv");
+        var tokenMatch = Regex.Match(initialHtml, "<input name=\"__RequestVerificationToken\" type=\"hidden\" value=\"(?<token>[^\"]+)\"");
+        Assert.That(tokenMatch.Success, Is.True, "Expected antiforgery token on sources index form.");
+
+        var request = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["__RequestVerificationToken"] = tokenMatch.Groups["token"].Value,
+            ["CandidateDiscovery.CategoryKeys"] = "tv"
+        });
+        using var response = await client.PostAsync("/Sources/Index?handler=DiscoverCandidates", request);
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(html, Does.Contain("Ephemeral source candidates"));
+            Assert.That(html, Does.Contain("Matches registered source"));
+            Assert.That(html, Does.Contain("Governance review needed before registration."));
+            Assert.That(html, Does.Contain("Register accepted host below"));
+            Assert.That(html, Does.Contain("Duplicate match: Currys"));
         });
     }
 }

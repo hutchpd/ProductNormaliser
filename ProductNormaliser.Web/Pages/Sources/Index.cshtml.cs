@@ -139,6 +139,8 @@ public sealed class IndexModel(
 
         try
         {
+            CandidateDiscoveryErrorMessage = null;
+            CandidateDiscoveryResult = null;
             CandidateDiscoveryResult = await adminApiClient.DiscoverSourceCandidatesAsync(new DiscoverSourceCandidatesRequest
             {
                 CategoryKeys = categoryKeys,
