@@ -58,11 +58,13 @@ public sealed class PageClassificationEvaluator
 
         var summary = Summarize(results);
         logger.LogInformation(
-            "Page classification evaluation completed. Total: {Total}, LLM Accuracy: {LlmAccuracy}%, Heuristic Accuracy: {HeuristicAccuracy}%, Combined Accuracy: {CombinedAccuracy}%, False Positives: {FalsePositives}, False Negatives: {FalseNegatives}",
+            "Page classification evaluation completed. Total: {Total}, LLM Accuracy: {LlmAccuracy}%, Heuristic Accuracy: {HeuristicAccuracy}%, Combined Accuracy: {CombinedAccuracy}%, Combined Precision: {CombinedPrecision}%, Combined Recall: {CombinedRecall}%, False Positives: {FalsePositives}, False Negatives: {FalseNegatives}",
             summary.Total,
             summary.LlmAccuracy,
             summary.HeuristicAccuracy,
             summary.CombinedAccuracy,
+            summary.CombinedPrecision,
+            summary.CombinedRecall,
             summary.FalsePositives,
             summary.FalseNegatives);
 
@@ -90,12 +92,42 @@ public sealed class PageClassificationEvaluator
             return Math.Round(correct * 100d / items.Length, 2, MidpointRounding.AwayFromZero);
         }
 
+        static double Precision(IEnumerable<PageClassificationEvaluationResult> source, Func<PageClassificationEvaluationResult, bool> selector)
+        {
+            var positives = source.Where(selector).ToArray();
+            if (positives.Length == 0)
+            {
+                return 0d;
+            }
+
+            var truePositives = positives.Count(item => item.ExpectedIsProduct);
+            return Math.Round(truePositives * 100d / positives.Length, 2, MidpointRounding.AwayFromZero);
+        }
+
+        static double Recall(IEnumerable<PageClassificationEvaluationResult> source, Func<PageClassificationEvaluationResult, bool> selector)
+        {
+            var actualPositives = source.Where(item => item.ExpectedIsProduct).ToArray();
+            if (actualPositives.Length == 0)
+            {
+                return 0d;
+            }
+
+            var truePositives = actualPositives.Count(selector);
+            return Math.Round(truePositives * 100d / actualPositives.Length, 2, MidpointRounding.AwayFromZero);
+        }
+
         return new PageClassificationEvaluationSummary
         {
             Total = results.Count,
             LlmAccuracy = Accuracy(results, item => item.LlmIsProduct),
+            LlmPrecision = Precision(results, item => item.LlmIsProduct),
+            LlmRecall = Recall(results, item => item.LlmIsProduct),
             HeuristicAccuracy = Accuracy(results, item => item.HeuristicIsProduct),
+            HeuristicPrecision = Precision(results, item => item.HeuristicIsProduct),
+            HeuristicRecall = Recall(results, item => item.HeuristicIsProduct),
             CombinedAccuracy = Accuracy(results, item => item.FinalDecision),
+            CombinedPrecision = Precision(results, item => item.FinalDecision),
+            CombinedRecall = Recall(results, item => item.FinalDecision),
             FalsePositives = results.Count(item => item.FalsePositive),
             FalseNegatives = results.Count(item => item.FalseNegative)
         };
