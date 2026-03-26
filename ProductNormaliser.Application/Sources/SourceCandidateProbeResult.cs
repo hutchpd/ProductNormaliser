@@ -15,6 +15,8 @@ public sealed class SourceCandidateProbeResult
     public bool RepresentativeCategoryPageReachable { get; init; }
     public string? RepresentativeProductPageUrl { get; init; }
     public bool RepresentativeProductPageReachable { get; init; }
+    public bool RuntimeExtractionCompatible { get; init; }
+    public int RepresentativeRuntimeProductCount { get; init; }
     public bool StructuredProductEvidenceDetected { get; init; }
     public bool TechnicalAttributeEvidenceDetected { get; init; }
     public bool LlmAcceptedRepresentativeProductPage { get; init; }

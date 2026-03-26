@@ -126,8 +126,16 @@ public sealed class SourceManagementPageTests
                         Host = "www.currys.co.uk",
                         CandidateType = "retailer",
                         ConfidenceScore = 82m,
+                        RuntimeExtractionStatus = "not_compatible",
+                        RuntimeExtractionMessage = "Representative runtime extraction did not produce products from the sampled product page.",
                         MatchedCategoryKeys = ["tv"],
-                        Probe = new SourceCandidateProbeDto(),
+                        Probe = new SourceCandidateProbeDto
+                        {
+                            RepresentativeProductPageReachable = true,
+                            RuntimeExtractionCompatible = false,
+                            RepresentativeRuntimeProductCount = 0,
+                            TechnicalAttributeEvidenceDetected = true
+                        },
                         Reasons = []
                     }
                 ]
@@ -155,6 +163,9 @@ public sealed class SourceManagementPageTests
             Assert.That(client.LastSourceCandidateDiscoveryRequest.Market, Is.EqualTo("UK"));
             Assert.That(model.CandidateDiscoveryResult, Is.Not.Null);
             Assert.That(model.CandidateDiscoveryResult!.Candidates.Select(candidate => candidate.DisplayName), Is.EqualTo(new[] { "Currys" }));
+            Assert.That(model.CandidateDiscoveryResult.Candidates[0].RuntimeExtractionStatus, Is.EqualTo("not_compatible"));
+            Assert.That(model.CandidateDiscoveryResult.Candidates[0].RuntimeExtractionMessage, Is.EqualTo("Representative runtime extraction did not produce products from the sampled product page."));
+            Assert.That(model.GetRuntimeExtractionLabel(model.CandidateDiscoveryResult.Candidates[0]), Is.EqualTo("Not compatible with runtime extraction"));
         });
     }
 

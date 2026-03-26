@@ -75,6 +75,8 @@ public sealed class SourceCandidateDiscoveryService(
             var llmScore = CalculateLlmScore(probe);
             var confidenceScore = CalculateConfidenceScore(heuristicScore, llmScore, probe);
             var recommendationStatus = DetermineRecommendationStatus(probe, duplicateRiskScore, allowedByGovernance, heuristicScore, llmScore);
+            var runtimeExtractionStatus = DetermineRuntimeExtractionStatus(probe);
+            var runtimeExtractionMessage = BuildRuntimeExtractionMessage(probe);
             var automationAssessment = BuildAutomationAssessment(searchResult, normalizedRequest, probe, duplicateRiskScore, allowedByGovernance, confidenceScore);
             candidates.Add(new SourceCandidateResult
             {
@@ -92,6 +94,8 @@ public sealed class SourceCandidateDiscoveryService(
                 ExtractabilityScore = probe.ExtractabilityScore,
                 DuplicateRiskScore = duplicateRiskScore,
                 RecommendationStatus = recommendationStatus,
+                RuntimeExtractionStatus = runtimeExtractionStatus,
+                RuntimeExtractionMessage = runtimeExtractionMessage,
                 MatchedCategoryKeys = NormalizeValues(searchResult.MatchedCategoryKeys),
                 MatchedBrandHints = NormalizeValues(searchResult.MatchedBrandHints),
                 AlreadyRegistered = duplicateSources.Any(),
@@ -258,6 +262,27 @@ public sealed class SourceCandidateDiscoveryService(
             });
         }
 
+        if (probe.RuntimeExtractionCompatible)
+        {
+            reasons.Add(new SourceCandidateReason
+            {
+                Code = "runtime_extraction_compatible",
+                Message = probe.RepresentativeRuntimeProductCount == 1
+                    ? "The representative product page produced 1 product through the live runtime extractor."
+                    : $"The representative product page produced {probe.RepresentativeRuntimeProductCount} products through the live runtime extractor.",
+                Weight = 40m
+            });
+        }
+        else if (probe.RepresentativeProductPageReachable)
+        {
+            reasons.Add(new SourceCandidateReason
+            {
+                Code = "runtime_extraction_mismatch",
+                Message = "The representative product page was reachable, but the live runtime extractor did not produce any products from it.",
+                Weight = -34m
+            });
+        }
+
         if (probe.LlmAcceptedRepresentativeProductPage)
         {
             reasons.Add(new SourceCandidateReason
@@ -372,8 +397,8 @@ public sealed class SourceCandidateDiscoveryService(
         var duplicateRiskAccepted = duplicateRiskScore <= onboardingAutomationOptions.MaxDuplicateRiskScore;
         var representativeValidationPassed = probe.RepresentativeCategoryPageReachable
             && probe.RepresentativeProductPageReachable;
-        var extractabilityConfidencePassed = probe.ExtractabilityScore >= onboardingAutomationOptions.MinExtractabilityScore
-            && (probe.StructuredProductEvidenceDetected || probe.TechnicalAttributeEvidenceDetected);
+        var extractabilityConfidencePassed = probe.RuntimeExtractionCompatible
+            && probe.ExtractabilityScore >= onboardingAutomationOptions.MinExtractabilityScore;
         var yieldConfidenceScore = CalculateYieldConfidenceScore(probe);
         var yieldConfidencePassed = yieldConfidenceScore >= onboardingAutomationOptions.MinYieldConfidenceScore;
         var localeAligned = string.IsNullOrWhiteSpace(requestedLocale)
@@ -416,7 +441,7 @@ public sealed class SourceCandidateDiscoveryService(
 
         if (extractabilityConfidencePassed)
         {
-            supportingReasons.Add("Representative product evidence cleared the extractability threshold.");
+            supportingReasons.Add("Representative product evidence cleared the extractability threshold through the live runtime extractor.");
         }
 
         if (yieldConfidencePassed)
@@ -457,7 +482,7 @@ public sealed class SourceCandidateDiscoveryService(
 
         if (!extractabilityConfidencePassed)
         {
-            blockingReasons.Add("Extractability confidence is below the guarded threshold.");
+            blockingReasons.Add("Representative product validation did not produce products through the live runtime extractor.");
         }
 
         if (!yieldConfidencePassed)
@@ -530,6 +555,15 @@ public sealed class SourceCandidateDiscoveryService(
             + probe.CatalogLikelihoodScore * 0.10m
             - (duplicateRiskScore * 0.35m);
 
+        if (probe.RuntimeExtractionCompatible)
+        {
+            score += 10m;
+        }
+        else if (probe.RepresentativeProductPageReachable)
+        {
+            score -= 25m;
+        }
+
         score += ScoreMarketAlignment(searchResult, request);
 
         if (!allowedByGovernance)
@@ -585,17 +619,21 @@ public sealed class SourceCandidateDiscoveryService(
 
         if (probe.RepresentativeProductPageReachable)
         {
-            score += 30m;
+            score += 20m;
         }
 
-        if (probe.StructuredProductEvidenceDetected)
+        if (probe.RuntimeExtractionCompatible)
         {
-            score += 25m;
+            score += 35m;
+        }
+        else if (probe.StructuredProductEvidenceDetected)
+        {
+            score += 10m;
         }
 
         if (probe.TechnicalAttributeEvidenceDetected)
         {
-            score += 20m;
+            score += 5m;
         }
 
         if (probe.SitemapDetected)
@@ -621,6 +659,17 @@ public sealed class SourceCandidateDiscoveryService(
         if (!allowedByGovernance)
         {
             return SourceCandidateResult.RecommendationDoNotAccept;
+        }
+
+        if (probe.RuntimeExtractionCompatible)
+        {
+            return probe.CrawlabilityScore >= 55m
+                && probe.CategoryRelevanceScore >= 35m
+                && probe.ExtractabilityScore >= 55m
+                && probe.CatalogLikelihoodScore >= 45m
+                && duplicateRiskScore < 50m
+                    ? SourceCandidateResult.RecommendationRecommended
+                    : SourceCandidateResult.RecommendationManualReview;
         }
 
         var heuristicsStrong = heuristicScore >= 70m;
@@ -654,6 +703,13 @@ public sealed class SourceCandidateDiscoveryService(
             return SourceCandidateResult.RecommendationDoNotAccept;
         }
 
+        if (probe.RepresentativeProductPageReachable && !probe.RuntimeExtractionCompatible)
+        {
+            return probe.StructuredProductEvidenceDetected || probe.TechnicalAttributeEvidenceDetected
+                ? SourceCandidateResult.RecommendationManualReview
+                : SourceCandidateResult.RecommendationDoNotAccept;
+        }
+
         if (probe.RepresentativeProductPageReachable
             && !probe.StructuredProductEvidenceDetected
             && !probe.TechnicalAttributeEvidenceDetected)
@@ -676,6 +732,38 @@ public sealed class SourceCandidateDiscoveryService(
         }
 
         return SourceCandidateResult.RecommendationManualReview;
+    }
+
+    private static string DetermineRuntimeExtractionStatus(SourceCandidateProbeResult probe)
+    {
+        if (probe.RuntimeExtractionCompatible)
+        {
+            return SourceCandidateResult.RuntimeExtractionCompatibleStatus;
+        }
+
+        if (probe.RepresentativeProductPageReachable)
+        {
+            return SourceCandidateResult.RuntimeExtractionNotCompatibleStatus;
+        }
+
+        return SourceCandidateResult.RuntimeExtractionManualReviewOnlyStatus;
+    }
+
+    private static string BuildRuntimeExtractionMessage(SourceCandidateProbeResult probe)
+    {
+        if (probe.RuntimeExtractionCompatible)
+        {
+            return probe.RepresentativeRuntimeProductCount == 1
+                ? "Representative runtime extraction succeeded on the sampled product page."
+                : $"Representative runtime extraction succeeded on the sampled product page and produced {probe.RepresentativeRuntimeProductCount} products.";
+        }
+
+        if (probe.RepresentativeProductPageReachable)
+        {
+            return "Representative runtime extraction did not produce products from the sampled product page.";
+        }
+
+        return "Representative runtime extraction could not be confirmed from the sampled pages, so this candidate needs manual review.";
     }
 
     private static decimal GetHeuristicExtractabilityScore(SourceCandidateProbeResult probe)

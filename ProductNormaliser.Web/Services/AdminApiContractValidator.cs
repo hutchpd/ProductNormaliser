@@ -11,6 +11,13 @@ internal static class AdminApiContractValidator
         "do_not_accept"
     };
 
+    private static readonly IReadOnlySet<string> CandidateRuntimeExtractionStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "compatible",
+        "manual_review_only",
+        "not_compatible"
+    };
+
     private static readonly IReadOnlySet<string> SourceAutomationModes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "operator_assisted",
@@ -300,6 +307,8 @@ internal static class AdminApiContractValidator
         ValidateRequiredString(payload.MarketEvidence, $"{path}.marketEvidence");
         ValidateRequiredString(payload.LocaleEvidence, $"{path}.localeEvidence");
         ValidateEnumValue(payload.RecommendationStatus, CandidateRecommendationStatuses, $"{path}.recommendationStatus", value => value);
+        ValidateEnumValue(payload.RuntimeExtractionStatus, CandidateRuntimeExtractionStatuses, $"{path}.runtimeExtractionStatus", value => value);
+        ValidateRequiredString(payload.RuntimeExtractionMessage, $"{path}.runtimeExtractionMessage");
         ValidateStringItems(payload.MatchedCategoryKeys, $"{path}.matchedCategoryKeys");
         ValidateStringItems(payload.MatchedBrandHints, $"{path}.matchedBrandHints");
         ValidateStringItems(payload.DuplicateSourceIds, $"{path}.duplicateSourceIds");

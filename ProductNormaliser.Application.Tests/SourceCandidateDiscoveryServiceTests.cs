@@ -58,6 +58,8 @@ public sealed class SourceCandidateDiscoveryServiceTests
                     CatalogLikelihoodScore = 68m,
                     RepresentativeCategoryPageReachable = true,
                     RepresentativeProductPageReachable = true,
+                    RuntimeExtractionCompatible = true,
+                    RepresentativeRuntimeProductCount = 1,
                     StructuredProductEvidenceDetected = true,
                     TechnicalAttributeEvidenceDetected = true
                 },
@@ -274,6 +276,8 @@ public sealed class SourceCandidateDiscoveryServiceTests
                         CatalogLikelihoodScore = 75m,
                         RepresentativeCategoryPageReachable = true,
                         RepresentativeProductPageReachable = true,
+                        RuntimeExtractionCompatible = true,
+                        RepresentativeRuntimeProductCount = 1,
                         StructuredProductEvidenceDetected = true,
                         TechnicalAttributeEvidenceDetected = true,
                         CategoryPageHints = ["https://rich.example/tv/"],
@@ -293,9 +297,11 @@ public sealed class SourceCandidateDiscoveryServiceTests
             Assert.That(result.Candidates, Has.Count.EqualTo(1));
             Assert.That(result.Candidates[0].ConfidenceScore, Is.GreaterThan(75m));
             Assert.That(result.Candidates[0].RecommendationStatus, Is.EqualTo(SourceCandidateResult.RecommendationRecommended));
+            Assert.That(result.Candidates[0].RuntimeExtractionStatus, Is.EqualTo(SourceCandidateResult.RuntimeExtractionCompatibleStatus));
             Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("robots"));
             Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("sitemap"));
             Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("category_relevance"));
+            Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("runtime_extraction_compatible"));
             Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("structured_product_evidence"));
             Assert.That(result.Candidates[0].Probe.SitemapUrls, Is.EqualTo(new[] { "https://rich.example/sitemap.xml" }));
             Assert.That(result.Candidates[0].Probe.LikelyListingUrlPatterns, Is.EqualTo(new[] { "/tv/" }));
@@ -338,6 +344,8 @@ public sealed class SourceCandidateDiscoveryServiceTests
                         CatalogLikelihoodScore = 80m,
                         RepresentativeCategoryPageReachable = true,
                         RepresentativeProductPageReachable = true,
+                        RuntimeExtractionCompatible = true,
+                        RepresentativeRuntimeProductCount = 1,
                         StructuredProductEvidenceDetected = true,
                         TechnicalAttributeEvidenceDetected = true,
                         LikelyListingUrlPatterns = ["/tv/"]
@@ -397,6 +405,8 @@ public sealed class SourceCandidateDiscoveryServiceTests
                         CatalogLikelihoodScore = 85m,
                         RepresentativeCategoryPageReachable = true,
                         RepresentativeProductPageReachable = true,
+                        RuntimeExtractionCompatible = true,
+                        RepresentativeRuntimeProductCount = 1,
                         StructuredProductEvidenceDetected = true,
                         TechnicalAttributeEvidenceDetected = true,
                         LikelyListingUrlPatterns = ["/tv/"]
@@ -505,6 +515,8 @@ public sealed class SourceCandidateDiscoveryServiceTests
                         CatalogLikelihoodScore = 72m,
                         RepresentativeCategoryPageReachable = true,
                         RepresentativeProductPageReachable = true,
+                        RuntimeExtractionCompatible = true,
+                        RepresentativeRuntimeProductCount = 1,
                         StructuredProductEvidenceDetected = true,
                         TechnicalAttributeEvidenceDetected = true,
                         LlmAcceptedRepresentativeProductPage = true,
@@ -611,6 +623,8 @@ public sealed class SourceCandidateDiscoveryServiceTests
                         CatalogLikelihoodScore = 60m,
                         RepresentativeCategoryPageReachable = true,
                         RepresentativeProductPageReachable = true,
+                        RuntimeExtractionCompatible = true,
+                        RepresentativeRuntimeProductCount = 1,
                         StructuredProductEvidenceDetected = true,
                         TechnicalAttributeEvidenceDetected = true,
                         LlmAcceptedRepresentativeProductPage = true,
@@ -626,8 +640,128 @@ public sealed class SourceCandidateDiscoveryServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.Candidates[0].ConfidenceScore, Is.EqualTo(77.1m));
+            Assert.That(result.Candidates[0].ConfidenceScore, Is.EqualTo(83.1m));
             Assert.That(result.Candidates[0].RecommendationStatus, Is.EqualTo(SourceCandidateResult.RecommendationRecommended));
+        });
+    }
+
+    [Test]
+    public async Task DiscoverAsync_KeepsTechnicalEvidenceVisibleButManualOnly_WhenRuntimeExtractionFails()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "tech_only_manual",
+                    DisplayName = "Tech Only Manual",
+                    BaseUrl = "https://tech-only.example/",
+                    Host = "tech-only.example",
+                    CandidateType = "retailer",
+                    AllowedMarkets = ["UK"],
+                    PreferredLocale = "en-GB",
+                    MarketEvidence = "explicit",
+                    LocaleEvidence = "explicit",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new FakeSourceCandidateProbeService(
+                new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["tech-only.example"] = new SourceCandidateProbeResult
+                    {
+                        HomePageReachable = true,
+                        RobotsTxtReachable = true,
+                        SitemapDetected = true,
+                        CrawlabilityScore = 88m,
+                        CategoryRelevanceScore = 68m,
+                        ExtractabilityScore = 25m,
+                        CatalogLikelihoodScore = 70m,
+                        RepresentativeCategoryPageReachable = true,
+                        RepresentativeProductPageReachable = true,
+                        RuntimeExtractionCompatible = false,
+                        RepresentativeRuntimeProductCount = 0,
+                        StructuredProductEvidenceDetected = false,
+                        TechnicalAttributeEvidenceDetected = true,
+                        LikelyListingUrlPatterns = ["/tv/"]
+                    }
+                }),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"],
+            Market = "UK",
+            Locale = "en-GB",
+            AutomationMode = "auto_accept_and_seed"
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Candidates[0].RecommendationStatus, Is.EqualTo(SourceCandidateResult.RecommendationManualReview));
+            Assert.That(result.Candidates[0].RuntimeExtractionStatus, Is.EqualTo(SourceCandidateResult.RuntimeExtractionNotCompatibleStatus));
+            Assert.That(result.Candidates[0].RuntimeExtractionMessage, Is.EqualTo("Representative runtime extraction did not produce products from the sampled product page."));
+            Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("technical_attribute_evidence"));
+            Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("runtime_extraction_mismatch"));
+            Assert.That(result.Candidates[0].AutomationAssessment.EligibleForSuggestion, Is.False);
+            Assert.That(result.Candidates[0].AutomationAssessment.EligibleForAutoAccept, Is.False);
+            Assert.That(result.Candidates[0].AutomationAssessment.BlockingReasons.Any(reason => reason.Contains("live runtime extractor", StringComparison.OrdinalIgnoreCase)), Is.True);
+        });
+    }
+
+    [Test]
+    public async Task DiscoverAsync_AllowsRecommendation_WhenRuntimeExtractionSucceeds()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "runtime_ready",
+                    DisplayName = "Runtime Ready",
+                    BaseUrl = "https://runtime-ready.example/",
+                    Host = "runtime-ready.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new FakeSourceCandidateProbeService(
+                new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["runtime-ready.example"] = new SourceCandidateProbeResult
+                    {
+                        HomePageReachable = true,
+                        RobotsTxtReachable = true,
+                        SitemapDetected = true,
+                        CrawlabilityScore = 82m,
+                        CategoryRelevanceScore = 58m,
+                        ExtractabilityScore = 80m,
+                        CatalogLikelihoodScore = 66m,
+                        RepresentativeCategoryPageReachable = true,
+                        RepresentativeProductPageReachable = true,
+                        RuntimeExtractionCompatible = true,
+                        RepresentativeRuntimeProductCount = 1,
+                        StructuredProductEvidenceDetected = true,
+                        TechnicalAttributeEvidenceDetected = true,
+                        LikelyListingUrlPatterns = ["/tv/"],
+                        LikelyProductUrlPatterns = ["/product/"]
+                    }
+                }),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"]
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Candidates[0].RecommendationStatus, Is.EqualTo(SourceCandidateResult.RecommendationRecommended));
+            Assert.That(result.Candidates[0].RuntimeExtractionStatus, Is.EqualTo(SourceCandidateResult.RuntimeExtractionCompatibleStatus));
+            Assert.That(result.Candidates[0].RuntimeExtractionMessage, Is.EqualTo("Representative runtime extraction succeeded on the sampled product page."));
+            Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("runtime_extraction_compatible"));
         });
     }
 
@@ -678,7 +812,7 @@ public sealed class SourceCandidateDiscoveryServiceTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.Candidates[0].ConfidenceScore, Is.EqualTo(22.55m));
+            Assert.That(result.Candidates[0].ConfidenceScore, Is.EqualTo(8m));
             Assert.That(result.Candidates[0].RecommendationStatus, Is.EqualTo(SourceCandidateResult.RecommendationDoNotAccept));
             Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("llm_rejected_product_page"));
         });

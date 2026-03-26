@@ -30,6 +30,8 @@ public sealed class SourceCandidateDiscoveryControllerTests
                     ExtractabilityScore = 88m,
                     DuplicateRiskScore = 0m,
                     RecommendationStatus = SourceCandidateResult.RecommendationRecommended,
+                    RuntimeExtractionStatus = SourceCandidateResult.RuntimeExtractionCompatibleStatus,
+                    RuntimeExtractionMessage = "Representative runtime extraction succeeded on the sampled product page.",
                     MatchedCategoryKeys = ["tv"],
                     MatchedBrandHints = ["Samsung"],
                     AlreadyRegistered = false,
@@ -48,6 +50,8 @@ public sealed class SourceCandidateDiscoveryControllerTests
                         RepresentativeCategoryPageReachable = true,
                         RepresentativeProductPageUrl = "https://samsung.example/product/oled-1",
                         RepresentativeProductPageReachable = true,
+                        RuntimeExtractionCompatible = true,
+                        RepresentativeRuntimeProductCount = 1,
                         StructuredProductEvidenceDetected = true,
                         TechnicalAttributeEvidenceDetected = true,
                         CategoryPageHints = ["https://samsung.example/tv/"],
@@ -87,7 +91,11 @@ public sealed class SourceCandidateDiscoveryControllerTests
             Assert.That(payload.Candidates, Has.Count.EqualTo(1));
             Assert.That(payload.Candidates[0].DisplayName, Is.EqualTo("Samsung Official Store"));
             Assert.That(payload.Candidates[0].RecommendationStatus, Is.EqualTo("recommended"));
+            Assert.That(payload.Candidates[0].RuntimeExtractionStatus, Is.EqualTo("compatible"));
+            Assert.That(payload.Candidates[0].RuntimeExtractionMessage, Is.EqualTo("Representative runtime extraction succeeded on the sampled product page."));
             Assert.That(payload.Candidates[0].Probe.SitemapUrls, Is.EqualTo(new[] { "https://samsung.example/sitemap.xml" }));
+            Assert.That(payload.Candidates[0].Probe.RuntimeExtractionCompatible, Is.True);
+            Assert.That(payload.Candidates[0].Probe.RepresentativeRuntimeProductCount, Is.EqualTo(1));
             Assert.That(payload.Candidates[0].Probe.StructuredProductEvidenceDetected, Is.True);
             Assert.That(payload.Candidates[0].Reasons[0].Code, Is.EqualTo("search_match"));
         });

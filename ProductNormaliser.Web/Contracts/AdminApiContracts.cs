@@ -328,6 +328,8 @@ public sealed class SourceCandidateDto
     public decimal ExtractabilityScore { get; init; }
     public decimal DuplicateRiskScore { get; init; }
     public string RecommendationStatus { get; init; } = string.Empty;
+    public string RuntimeExtractionStatus { get; init; } = string.Empty;
+    public string RuntimeExtractionMessage { get; init; } = string.Empty;
     public IReadOnlyList<string> MatchedCategoryKeys { get; init; } = [];
     public IReadOnlyList<string> MatchedBrandHints { get; init; } = [];
     public bool AlreadyRegistered { get; init; }
@@ -388,6 +390,8 @@ public sealed class SourceCandidateProbeDto
     public bool RepresentativeCategoryPageReachable { get; init; }
     public string? RepresentativeProductPageUrl { get; init; }
     public bool RepresentativeProductPageReachable { get; init; }
+    public bool RuntimeExtractionCompatible { get; init; }
+    public int RepresentativeRuntimeProductCount { get; init; }
     public bool StructuredProductEvidenceDetected { get; init; }
     public bool TechnicalAttributeEvidenceDetected { get; init; }
     public bool NonCatalogContentHeavy { get; init; }

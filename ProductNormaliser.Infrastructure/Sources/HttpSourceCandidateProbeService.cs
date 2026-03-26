@@ -44,6 +44,8 @@ public sealed partial class HttpSourceCandidateProbeService(
         var representativeProductPageHtml = await TryFetchRepresentativeAsync(candidate.BaseUrl, representativeProductPageUrl, timeoutCts.Token);
         var likelyListingUrlPatterns = InferListingUrlPatterns(categoryPageHints);
         var likelyProductUrlPatterns = InferProductUrlPatterns(string.Join('\n', new[] { homePageHtml, representativeCategoryPageHtml }.Where(value => !string.IsNullOrWhiteSpace(value))));
+        var representativeRuntimeProductCount = CountRuntimeExtractedProducts(representativeProductPageHtml, representativeProductPageUrl);
+        var runtimeExtractionCompatible = representativeRuntimeProductCount > 0;
         var structuredProductEvidenceDetected = HasStructuredProductEvidence(representativeProductPageHtml, representativeProductPageUrl);
         var technicalAttributeEvidenceDetected = HasTechnicalAttributeEvidence(representativeProductPageHtml);
         var heuristicProductEvidenceDetected = structuredProductEvidenceDetected || technicalAttributeEvidenceDetected;
@@ -66,7 +68,7 @@ public sealed partial class HttpSourceCandidateProbeService(
         var catalogLikelihoodScore = ScoreCatalogLikelihood(homePageHtml, representativeCategoryPageHtml, representativeProductPageUrl);
         var categoryRelevanceScore = ScoreCategoryRelevance(categoryKeys, homePageHtml, representativeCategoryPageHtml, categoryPageHints);
         var crawlabilityScore = ScoreCrawlability(homePageHtml, robotsText, sitemapUrls.Count > 0, representativeCategoryPageHtml, representativeProductPageHtml);
-        var heuristicExtractabilityScore = ScoreExtractability(structuredProductEvidenceDetected, technicalAttributeEvidenceDetected, representativeProductPageHtml);
+        var heuristicExtractabilityScore = ScoreExtractability(runtimeExtractionCompatible, structuredProductEvidenceDetected, technicalAttributeEvidenceDetected, representativeProductPageHtml);
         var extractabilityScore = AdjustExtractabilityScoreForLlm(
             heuristicExtractabilityScore,
             llmAcceptedRepresentativeProductPage,
@@ -99,6 +101,8 @@ public sealed partial class HttpSourceCandidateProbeService(
             RepresentativeCategoryPageReachable = representativeCategoryPageHtml is not null,
             RepresentativeProductPageUrl = representativeProductPageUrl,
             RepresentativeProductPageReachable = representativeProductPageHtml is not null,
+            RuntimeExtractionCompatible = runtimeExtractionCompatible,
+            RepresentativeRuntimeProductCount = representativeRuntimeProductCount,
             StructuredProductEvidenceDetected = structuredProductEvidenceDetected,
             TechnicalAttributeEvidenceDetected = technicalAttributeEvidenceDetected,
             LlmAcceptedRepresentativeProductPage = llmAcceptedRepresentativeProductPage,
@@ -344,7 +348,7 @@ public sealed partial class HttpSourceCandidateProbeService(
         return Math.Min(100m, score);
     }
 
-    private decimal ScoreExtractability(bool structuredProductEvidenceDetected, bool technicalAttributeEvidenceDetected, string? representativeProductPageHtml)
+    private decimal ScoreExtractability(bool runtimeExtractionCompatible, bool structuredProductEvidenceDetected, bool technicalAttributeEvidenceDetected, string? representativeProductPageHtml)
     {
         var score = 0m;
         if (!string.IsNullOrWhiteSpace(representativeProductPageHtml))
@@ -352,17 +356,32 @@ public sealed partial class HttpSourceCandidateProbeService(
             score += 10m;
         }
 
+        if (runtimeExtractionCompatible)
+        {
+            score += 55m;
+        }
+
         if (structuredProductEvidenceDetected)
         {
-            score += 60m;
+            score += 20m;
         }
 
         if (technicalAttributeEvidenceDetected)
         {
-            score += 30m;
+            score += 15m;
         }
 
         return Math.Min(100m, score);
+    }
+
+    private int CountRuntimeExtractedProducts(string? html, string? url)
+    {
+        if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(url))
+        {
+            return 0;
+        }
+
+        return structuredDataExtractor.ExtractProducts(html, url).Count;
     }
 
     private static decimal AdjustExtractabilityScoreForLlm(decimal extractabilityScore, bool llmAcceptedRepresentativeProductPage, bool llmRejectedRepresentativeProductPage, bool heuristicProductEvidenceDetected)

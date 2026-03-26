@@ -114,6 +114,8 @@ public sealed class HttpSourceCandidateProbeServiceTests
             Assert.That(result.CategoryPageHints, Does.Contain("/tv/"));
             Assert.That(result.RepresentativeCategoryPageReachable, Is.True);
             Assert.That(result.RepresentativeProductPageReachable, Is.True);
+            Assert.That(result.RuntimeExtractionCompatible, Is.True);
+            Assert.That(result.RepresentativeRuntimeProductCount, Is.EqualTo(1));
             Assert.That(result.StructuredProductEvidenceDetected, Is.True);
             Assert.That(result.TechnicalAttributeEvidenceDetected, Is.True);
             Assert.That(result.LikelyListingUrlPatterns, Does.Contain("/category/"));
@@ -121,6 +123,72 @@ public sealed class HttpSourceCandidateProbeServiceTests
             Assert.That(result.CategoryRelevanceScore, Is.GreaterThan(0m));
             Assert.That(result.ExtractabilityScore, Is.GreaterThanOrEqualTo(90m));
             Assert.That(result.CatalogLikelihoodScore, Is.GreaterThan(50m));
+        });
+    }
+
+    [Test]
+    public async Task ProbeAsync_FlagsRepresentativePageAsNotRuntimeCompatible_WhenOnlyTechnicalAttributesArePresent()
+    {
+        var fetcher = new FakeHttpFetcher(new Dictionary<string, FetchResult>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["https://candidate.example/"] = new FetchResult
+            {
+                Url = "https://candidate.example/",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "<html><body><a href=\"/tv/\">TV</a><a href=\"/product/oled-123\">OLED</a></body></html>",
+                FetchedUtc = DateTime.UtcNow
+            },
+            ["https://candidate.example/robots.txt"] = new FetchResult
+            {
+                Url = "https://candidate.example/robots.txt",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "User-agent: *",
+                FetchedUtc = DateTime.UtcNow
+            },
+            ["https://candidate.example/tv/"] = new FetchResult
+            {
+                Url = "https://candidate.example/tv/",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "<html><body><a href=\"/product/oled-123\">OLED TV</a></body></html>",
+                FetchedUtc = DateTime.UtcNow
+            },
+            ["https://candidate.example/product/oled-123"] = new FetchResult
+            {
+                Url = "https://candidate.example/product/oled-123",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "<html><body><section>Specifications</section><table><tr><th>Resolution</th><td>3840x2160</td></tr></table></body></html>",
+                FetchedUtc = DateTime.UtcNow
+            }
+        });
+        var service = new HttpSourceCandidateProbeService(
+            fetcher,
+            new SchemaOrgJsonLdExtractor(),
+            new NoOpPageClassificationService(),
+            Options.Create(new SourceCandidateDiscoveryOptions { ProbeTimeoutSeconds = 5 }),
+            Options.Create(new LlmOptions()),
+            NullLogger<HttpSourceCandidateProbeService>.Instance);
+
+        var result = await service.ProbeAsync(new SourceCandidateSearchResult
+        {
+            CandidateKey = "candidate_example",
+            DisplayName = "Candidate Example",
+            BaseUrl = "https://candidate.example/",
+            Host = "candidate.example",
+            CandidateType = "retailer"
+        }, ["tv"]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.RepresentativeProductPageReachable, Is.True);
+            Assert.That(result.RuntimeExtractionCompatible, Is.False);
+            Assert.That(result.RepresentativeRuntimeProductCount, Is.EqualTo(0));
+            Assert.That(result.StructuredProductEvidenceDetected, Is.False);
+            Assert.That(result.TechnicalAttributeEvidenceDetected, Is.True);
+            Assert.That(result.ExtractabilityScore, Is.EqualTo(25m));
         });
     }
 
@@ -245,9 +313,11 @@ public sealed class HttpSourceCandidateProbeServiceTests
         Assert.Multiple(() =>
         {
             Assert.That(result.RepresentativeProductPageReachable, Is.True);
+            Assert.That(result.RuntimeExtractionCompatible, Is.False);
+            Assert.That(result.RepresentativeRuntimeProductCount, Is.EqualTo(0));
             Assert.That(result.LlmRejectedRepresentativeProductPage, Is.True);
             Assert.That(result.LlmDisagreedWithHeuristics, Is.True);
-            Assert.That(result.ExtractabilityScore, Is.EqualTo(5m));
+            Assert.That(result.ExtractabilityScore, Is.EqualTo(0m));
         });
     }
 

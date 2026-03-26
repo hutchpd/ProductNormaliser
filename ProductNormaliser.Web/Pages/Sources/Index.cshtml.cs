@@ -278,6 +278,26 @@ public sealed class IndexModel(
         };
     }
 
+    public string GetRuntimeExtractionLabel(SourceCandidateDto candidate)
+    {
+        return candidate.RuntimeExtractionStatus switch
+        {
+            "compatible" => "Compatible with runtime extraction",
+            "not_compatible" => "Not compatible with runtime extraction",
+            _ => "Manual review only"
+        };
+    }
+
+    public string GetRuntimeExtractionTone(SourceCandidateDto candidate)
+    {
+        return candidate.RuntimeExtractionStatus switch
+        {
+            "compatible" => "completed",
+            "not_compatible" => "warning",
+            _ => "pending"
+        };
+    }
+
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
         try
@@ -580,6 +600,8 @@ public sealed class IndexModel(
                     ExtractabilityScore = candidate.ExtractabilityScore,
                     DuplicateRiskScore = candidate.DuplicateRiskScore,
                     RecommendationStatus = candidate.RecommendationStatus,
+                    RuntimeExtractionStatus = candidate.RuntimeExtractionStatus,
+                    RuntimeExtractionMessage = candidate.RuntimeExtractionMessage,
                     MatchedCategoryKeys = candidate.MatchedCategoryKeys,
                     MatchedBrandHints = candidate.MatchedBrandHints,
                     AlreadyRegistered = true,

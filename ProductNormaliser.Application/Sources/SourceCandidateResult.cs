@@ -5,6 +5,9 @@ public sealed class SourceCandidateResult
     public const string RecommendationRecommended = "recommended";
     public const string RecommendationManualReview = "manual_review";
     public const string RecommendationDoNotAccept = "do_not_accept";
+    public const string RuntimeExtractionCompatibleStatus = "compatible";
+    public const string RuntimeExtractionManualReviewOnlyStatus = "manual_review_only";
+    public const string RuntimeExtractionNotCompatibleStatus = "not_compatible";
 
     public string CandidateKey { get; init; } = string.Empty;
     public string DisplayName { get; init; } = string.Empty;
@@ -20,6 +23,8 @@ public sealed class SourceCandidateResult
     public decimal ExtractabilityScore { get; init; }
     public decimal DuplicateRiskScore { get; init; }
     public string RecommendationStatus { get; init; } = RecommendationManualReview;
+    public string RuntimeExtractionStatus { get; init; } = RuntimeExtractionManualReviewOnlyStatus;
+    public string RuntimeExtractionMessage { get; init; } = string.Empty;
     public IReadOnlyList<string> MatchedCategoryKeys { get; init; } = [];
     public IReadOnlyList<string> MatchedBrandHints { get; init; } = [];
     public bool AlreadyRegistered { get; init; }

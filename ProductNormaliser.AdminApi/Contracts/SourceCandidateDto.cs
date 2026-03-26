@@ -16,6 +16,8 @@ public sealed class SourceCandidateDto
     public decimal ExtractabilityScore { get; init; }
     public decimal DuplicateRiskScore { get; init; }
     public string RecommendationStatus { get; init; } = string.Empty;
+    public string RuntimeExtractionStatus { get; init; } = string.Empty;
+    public string RuntimeExtractionMessage { get; init; } = string.Empty;
     public IReadOnlyList<string> MatchedCategoryKeys { get; init; } = [];
     public IReadOnlyList<string> MatchedBrandHints { get; init; } = [];
     public bool AlreadyRegistered { get; init; }

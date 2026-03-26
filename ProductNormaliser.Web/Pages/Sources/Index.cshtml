@@ -311,6 +311,7 @@
                             <div class="d-flex flex-column align-items-end gap-2">
                                 <partial name="_StatusBadge" model='new ProductNormaliser.Web.Models.StatusBadgeModel { Text = Model.GetCandidateRecommendationLabel(candidate), Tone = Model.GetCandidateRecommendationTone(candidate) }' />
                                 <partial name="_StatusBadge" model='new ProductNormaliser.Web.Models.StatusBadgeModel { Text = Model.GetAutomationDecisionLabel(candidate), Tone = Model.GetAutomationDecisionTone(candidate) }' />
+                                <partial name="_StatusBadge" model='new ProductNormaliser.Web.Models.StatusBadgeModel { Text = Model.GetRuntimeExtractionLabel(candidate), Tone = Model.GetRuntimeExtractionTone(candidate) }' />
                                 <partial name="_StatusBadge" model='new ProductNormaliser.Web.Models.StatusBadgeModel { Text = $"{candidate.ConfidenceScore:0.#}% confidence", Tone = candidate.AllowedByGovernance ? "completed" : "warning" }' />
                             </div>
                         </div>
@@ -353,9 +354,12 @@
                             <div><dt>Crawlability</dt><dd>@candidate.CrawlabilityScore.ToString("0.#")</dd></div>
                             <div><dt>Relevance</dt><dd>@candidate.Probe.CategoryRelevanceScore.ToString("0.#")</dd></div>
                             <div><dt>Extractability</dt><dd>@candidate.ExtractabilityScore.ToString("0.#")</dd></div>
+                            <div><dt>Runtime extraction</dt><dd>@(candidate.Probe.RuntimeExtractionCompatible ? $"{candidate.Probe.RepresentativeRuntimeProductCount} product(s)" : "No products extracted")</dd></div>
                             <div><dt>Catalog fit</dt><dd>@candidate.Probe.CatalogLikelihoodScore.ToString("0.#")</dd></div>
                             <div><dt>Duplicate risk</dt><dd>@candidate.DuplicateRiskScore.ToString("0.#")</dd></div>
                         </dl>
+
+                        <p class="subtle-copy mt-2">@candidate.RuntimeExtractionMessage</p>
 
                         <div class="subtle-copy mt-3">Automation assessment</div>
                         <ul class="small mb-0">
@@ -375,6 +379,7 @@
                             <ul class="small mb-0">
                                 <li>Category page: @(candidate.Probe.RepresentativeCategoryPageReachable ? "reachable" : "not confirmed")@(string.IsNullOrWhiteSpace(candidate.Probe.RepresentativeCategoryPageUrl) ? string.Empty : $" ({candidate.Probe.RepresentativeCategoryPageUrl})")</li>
                                 <li>Product page: @(candidate.Probe.RepresentativeProductPageReachable ? "reachable" : "not confirmed")@(string.IsNullOrWhiteSpace(candidate.Probe.RepresentativeProductPageUrl) ? string.Empty : $" ({candidate.Probe.RepresentativeProductPageUrl})")</li>
+                                <li>Runtime extraction: @(candidate.Probe.RuntimeExtractionCompatible ? $"compatible ({candidate.Probe.RepresentativeRuntimeProductCount} product(s) extracted)" : "not compatible")</li>
                                 <li>Structured product evidence: @(candidate.Probe.StructuredProductEvidenceDetected ? "detected" : "not detected")</li>
                                 <li>Technical attribute evidence: @(candidate.Probe.TechnicalAttributeEvidenceDetected ? "detected" : "not detected")</li>
                             </ul>

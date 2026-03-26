@@ -448,6 +448,8 @@ public sealed class SourceManagementRenderingTests
                         ExtractabilityScore = 30m,
                         DuplicateRiskScore = 0m,
                         RecommendationStatus = "manual_review",
+                        RuntimeExtractionStatus = "not_compatible",
+                        RuntimeExtractionMessage = "Representative runtime extraction did not produce products from the sampled product page.",
                         MatchedCategoryKeys = ["tv"],
                         AllowedByGovernance = true,
                         Probe = new SourceCandidateProbeDto
@@ -458,6 +460,8 @@ public sealed class SourceManagementRenderingTests
                             CatalogLikelihoodScore = 52m,
                             RepresentativeCategoryPageReachable = true,
                             RepresentativeProductPageReachable = true,
+                            RuntimeExtractionCompatible = false,
+                            RepresentativeRuntimeProductCount = 0,
                             StructuredProductEvidenceDetected = false,
                             TechnicalAttributeEvidenceDetected = true
                         },
@@ -485,6 +489,9 @@ public sealed class SourceManagementRenderingTests
         Assert.Multiple(() =>
         {
             Assert.That(html, Does.Contain("Manual review"));
+            Assert.That(html, Does.Contain("Not compatible with runtime extraction"));
+            Assert.That(html, Does.Contain("Representative runtime extraction did not produce products from the sampled product page."));
+            Assert.That(html, Does.Contain("Runtime extraction: not compatible"));
             Assert.That(html, Does.Contain("Use candidate"));
             Assert.That(html, Does.Not.Contain("<button type=\"submit\" class=\"btn btn-dark\">Accept candidate</button>"));
         });
