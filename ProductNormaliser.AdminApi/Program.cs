@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication;
+using ProductNormaliser.Application.AI;
 using ProductNormaliser.Application.Categories;
 using ProductNormaliser.Application.Crawls;
 using ProductNormaliser.Application.Governance;
@@ -7,6 +8,7 @@ using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.AdminApi.Services;
 using ProductNormaliser.AdminApi.OpenApi;
 using ProductNormaliser.AdminApi.Security;
+using ProductNormaliser.Infrastructure.AI;
 using ProductNormaliser.Infrastructure.Crawling;
 using ProductNormaliser.Infrastructure.Mongo;
 using ProductNormaliser.Infrastructure.Sources;
@@ -30,6 +32,7 @@ builder.Services.AddAuthorization(options =>
 builder.Services.Configure<ManagementApiSecurityOptions>(builder.Configuration.GetSection(ManagementApiSecurityOptions.SectionName));
 builder.Services.Configure<SourceCandidateDiscoveryOptions>(builder.Configuration.GetSection(SourceCandidateDiscoveryOptions.SectionName));
 builder.Services.Configure<SourceOnboardingAutomationOptions>(builder.Configuration.GetSection(SourceOnboardingAutomationOptions.SectionName));
+builder.Services.Configure<LlmOptions>(builder.Configuration.GetSection(LlmOptions.SectionName));
 builder.Services.AddOpenApi(options =>
 {
     options.AddOperationTransformer(SourceEndpointOpenApiTransformer.ApplyAsync);
@@ -54,6 +57,7 @@ builder.Services.AddHttpClient<ISourceCandidateSearchProvider, SearchApiSourceCa
 builder.Services.AddSingleton<ICategoryMetadataService, CategoryMetadataService>();
 builder.Services.AddSingleton<ICategoryManagementService, CategoryManagementService>();
 builder.Services.AddSingleton<ICrawlJobService, CrawlJobService>();
+builder.Services.AddSingleton<IPageClassificationService, LlamaPageClassificationService>();
 builder.Services.AddSingleton<ISourceCandidateProbeService, HttpSourceCandidateProbeService>();
 builder.Services.AddSingleton<ISourceCandidateDiscoveryService, SourceCandidateDiscoveryService>();
 builder.Services.AddSingleton<ISourceManagementService, SourceManagementService>();
