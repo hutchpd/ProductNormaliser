@@ -46,6 +46,15 @@ public sealed class IndexModel(
     public SourceOnboardingAutomationSettingsDto AutomationSettings { get; private set; } = new()
     {
         DefaultMode = OperatorAssistedMode,
+        AutomationCategorySampleBudget = 3,
+        AutomationProductSampleBudget = 3,
+        SuggestMinReachableCategorySamples = 2,
+        SuggestMinReachableProductSamples = 2,
+        SuggestMinRuntimeCompatibleProductSamples = 2,
+        AutoAcceptMinReachableCategorySamples = 3,
+        AutoAcceptMinReachableProductSamples = 3,
+        AutoAcceptMinRuntimeCompatibleProductSamples = 3,
+        AutoAcceptMinStructuredEvidenceProductSamples = 2,
         MaxAutoAcceptedCandidatesPerRun = 1
     };
 
@@ -395,6 +404,15 @@ public sealed class IndexModel(
             AutomationSettings = new SourceOnboardingAutomationSettingsDto
             {
                 DefaultMode = OperatorAssistedMode,
+                AutomationCategorySampleBudget = 3,
+                AutomationProductSampleBudget = 3,
+                SuggestMinReachableCategorySamples = 2,
+                SuggestMinReachableProductSamples = 2,
+                SuggestMinRuntimeCompatibleProductSamples = 2,
+                AutoAcceptMinReachableCategorySamples = 3,
+                AutoAcceptMinReachableProductSamples = 3,
+                AutoAcceptMinRuntimeCompatibleProductSamples = 3,
+                AutoAcceptMinStructuredEvidenceProductSamples = 2,
                 MaxAutoAcceptedCandidatesPerRun = 1
             };
         }

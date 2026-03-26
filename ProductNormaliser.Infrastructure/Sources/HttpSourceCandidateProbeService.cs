@@ -15,16 +15,25 @@ public sealed partial class HttpSourceCandidateProbeService(
     IStructuredDataExtractor structuredDataExtractor,
     IPageClassificationService pageClassifier,
     IOptions<SourceCandidateDiscoveryOptions> options,
+    IOptions<SourceOnboardingAutomationOptions> onboardingAutomationOptions,
     IOptions<LlmOptions> llmOptions,
     ILogger<HttpSourceCandidateProbeService> logger) : ISourceCandidateProbeService
 {
     private readonly SourceCandidateDiscoveryOptions options = options.Value;
+    private readonly SourceOnboardingAutomationOptions onboardingAutomationOptions = onboardingAutomationOptions.Value;
     private readonly LlmOptions llmOptions = llmOptions.Value;
 
-    public async Task<SourceCandidateProbeResult> ProbeAsync(SourceCandidateSearchResult candidate, IReadOnlyCollection<string> categoryKeys, CancellationToken cancellationToken = default)
+    public async Task<SourceCandidateProbeResult> ProbeAsync(
+        SourceCandidateSearchResult candidate,
+        IReadOnlyCollection<string> categoryKeys,
+        string automationMode,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(candidate);
         ArgumentNullException.ThrowIfNull(categoryKeys);
+
+        var normalizedAutomationMode = SourceAutomationModes.Normalize(automationMode);
+        var collectAutomationEvidence = normalizedAutomationMode is SourceAutomationModes.SuggestAccept or SourceAutomationModes.AutoAcceptAndSeed;
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, options.ProbeTimeoutSeconds)));
@@ -39,15 +48,38 @@ public sealed partial class HttpSourceCandidateProbeService(
         var sitemapUrls = ExtractSitemapUrls(candidate.BaseUrl, robotsText, homePageHtml);
         var categoryPageHints = ExtractCategoryPageHints(homePageHtml, categoryKeys);
         var representativeCategoryPageUrl = categoryPageHints.FirstOrDefault();
-        var representativeCategoryPageHtml = await TryFetchRepresentativeAsync(candidate.BaseUrl, representativeCategoryPageUrl, timeoutCts.Token);
+        var categorySampleUrls = collectAutomationEvidence
+            ? SelectSampleUrls(candidate.BaseUrl, categoryPageHints, representativeCategoryPageUrl, onboardingAutomationOptions.AutomationCategorySampleBudget)
+            : [];
+        var categorySamples = categorySampleUrls.Count > 0
+            ? await FetchSamplePagesAsync(categorySampleUrls, timeoutCts.Token)
+            : [];
+        var representativeCategoryPageHtml = FindFetchedHtml(categorySamples, ToAbsoluteUrl(candidate.BaseUrl, representativeCategoryPageUrl))
+            ?? await TryFetchRepresentativeAsync(candidate.BaseUrl, representativeCategoryPageUrl, timeoutCts.Token);
         var representativeProductPageUrl = ExtractRepresentativeProductPageUrl(candidate.BaseUrl, homePageHtml, representativeCategoryPageHtml);
-        var representativeProductPageHtml = await TryFetchRepresentativeAsync(candidate.BaseUrl, representativeProductPageUrl, timeoutCts.Token);
+        var productSampleUrls = collectAutomationEvidence
+            ? SelectSampleUrls(
+                candidate.BaseUrl,
+                ExtractProductPageUrls(candidate.BaseUrl, [homePageHtml, representativeCategoryPageHtml, .. categorySamples.Select(sample => sample.Html)]),
+                representativeProductPageUrl,
+                onboardingAutomationOptions.AutomationProductSampleBudget)
+            : [];
+        var productSamples = productSampleUrls.Count > 0
+            ? await FetchSamplePagesAsync(productSampleUrls, timeoutCts.Token)
+            : [];
+        var representativeProductPageHtml = FindFetchedHtml(productSamples, representativeProductPageUrl)
+            ?? await TryFetchRepresentativeAsync(candidate.BaseUrl, representativeProductPageUrl, timeoutCts.Token);
         var likelyListingUrlPatterns = InferListingUrlPatterns(categoryPageHints);
-        var likelyProductUrlPatterns = InferProductUrlPatterns(string.Join('\n', new[] { homePageHtml, representativeCategoryPageHtml }.Where(value => !string.IsNullOrWhiteSpace(value))));
-        var representativeRuntimeProductCount = CountRuntimeExtractedProducts(representativeProductPageHtml, representativeProductPageUrl);
+        var likelyProductUrlPatterns = InferProductUrlPatterns(string.Join(
+            '\n',
+            new[] { homePageHtml, representativeCategoryPageHtml }
+                .Concat(categorySamples.Select(sample => sample.Html))
+                .Where(value => !string.IsNullOrWhiteSpace(value))));
+        var representativeEvidence = AnalyzeProductSample(representativeProductPageHtml, representativeProductPageUrl);
+        var representativeRuntimeProductCount = representativeEvidence.RuntimeProductCount;
         var runtimeExtractionCompatible = representativeRuntimeProductCount > 0;
-        var structuredProductEvidenceDetected = HasStructuredProductEvidence(representativeProductPageHtml, representativeProductPageUrl);
-        var technicalAttributeEvidenceDetected = HasTechnicalAttributeEvidence(representativeProductPageHtml);
+        var structuredProductEvidenceDetected = representativeEvidence.StructuredProductEvidenceDetected;
+        var technicalAttributeEvidenceDetected = representativeEvidence.TechnicalAttributeEvidenceDetected;
         var heuristicProductEvidenceDetected = structuredProductEvidenceDetected || technicalAttributeEvidenceDetected;
         var requestedCategory = categoryKeys
             .Where(value => !string.IsNullOrWhiteSpace(value))
@@ -86,6 +118,10 @@ public sealed partial class HttpSourceCandidateProbeService(
                 llmResult?.Confidence);
         }
 
+        var automationProductEvidence = collectAutomationEvidence
+            ? productSamples.Select(sample => AnalyzeProductSample(sample.Html, sample.Url)).ToArray()
+            : [];
+
         return new SourceCandidateProbeResult
         {
             HomePageReachable = homePageHtml is not null,
@@ -103,6 +139,13 @@ public sealed partial class HttpSourceCandidateProbeService(
             RepresentativeProductPageReachable = representativeProductPageHtml is not null,
             RuntimeExtractionCompatible = runtimeExtractionCompatible,
             RepresentativeRuntimeProductCount = representativeRuntimeProductCount,
+            AutomationCategorySampleCount = categorySamples.Count,
+            AutomationReachableCategorySampleCount = categorySamples.Count(sample => sample.Html is not null),
+            AutomationProductSampleCount = productSamples.Count,
+            AutomationReachableProductSampleCount = automationProductEvidence.Count(sample => sample.PageReachable),
+            AutomationRuntimeCompatibleProductSampleCount = automationProductEvidence.Count(sample => sample.RuntimeProductCount > 0),
+            AutomationStructuredProductEvidenceSampleCount = automationProductEvidence.Count(sample => sample.StructuredProductEvidenceDetected),
+            AutomationTechnicalAttributeEvidenceSampleCount = automationProductEvidence.Count(sample => sample.TechnicalAttributeEvidenceDetected),
             StructuredProductEvidenceDetected = structuredProductEvidenceDetected,
             TechnicalAttributeEvidenceDetected = technicalAttributeEvidenceDetected,
             LlmAcceptedRepresentativeProductPage = llmAcceptedRepresentativeProductPage,
@@ -121,17 +164,26 @@ public sealed partial class HttpSourceCandidateProbeService(
 
     private async Task<string?> TryFetchRepresentativeAsync(string baseUrl, string? candidateUrl, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(candidateUrl))
+        var absoluteUrl = ToAbsoluteUrl(baseUrl, candidateUrl);
+        if (absoluteUrl is null)
         {
             return null;
         }
 
-        if (!Uri.TryCreate(new Uri(baseUrl, UriKind.Absolute), candidateUrl, out var absoluteUri))
+        return await TryFetchTextAsync(absoluteUrl, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<FetchedPageSample>> FetchSamplePagesAsync(IReadOnlyList<string> absoluteUrls, CancellationToken cancellationToken)
+    {
+        if (absoluteUrls.Count == 0)
         {
-            return null;
+            return [];
         }
 
-        return await TryFetchTextAsync(absoluteUri.ToString(), cancellationToken);
+        var htmlByUrl = await Task.WhenAll(absoluteUrls.Select(url => TryFetchTextAsync(url, cancellationToken)));
+        return absoluteUrls
+            .Zip(htmlByUrl, static (url, html) => new FetchedPageSample(url, html))
+            .ToArray();
     }
 
     private async Task<string?> TryFetchTextAsync(string absoluteUrl, CancellationToken cancellationToken)
@@ -260,6 +312,39 @@ public sealed partial class HttpSourceCandidateProbeService(
         return patterns.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
+    private static IReadOnlyList<string> SelectSampleUrls(string baseUrl, IEnumerable<string?> candidateUrls, string? preferredUrl, int budget)
+    {
+        if (budget <= 0)
+        {
+            return [];
+        }
+
+        var selected = new List<string>(budget);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        static void AddCandidate(List<string> selectedUrls, HashSet<string> seenUrls, string? absoluteUrl, int maxBudget)
+        {
+            if (absoluteUrl is null || selectedUrls.Count >= maxBudget || !seenUrls.Add(absoluteUrl))
+            {
+                return;
+            }
+
+            selectedUrls.Add(absoluteUrl);
+        }
+
+        AddCandidate(selected, seen, ToAbsoluteUrl(baseUrl, preferredUrl), budget);
+        foreach (var candidateUrl in candidateUrls)
+        {
+            AddCandidate(selected, seen, ToAbsoluteUrl(baseUrl, candidateUrl), budget);
+            if (selected.Count >= budget)
+            {
+                break;
+            }
+        }
+
+        return selected;
+    }
+
     private static string? ExtractRepresentativeProductPageUrl(string baseUrl, params string?[] htmlFragments)
     {
         foreach (var html in htmlFragments)
@@ -284,6 +369,38 @@ public sealed partial class HttpSourceCandidateProbeService(
         }
 
         return null;
+    }
+
+    private static IReadOnlyList<string> ExtractProductPageUrls(string baseUrl, IEnumerable<string?> htmlFragments)
+    {
+        var urls = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var html in htmlFragments)
+        {
+            if (string.IsNullOrWhiteSpace(html))
+            {
+                continue;
+            }
+
+            foreach (var href in ExtractHrefs(html))
+            {
+                if (!LooksLikeProductLink(href))
+                {
+                    continue;
+                }
+
+                var absoluteUrl = ToAbsoluteUrl(baseUrl, href);
+                if (absoluteUrl is null || !seen.Add(absoluteUrl))
+                {
+                    continue;
+                }
+
+                urls.Add(absoluteUrl);
+            }
+        }
+
+        return urls;
     }
 
     private static IReadOnlyList<string> InferProductUrlPatterns(string? homePageHtml)
@@ -382,6 +499,17 @@ public sealed partial class HttpSourceCandidateProbeService(
         }
 
         return structuredDataExtractor.ExtractProducts(html, url).Count;
+    }
+
+    private ProductSampleEvidence AnalyzeProductSample(string? html, string? url)
+    {
+        var runtimeProductCount = CountRuntimeExtractedProducts(html, url);
+        return new ProductSampleEvidence(
+            url,
+            html is not null,
+            runtimeProductCount,
+            HasStructuredProductEvidence(html, url),
+            HasTechnicalAttributeEvidence(html));
     }
 
     private static decimal AdjustExtractabilityScoreForLlm(decimal extractabilityScore, bool llmAcceptedRepresentativeProductPage, bool llmRejectedRepresentativeProductPage, bool heuristicProductEvidenceDetected)
@@ -600,6 +728,28 @@ public sealed partial class HttpSourceCandidateProbeService(
             || href.Contains("/search", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static string? ToAbsoluteUrl(string baseUrl, string? candidateUrl)
+    {
+        if (string.IsNullOrWhiteSpace(candidateUrl))
+        {
+            return null;
+        }
+
+        return Uri.TryCreate(new Uri(baseUrl, UriKind.Absolute), candidateUrl, out var absoluteUri)
+            ? absoluteUri.ToString()
+            : null;
+    }
+
+    private static string? FindFetchedHtml(IEnumerable<FetchedPageSample> samples, string? targetUrl)
+    {
+        if (string.IsNullOrWhiteSpace(targetUrl))
+        {
+            return null;
+        }
+
+        return samples.FirstOrDefault(sample => string.Equals(sample.Url, targetUrl, StringComparison.OrdinalIgnoreCase))?.Html;
+    }
+
     private static IReadOnlyList<string> ExtractHrefs(string html)
     {
         return HrefRegex().Matches(html)
@@ -623,4 +773,13 @@ public sealed partial class HttpSourceCandidateProbeService(
 
     [GeneratedRegex("/(?:[a-z0-9-]+/){1,4}[a-z0-9-]{4,}$", RegexOptions.IgnoreCase)]
     private static partial Regex ProductSlugRegex();
+
+    private sealed record FetchedPageSample(string Url, string? Html);
+
+    private sealed record ProductSampleEvidence(
+        string? Url,
+        bool PageReachable,
+        int RuntimeProductCount,
+        bool StructuredProductEvidenceDetected,
+        bool TechnicalAttributeEvidenceDetected);
 }

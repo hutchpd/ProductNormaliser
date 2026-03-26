@@ -50,6 +50,7 @@ public sealed class SourceCandidateDiscoveryService(
         var searchResponse = await sourceCandidateSearchProvider.SearchAsync(normalizedRequest, cancellationToken);
         var searchResults = CollapseEquivalentCandidates(searchResponse.Candidates);
         var diagnostics = new List<SourceCandidateDiscoveryDiagnostic>(searchResponse.Diagnostics);
+        var normalizedAutomationMode = normalizedRequest.AutomationMode ?? SourceAutomationModes.OperatorAssisted;
 
         var candidates = new List<SourceCandidateResult>(searchResults.Count);
         foreach (var searchResult in searchResults)
@@ -57,7 +58,7 @@ public sealed class SourceCandidateDiscoveryService(
             var duplicateSources = registeredSources
                 .Where(source => IsPotentialDuplicate(source, searchResult))
                 .ToArray();
-            var probe = await sourceCandidateProbeService.ProbeAsync(searchResult, categoryKeys, cancellationToken);
+            var probe = await sourceCandidateProbeService.ProbeAsync(searchResult, categoryKeys, normalizedAutomationMode, cancellationToken);
 
             var governanceWarning = default(string);
             var allowedByGovernance = true;
@@ -480,6 +481,7 @@ public sealed class SourceCandidateDiscoveryService(
         var requestedMarket = NormalizeOptionalText(request.Market);
         var requestedLocale = NormalizeOptionalText(request.Locale);
         var candidateMarkets = NormalizeValues(searchResult.AllowedMarkets);
+        var unattendedAutomationRequested = requestedMode is SourceAutomationModes.SuggestAccept or SourceAutomationModes.AutoAcceptAndSeed;
 
         var marketMatchApproved = !string.IsNullOrWhiteSpace(requestedMarket)
             && candidateMarkets.Count > 0
@@ -494,6 +496,8 @@ public sealed class SourceCandidateDiscoveryService(
             && probe.ExtractabilityScore >= onboardingAutomationOptions.MinExtractabilityScore;
         var yieldConfidenceScore = CalculateYieldConfidenceScore(probe);
         var yieldConfidencePassed = yieldConfidenceScore >= onboardingAutomationOptions.MinYieldConfidenceScore;
+        var suggestionBreadthPassed = HasSuggestionAutomationEvidence(probe, onboardingAutomationOptions);
+        var autoAcceptBreadthPassed = HasAutoAcceptAutomationEvidence(probe, onboardingAutomationOptions);
         var localeAligned = string.IsNullOrWhiteSpace(requestedLocale)
             || string.Equals(NormalizeOptionalText(searchResult.PreferredLocale), requestedLocale, StringComparison.OrdinalIgnoreCase);
 
@@ -511,9 +515,11 @@ public sealed class SourceCandidateDiscoveryService(
 
         var eligibleForSuggestion = requestedMode is SourceAutomationModes.SuggestAccept or SourceAutomationModes.AutoAcceptAndSeed
             && baseGuardrailsPassed
+            && suggestionBreadthPassed
             && confidenceScore >= onboardingAutomationOptions.SuggestMinConfidenceScore;
         var eligibleForAutoAccept = requestedMode == SourceAutomationModes.AutoAcceptAndSeed
             && eligibleForSuggestion
+            && autoAcceptBreadthPassed
             && confidenceScore >= onboardingAutomationOptions.AutoAcceptMinConfidenceScore;
 
         var supportingReasons = new List<string>();
@@ -540,6 +546,16 @@ public sealed class SourceCandidateDiscoveryService(
         if (yieldConfidencePassed)
         {
             supportingReasons.Add($"Predicted downstream yield confidence scored {yieldConfidenceScore:0.#}.");
+        }
+
+        if (unattendedAutomationRequested && suggestionBreadthPassed)
+        {
+            supportingReasons.Add($"Automation breadth validated {probe.AutomationReachableCategorySampleCount} category samples, {probe.AutomationReachableProductSampleCount} product samples, and {probe.AutomationRuntimeCompatibleProductSampleCount} runtime-compatible product pages.");
+        }
+
+        if (requestedMode == SourceAutomationModes.AutoAcceptAndSeed && autoAcceptBreadthPassed)
+        {
+            supportingReasons.Add($"Auto-accept breadth validated {probe.AutomationStructuredProductEvidenceSampleCount} product samples with structured product evidence.");
         }
 
         var blockingReasons = new List<string>();
@@ -581,6 +597,16 @@ public sealed class SourceCandidateDiscoveryService(
         if (!yieldConfidencePassed)
         {
             blockingReasons.Add("Predicted downstream yield confidence is below the guarded threshold.");
+        }
+
+        if (unattendedAutomationRequested && !suggestionBreadthPassed)
+        {
+            blockingReasons.Add($"Automation sampled {probe.AutomationReachableCategorySampleCount}/{onboardingAutomationOptions.SuggestMinReachableCategorySamples} reachable category pages, {probe.AutomationReachableProductSampleCount}/{onboardingAutomationOptions.SuggestMinReachableProductSamples} reachable product pages, and {probe.AutomationRuntimeCompatibleProductSampleCount}/{onboardingAutomationOptions.SuggestMinRuntimeCompatibleProductSamples} runtime-compatible product pages; that is not enough for unattended suggestion.");
+        }
+
+        if (requestedMode == SourceAutomationModes.AutoAcceptAndSeed && !autoAcceptBreadthPassed)
+        {
+            blockingReasons.Add($"Auto-accept requires broader recurring evidence: {probe.AutomationReachableCategorySampleCount}/{onboardingAutomationOptions.AutoAcceptMinReachableCategorySamples} reachable category pages, {probe.AutomationReachableProductSampleCount}/{onboardingAutomationOptions.AutoAcceptMinReachableProductSamples} reachable product pages, {probe.AutomationRuntimeCompatibleProductSampleCount}/{onboardingAutomationOptions.AutoAcceptMinRuntimeCompatibleProductSamples} runtime-compatible product pages, and {probe.AutomationStructuredProductEvidenceSampleCount}/{onboardingAutomationOptions.AutoAcceptMinStructuredEvidenceProductSamples} structured-evidence product pages.");
         }
 
         if (!localeAligned)
@@ -744,7 +770,39 @@ public sealed class SourceCandidateDiscoveryService(
             score += 5m;
         }
 
+        if (probe.AutomationReachableCategorySampleCount >= 2)
+        {
+            score += 5m;
+        }
+
+        if (probe.AutomationReachableProductSampleCount >= 2)
+        {
+            score += 5m;
+        }
+
+        score += Math.Min(10m, probe.AutomationRuntimeCompatibleProductSampleCount * 5m);
+
+        if (probe.AutomationStructuredProductEvidenceSampleCount >= 2)
+        {
+            score += 5m;
+        }
+
         return Math.Clamp(decimal.Round(score, 2, MidpointRounding.AwayFromZero), 0m, 100m);
+    }
+
+    private static bool HasSuggestionAutomationEvidence(SourceCandidateProbeResult probe, SourceOnboardingAutomationOptions options)
+    {
+        return probe.AutomationReachableCategorySampleCount >= options.SuggestMinReachableCategorySamples
+            && probe.AutomationReachableProductSampleCount >= options.SuggestMinReachableProductSamples
+            && probe.AutomationRuntimeCompatibleProductSampleCount >= options.SuggestMinRuntimeCompatibleProductSamples;
+    }
+
+    private static bool HasAutoAcceptAutomationEvidence(SourceCandidateProbeResult probe, SourceOnboardingAutomationOptions options)
+    {
+        return probe.AutomationReachableCategorySampleCount >= options.AutoAcceptMinReachableCategorySamples
+            && probe.AutomationReachableProductSampleCount >= options.AutoAcceptMinReachableProductSamples
+            && probe.AutomationRuntimeCompatibleProductSampleCount >= options.AutoAcceptMinRuntimeCompatibleProductSamples
+            && probe.AutomationStructuredProductEvidenceSampleCount >= options.AutoAcceptMinStructuredEvidenceProductSamples;
     }
 
     private static string DetermineRecommendationStatus(SourceCandidateProbeResult probe, decimal duplicateRiskScore, bool allowedByGovernance, decimal heuristicScore, decimal llmScore)

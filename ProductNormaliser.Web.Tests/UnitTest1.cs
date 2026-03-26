@@ -24,6 +24,17 @@ public sealed class AdminApiClientTests
                 Host = "ao.com",
                 Description = "Appliances",
                 IsEnabled = true,
+                AllowedMarkets = ["UK"],
+                PreferredLocale = "en-GB",
+                AutomationPolicy = new SourceAutomationPolicyDto
+                {
+                    Mode = "operator_assisted"
+                },
+                DiscoveryProfile = new SourceDiscoveryProfileDto
+                {
+                    AllowedMarkets = ["UK"],
+                    PreferredLocale = "en-GB"
+                },
                 SupportedCategoryKeys = ["tv", "refrigerator"],
                 ThrottlingPolicy = new SourceThrottlingPolicyDto
                 {
@@ -439,6 +450,7 @@ public sealed class AdminApiClientTests
                 RequestedCategoryKeys = ["tv"],
                 Locale = "en-GB",
                 Market = "UK",
+                AutomationMode = "operator_assisted",
                 BrandHints = ["Samsung"],
                 GeneratedUtc = new DateTime(2026, 03, 25, 10, 00, 00, DateTimeKind.Utc),
                 Candidates =
@@ -450,13 +462,25 @@ public sealed class AdminApiClientTests
                         BaseUrl = "https://www.currys.co.uk/",
                         Host = "www.currys.co.uk",
                         CandidateType = "retailer",
+                        MarketEvidence = "explicit",
+                        LocaleEvidence = "explicit",
                         ConfidenceScore = 82.5m,
+                        RecommendationStatus = "recommended",
+                        RuntimeExtractionStatus = "compatible",
+                        RuntimeExtractionMessage = "Representative runtime extraction succeeded on the sampled product page.",
                         MatchedCategoryKeys = ["tv"],
                         Probe = new SourceCandidateProbeDto
                         {
                             RobotsTxtReachable = true,
                             SitemapDetected = true,
                             SitemapUrls = ["https://www.currys.co.uk/sitemap.xml"]
+                        },
+                        AutomationAssessment = new SourceCandidateAutomationAssessmentDto
+                        {
+                            RequestedMode = "operator_assisted",
+                            Decision = "manual_only",
+                            MarketEvidence = "explicit",
+                            LocaleEvidence = "explicit"
                         },
                         Reasons =
                         [
@@ -498,6 +522,7 @@ public sealed class AdminApiClientTests
                 const string payload = """
                         {
                             "requestedCategoryKeys": ["tv"],
+                            "automationMode": "operator_assisted",
                             "generatedUtc": "2026-03-25T10:00:00Z",
                             "candidates": [
                                 {

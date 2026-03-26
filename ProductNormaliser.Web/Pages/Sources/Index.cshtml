@@ -252,6 +252,18 @@
                     <dt>Auto cap per run</dt>
                     <dd>@Model.AutomationSettings.MaxAutoAcceptedCandidatesPerRun</dd>
                 </div>
+                <div>
+                    <dt>Probe budget</dt>
+                    <dd>@Model.AutomationSettings.AutomationCategorySampleBudget.ToString("0") category pages / @Model.AutomationSettings.AutomationProductSampleBudget.ToString("0") product pages</dd>
+                </div>
+                <div>
+                    <dt>Suggestion breadth</dt>
+                    <dd>@Model.AutomationSettings.SuggestMinReachableCategorySamples.ToString("0") category / @Model.AutomationSettings.SuggestMinReachableProductSamples.ToString("0") product / @Model.AutomationSettings.SuggestMinRuntimeCompatibleProductSamples.ToString("0") runtime-compatible</dd>
+                </div>
+                <div>
+                    <dt>Auto-accept breadth</dt>
+                    <dd>@Model.AutomationSettings.AutoAcceptMinReachableCategorySamples.ToString("0") category / @Model.AutomationSettings.AutoAcceptMinReachableProductSamples.ToString("0") product / @Model.AutomationSettings.AutoAcceptMinRuntimeCompatibleProductSamples.ToString("0") runtime-compatible / @Model.AutomationSettings.AutoAcceptMinStructuredEvidenceProductSamples.ToString("0") structured</dd>
+                </div>
             </div>
 
             <div class="actions-bar">

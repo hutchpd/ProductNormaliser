@@ -2,6 +2,7 @@ using ProductNormaliser.Application.Categories;
 using ProductNormaliser.Application.Crawls;
 using ProductNormaliser.Application.Governance;
 using ProductNormaliser.Application.Sources;
+using Microsoft.Extensions.Options;
 using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Tests;
@@ -198,6 +199,7 @@ public sealed class SourceCandidateDiscoveryServiceTests
             Assert.That(searchProvider.LastRequest.MaxCandidates, Is.EqualTo(2));
 
             Assert.That(probeService.CategoryKeysByHost["gamma.example"], Is.EqualTo(new[] { "laptop", "tv" }));
+            Assert.That(probeService.AutomationModesByHost["gamma.example"], Is.EqualTo(SourceAutomationModes.OperatorAssisted));
             Assert.That(result.RequestedCategoryKeys, Is.EqualTo(new[] { "laptop", "tv" }));
             Assert.That(result.Locale, Is.EqualTo("en-GB"));
             Assert.That(result.Market, Is.EqualTo("UK"));
@@ -420,6 +422,12 @@ public sealed class SourceCandidateDiscoveryServiceTests
                         RepresentativeProductPageReachable = true,
                         RuntimeExtractionCompatible = true,
                         RepresentativeRuntimeProductCount = 1,
+                        AutomationCategorySampleCount = 2,
+                        AutomationReachableCategorySampleCount = 2,
+                        AutomationProductSampleCount = 2,
+                        AutomationReachableProductSampleCount = 2,
+                        AutomationRuntimeCompatibleProductSampleCount = 2,
+                        AutomationStructuredProductEvidenceSampleCount = 2,
                         StructuredProductEvidenceDetected = true,
                         TechnicalAttributeEvidenceDetected = true,
                         LikelyListingUrlPatterns = ["/tv/"]
@@ -441,6 +449,76 @@ public sealed class SourceCandidateDiscoveryServiceTests
             Assert.That(result.Candidates[0].AutomationAssessment.EligibleForSuggestion, Is.True);
             Assert.That(result.Candidates[0].AutomationAssessment.EligibleForAutoAccept, Is.False);
             Assert.That(result.Candidates[0].AutomationAssessment.Decision, Is.EqualTo(SourceCandidateAutomationAssessment.DecisionSuggestAccept));
+            Assert.That(result.Candidates[0].AutomationAssessment.SupportingReasons.Any(reason => reason.Contains("Automation breadth validated", StringComparison.OrdinalIgnoreCase)), Is.True);
+        });
+    }
+
+    [Test]
+    public async Task DiscoverAsync_LeavesSingleSampleCandidateManualOnly_WhenAutomationBreadthIsTooThin()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "thin_breadth",
+                    DisplayName = "Thin Breadth",
+                    BaseUrl = "https://thin-breadth.example/",
+                    Host = "thin-breadth.example",
+                    CandidateType = "retailer",
+                    AllowedMarkets = ["UK"],
+                    PreferredLocale = "en-GB",
+                    MarketEvidence = "explicit",
+                    LocaleEvidence = "explicit",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new FakeSourceCandidateProbeService(
+                new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["thin-breadth.example"] = new SourceCandidateProbeResult
+                    {
+                        HomePageReachable = true,
+                        RobotsTxtReachable = true,
+                        SitemapDetected = true,
+                        CrawlabilityScore = 90m,
+                        CategoryRelevanceScore = 72m,
+                        ExtractabilityScore = 95m,
+                        CatalogLikelihoodScore = 82m,
+                        RepresentativeCategoryPageReachable = true,
+                        RepresentativeProductPageReachable = true,
+                        RuntimeExtractionCompatible = true,
+                        RepresentativeRuntimeProductCount = 1,
+                        AutomationCategorySampleCount = 1,
+                        AutomationReachableCategorySampleCount = 1,
+                        AutomationProductSampleCount = 1,
+                        AutomationReachableProductSampleCount = 1,
+                        AutomationRuntimeCompatibleProductSampleCount = 1,
+                        AutomationStructuredProductEvidenceSampleCount = 1,
+                        StructuredProductEvidenceDetected = true,
+                        TechnicalAttributeEvidenceDetected = true,
+                        LikelyListingUrlPatterns = ["/tv/"],
+                        LikelyProductUrlPatterns = ["/product/"]
+                    }
+                }),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"],
+            Market = "UK",
+            Locale = "en-GB",
+            AutomationMode = SourceAutomationModes.AutoAcceptAndSeed
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Candidates[0].RecommendationStatus, Is.EqualTo(SourceCandidateResult.RecommendationRecommended));
+            Assert.That(result.Candidates[0].AutomationAssessment.EligibleForSuggestion, Is.False);
+            Assert.That(result.Candidates[0].AutomationAssessment.EligibleForAutoAccept, Is.False);
+            Assert.That(result.Candidates[0].AutomationAssessment.Decision, Is.EqualTo(SourceCandidateAutomationAssessment.DecisionManualOnly));
+            Assert.That(result.Candidates[0].AutomationAssessment.BlockingReasons.Any(reason => reason.Contains("not enough for unattended suggestion", StringComparison.OrdinalIgnoreCase)), Is.True);
         });
     }
 
@@ -481,6 +559,12 @@ public sealed class SourceCandidateDiscoveryServiceTests
                         RepresentativeProductPageReachable = true,
                         RuntimeExtractionCompatible = true,
                         RepresentativeRuntimeProductCount = 1,
+                        AutomationCategorySampleCount = 3,
+                        AutomationReachableCategorySampleCount = 3,
+                        AutomationProductSampleCount = 3,
+                        AutomationReachableProductSampleCount = 3,
+                        AutomationRuntimeCompatibleProductSampleCount = 3,
+                        AutomationStructuredProductEvidenceSampleCount = 2,
                         StructuredProductEvidenceDetected = true,
                         TechnicalAttributeEvidenceDetected = true,
                         LikelyListingUrlPatterns = ["/tv/"]
@@ -502,6 +586,76 @@ public sealed class SourceCandidateDiscoveryServiceTests
             Assert.That(result.Candidates[0].AutomationAssessment.EligibleForAutoAccept, Is.False);
             Assert.That(result.Candidates[0].AutomationAssessment.Decision, Is.EqualTo(SourceCandidateAutomationAssessment.DecisionManualOnly));
             Assert.That(result.Candidates[0].AutomationAssessment.BlockingReasons.Any(reason => reason.Contains("weakly inferred", StringComparison.OrdinalIgnoreCase)), Is.True);
+        });
+    }
+
+    [Test]
+    public async Task DiscoverAsync_AutoAcceptsCandidate_WhenRecurringAutomationEvidenceIsStrongEnough()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "recurring_safe",
+                    DisplayName = "Recurring Safe",
+                    BaseUrl = "https://recurring-safe.example/",
+                    Host = "recurring-safe.example",
+                    CandidateType = "retailer",
+                    AllowedMarkets = ["UK"],
+                    PreferredLocale = "en-GB",
+                    MarketEvidence = "explicit",
+                    LocaleEvidence = "explicit",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new FakeSourceCandidateProbeService(
+                new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["recurring-safe.example"] = new SourceCandidateProbeResult
+                    {
+                        HomePageReachable = true,
+                        RobotsTxtReachable = true,
+                        SitemapDetected = true,
+                        CrawlabilityScore = 95m,
+                        CategoryRelevanceScore = 82m,
+                        ExtractabilityScore = 100m,
+                        CatalogLikelihoodScore = 85m,
+                        RepresentativeCategoryPageReachable = true,
+                        RepresentativeProductPageReachable = true,
+                        RuntimeExtractionCompatible = true,
+                        RepresentativeRuntimeProductCount = 1,
+                        AutomationCategorySampleCount = 3,
+                        AutomationReachableCategorySampleCount = 3,
+                        AutomationProductSampleCount = 3,
+                        AutomationReachableProductSampleCount = 3,
+                        AutomationRuntimeCompatibleProductSampleCount = 3,
+                        AutomationStructuredProductEvidenceSampleCount = 3,
+                        StructuredProductEvidenceDetected = true,
+                        TechnicalAttributeEvidenceDetected = true,
+                        LlmAcceptedRepresentativeProductPage = true,
+                        LlmConfidenceScore = 96m,
+                        LikelyListingUrlPatterns = ["/tv/"],
+                        LikelyProductUrlPatterns = ["/product/"]
+                    }
+                }),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"],
+            Market = "UK",
+            Locale = "en-GB",
+            AutomationMode = SourceAutomationModes.AutoAcceptAndSeed
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Candidates[0].AutomationAssessment.EligibleForSuggestion, Is.True);
+            Assert.That(result.Candidates[0].AutomationAssessment.EligibleForAutoAccept, Is.True);
+            Assert.That(result.Candidates[0].AutomationAssessment.EligibleForAutoSeed, Is.True);
+            Assert.That(result.Candidates[0].AutomationAssessment.Decision, Is.EqualTo(SourceCandidateAutomationAssessment.DecisionAutoAcceptAndSeed));
         });
     }
 
@@ -1228,14 +1382,16 @@ public sealed class SourceCandidateDiscoveryServiceTests
         FakeCategoryMetadataService categoryService,
         FakeSourceCandidateSearchProvider searchProvider,
         FakeSourceCandidateProbeService probeService,
-        ICrawlGovernanceService governanceService)
+        ICrawlGovernanceService governanceService,
+        SourceOnboardingAutomationOptions? automationOptions = null)
     {
         return new SourceCandidateDiscoveryService(
             store,
             categoryService,
             governanceService,
             searchProvider,
-            probeService);
+            probeService,
+            Options.Create(automationOptions ?? new SourceOnboardingAutomationOptions()));
     }
 
     private static CategoryMetadata CreateCategory(string key)
@@ -1342,12 +1498,19 @@ public sealed class SourceCandidateDiscoveryServiceTests
 
         public Dictionary<string, IReadOnlyCollection<string>> CategoryKeysByHost { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+        public Dictionary<string, string> AutomationModesByHost { get; } = new(StringComparer.OrdinalIgnoreCase);
+
         public int ProbeCallCount { get; private set; }
 
-        public Task<SourceCandidateProbeResult> ProbeAsync(SourceCandidateSearchResult candidate, IReadOnlyCollection<string> categoryKeys, CancellationToken cancellationToken = default)
+        public Task<SourceCandidateProbeResult> ProbeAsync(
+            SourceCandidateSearchResult candidate,
+            IReadOnlyCollection<string> categoryKeys,
+            string automationMode,
+            CancellationToken cancellationToken = default)
         {
             ProbeCallCount++;
             CategoryKeysByHost[candidate.Host] = categoryKeys.ToArray();
+            AutomationModesByHost[candidate.Host] = automationMode;
             return Task.FromResult(resultsByHost.TryGetValue(candidate.Host, out var result) ? result : new SourceCandidateProbeResult());
         }
     }

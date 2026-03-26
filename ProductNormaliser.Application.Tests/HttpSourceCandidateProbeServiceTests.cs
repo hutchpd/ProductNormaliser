@@ -93,7 +93,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
                 var service = new HttpSourceCandidateProbeService(fetcher, new SchemaOrgJsonLdExtractor(), new NoOpPageClassificationService(), Options.Create(new SourceCandidateDiscoveryOptions
         {
             ProbeTimeoutSeconds = 5
-            }), Options.Create(new LlmOptions()), NullLogger<HttpSourceCandidateProbeService>.Instance);
+            }), Options.Create(new SourceOnboardingAutomationOptions()), Options.Create(new LlmOptions()), NullLogger<HttpSourceCandidateProbeService>.Instance);
 
         var result = await service.ProbeAsync(new SourceCandidateSearchResult
         {
@@ -102,7 +102,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
             BaseUrl = "https://candidate.example/",
             Host = "candidate.example",
             CandidateType = "retailer"
-        }, ["tv"]);
+        }, ["tv"], SourceAutomationModes.OperatorAssisted);
 
         Assert.Multiple(() =>
         {
@@ -123,6 +123,84 @@ public sealed class HttpSourceCandidateProbeServiceTests
             Assert.That(result.CategoryRelevanceScore, Is.GreaterThan(0m));
             Assert.That(result.ExtractabilityScore, Is.GreaterThanOrEqualTo(90m));
             Assert.That(result.CatalogLikelihoodScore, Is.GreaterThan(50m));
+        });
+    }
+
+    [Test]
+    public async Task ProbeAsync_CollectsBoundedAutomationEvidence_WhenUnattendedModeIsRequested()
+    {
+        var fetcher = CreateAutomationBreadthFetcher();
+        var service = new HttpSourceCandidateProbeService(
+            fetcher,
+            new SchemaOrgJsonLdExtractor(),
+            new NoOpPageClassificationService(),
+            Options.Create(new SourceCandidateDiscoveryOptions { ProbeTimeoutSeconds = 5 }),
+            Options.Create(new SourceOnboardingAutomationOptions
+            {
+                AutomationCategorySampleBudget = 3,
+                AutomationProductSampleBudget = 3
+            }),
+            Options.Create(new LlmOptions()),
+            NullLogger<HttpSourceCandidateProbeService>.Instance);
+
+        var result = await service.ProbeAsync(new SourceCandidateSearchResult
+        {
+            CandidateKey = "automation_breadth",
+            DisplayName = "Automation Breadth",
+            BaseUrl = "https://breadth.example/",
+            Host = "breadth.example",
+            CandidateType = "retailer"
+        }, ["tv"], SourceAutomationModes.SuggestAccept);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.AutomationCategorySampleCount, Is.EqualTo(3));
+            Assert.That(result.AutomationReachableCategorySampleCount, Is.EqualTo(3));
+            Assert.That(result.AutomationProductSampleCount, Is.EqualTo(3));
+            Assert.That(result.AutomationReachableProductSampleCount, Is.EqualTo(3));
+            Assert.That(result.AutomationRuntimeCompatibleProductSampleCount, Is.EqualTo(3));
+            Assert.That(result.AutomationStructuredProductEvidenceSampleCount, Is.EqualTo(3));
+            Assert.That(result.AutomationTechnicalAttributeEvidenceSampleCount, Is.EqualTo(3));
+            Assert.That(fetcher.RequestedUrls.Count(url => url.Contains("/category/", StringComparison.OrdinalIgnoreCase) || url.EndsWith("/tv/", StringComparison.OrdinalIgnoreCase) || url.EndsWith("/televisions/", StringComparison.OrdinalIgnoreCase)), Is.EqualTo(3));
+            Assert.That(fetcher.RequestedUrls.Count(url => url.Contains("/product/", StringComparison.OrdinalIgnoreCase)), Is.EqualTo(3));
+        });
+    }
+
+    [Test]
+    public async Task ProbeAsync_KeepsOperatorAssistedSamplingOnRepresentativePathOnly()
+    {
+        var fetcher = CreateAutomationBreadthFetcher();
+        var service = new HttpSourceCandidateProbeService(
+            fetcher,
+            new SchemaOrgJsonLdExtractor(),
+            new NoOpPageClassificationService(),
+            Options.Create(new SourceCandidateDiscoveryOptions { ProbeTimeoutSeconds = 5 }),
+            Options.Create(new SourceOnboardingAutomationOptions
+            {
+                AutomationCategorySampleBudget = 3,
+                AutomationProductSampleBudget = 3
+            }),
+            Options.Create(new LlmOptions()),
+            NullLogger<HttpSourceCandidateProbeService>.Instance);
+
+        var result = await service.ProbeAsync(new SourceCandidateSearchResult
+        {
+            CandidateKey = "automation_breadth",
+            DisplayName = "Automation Breadth",
+            BaseUrl = "https://breadth.example/",
+            Host = "breadth.example",
+            CandidateType = "retailer"
+        }, ["tv"], SourceAutomationModes.OperatorAssisted);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.AutomationCategorySampleCount, Is.EqualTo(0));
+            Assert.That(result.AutomationProductSampleCount, Is.EqualTo(0));
+            Assert.That(fetcher.RequestedUrls.Count, Is.EqualTo(4));
+            Assert.That(fetcher.RequestedUrls[0], Is.EqualTo("https://breadth.example/"));
+            Assert.That(fetcher.RequestedUrls[1], Is.EqualTo("https://breadth.example/robots.txt"));
+            Assert.That(fetcher.RequestedUrls[2], Does.StartWith("https://breadth.example/"));
+            Assert.That(fetcher.RequestedUrls[3], Does.Contain("/product/"));
         });
     }
 
@@ -169,6 +247,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
             new SchemaOrgJsonLdExtractor(),
             new NoOpPageClassificationService(),
             Options.Create(new SourceCandidateDiscoveryOptions { ProbeTimeoutSeconds = 5 }),
+            Options.Create(new SourceOnboardingAutomationOptions()),
             Options.Create(new LlmOptions()),
             NullLogger<HttpSourceCandidateProbeService>.Instance);
 
@@ -179,7 +258,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
             BaseUrl = "https://candidate.example/",
             Host = "candidate.example",
             CandidateType = "retailer"
-        }, ["tv"]);
+        }, ["tv"], SourceAutomationModes.OperatorAssisted);
 
         Assert.Multiple(() =>
         {
@@ -233,7 +312,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
         var service = new HttpSourceCandidateProbeService(fetcher, new SchemaOrgJsonLdExtractor(), new NoOpPageClassificationService(), Options.Create(new SourceCandidateDiscoveryOptions
         {
             ProbeTimeoutSeconds = 5
-        }), Options.Create(new LlmOptions()), NullLogger<HttpSourceCandidateProbeService>.Instance);
+        }), Options.Create(new SourceOnboardingAutomationOptions()), Options.Create(new LlmOptions()), NullLogger<HttpSourceCandidateProbeService>.Instance);
 
         var result = await service.ProbeAsync(new SourceCandidateSearchResult
         {
@@ -242,7 +321,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
             BaseUrl = "https://support-heavy.example/",
             Host = "support-heavy.example",
             CandidateType = "retailer"
-        }, ["tv"]);
+        }, ["tv"], SourceAutomationModes.OperatorAssisted);
 
         Assert.Multiple(() =>
         {
@@ -298,6 +377,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
             new SchemaOrgJsonLdExtractor(),
             new FakeRejectingPageClassificationService(),
             Options.Create(new SourceCandidateDiscoveryOptions { ProbeTimeoutSeconds = 5 }),
+            Options.Create(new SourceOnboardingAutomationOptions()),
             Options.Create(new LlmOptions()),
             NullLogger<HttpSourceCandidateProbeService>.Instance);
 
@@ -308,7 +388,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
             BaseUrl = "https://candidate.example/",
             Host = "candidate.example",
             CandidateType = "retailer"
-        }, ["tv"]);
+        }, ["tv"], SourceAutomationModes.OperatorAssisted);
 
         Assert.Multiple(() =>
         {
@@ -331,6 +411,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
             new SchemaOrgJsonLdExtractor(),
             classifier,
             Options.Create(new SourceCandidateDiscoveryOptions { ProbeTimeoutSeconds = 5 }),
+            Options.Create(new SourceOnboardingAutomationOptions()),
             Options.Create(new LlmOptions { Enabled = false }),
             NullLogger<HttpSourceCandidateProbeService>.Instance);
 
@@ -341,7 +422,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
             BaseUrl = "https://candidate.example/",
             Host = "candidate.example",
             CandidateType = "retailer"
-        }, ["tv"]);
+        }, ["tv"], SourceAutomationModes.OperatorAssisted);
 
         Assert.Multiple(() =>
         {
@@ -349,7 +430,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
             Assert.That(result.LlmAcceptedRepresentativeProductPage, Is.False);
             Assert.That(result.LlmRejectedRepresentativeProductPage, Is.False);
             Assert.That(result.ExtractabilityScore, Is.EqualTo(100m));
-            Assert.That(result.LlmReason, Is.Null);
+            Assert.That(result.LlmReason, Is.EqualTo("LLM disabled"));
         });
     }
 
@@ -362,6 +443,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
             new SchemaOrgJsonLdExtractor(),
             new ThrowingPageClassificationService(),
             Options.Create(new SourceCandidateDiscoveryOptions { ProbeTimeoutSeconds = 5 }),
+            Options.Create(new SourceOnboardingAutomationOptions()),
             Options.Create(new LlmOptions { Enabled = true }),
             NullLogger<HttpSourceCandidateProbeService>.Instance);
 
@@ -372,7 +454,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
             BaseUrl = "https://candidate.example/",
             Host = "candidate.example",
             CandidateType = "retailer"
-        }, ["tv"]);
+        }, ["tv"], SourceAutomationModes.OperatorAssisted);
 
         Assert.Multiple(() =>
         {
@@ -425,10 +507,84 @@ public sealed class HttpSourceCandidateProbeServiceTests
         });
     }
 
+    private static FakeHttpFetcher CreateAutomationBreadthFetcher()
+    {
+        return new FakeHttpFetcher(new Dictionary<string, FetchResult>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["https://breadth.example/"] = new FetchResult
+            {
+                Url = "https://breadth.example/",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "<html><body><a href=\"/tv/\">TV</a><a href=\"/category/oled/\">OLED</a><a href=\"/category/televisions/\">Televisions</a></body></html>",
+                FetchedUtc = DateTime.UtcNow
+            },
+            ["https://breadth.example/robots.txt"] = new FetchResult
+            {
+                Url = "https://breadth.example/robots.txt",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "User-agent: *",
+                FetchedUtc = DateTime.UtcNow
+            },
+            ["https://breadth.example/tv/"] = new FetchResult
+            {
+                Url = "https://breadth.example/tv/",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "<html><body><a href=\"/product/oled-1\">OLED One</a></body></html>",
+                FetchedUtc = DateTime.UtcNow
+            },
+            ["https://breadth.example/category/oled/"] = new FetchResult
+            {
+                Url = "https://breadth.example/category/oled/",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "<html><body><a href=\"/product/oled-2\">OLED Two</a></body></html>",
+                FetchedUtc = DateTime.UtcNow
+            },
+            ["https://breadth.example/category/televisions/"] = new FetchResult
+            {
+                Url = "https://breadth.example/category/televisions/",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "<html><body><a href=\"/product/oled-3\">OLED Three</a></body></html>",
+                FetchedUtc = DateTime.UtcNow
+            },
+            ["https://breadth.example/product/oled-1"] = new FetchResult
+            {
+                Url = "https://breadth.example/product/oled-1",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "<html><head><script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"Product\",\"name\":\"OLED One\"}</script></head><body><section>Specifications</section><table><tr><th>Resolution</th><td>4K</td></tr></table></body></html>",
+                FetchedUtc = DateTime.UtcNow
+            },
+            ["https://breadth.example/product/oled-2"] = new FetchResult
+            {
+                Url = "https://breadth.example/product/oled-2",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "<html><head><script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"Product\",\"name\":\"OLED Two\"}</script></head><body><section>Specifications</section><table><tr><th>Resolution</th><td>4K</td></tr></table></body></html>",
+                FetchedUtc = DateTime.UtcNow
+            },
+            ["https://breadth.example/product/oled-3"] = new FetchResult
+            {
+                Url = "https://breadth.example/product/oled-3",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "<html><head><script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"Product\",\"name\":\"OLED Three\"}</script></head><body><section>Specifications</section><table><tr><th>Resolution</th><td>4K</td></tr></table></body></html>",
+                FetchedUtc = DateTime.UtcNow
+            }
+        });
+    }
+
     private sealed class FakeHttpFetcher(IReadOnlyDictionary<string, FetchResult> resultsByUrl) : IHttpFetcher
     {
+        public List<string> RequestedUrls { get; } = [];
+
         public Task<FetchResult> FetchAsync(CrawlTarget target, CancellationToken cancellationToken)
         {
+            RequestedUrls.Add(target.Url);
             return Task.FromResult(resultsByUrl.TryGetValue(target.Url, out var result)
                 ? result
                 : new FetchResult

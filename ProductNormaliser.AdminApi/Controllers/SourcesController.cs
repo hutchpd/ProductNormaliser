@@ -48,6 +48,8 @@ public sealed class SourcesController(
         {
             DefaultMode = settings.DefaultMode,
             MaxAutoAcceptedCandidatesPerRun = settings.MaxAutoAcceptedCandidatesPerRun,
+            AutomationCategorySampleBudget = settings.AutomationCategorySampleBudget,
+            AutomationProductSampleBudget = settings.AutomationProductSampleBudget,
             SuggestMinConfidenceScore = settings.SuggestMinConfidenceScore,
             AutoAcceptMinConfidenceScore = settings.AutoAcceptMinConfidenceScore,
             MinCrawlabilityScore = settings.MinCrawlabilityScore,
@@ -55,7 +57,14 @@ public sealed class SourcesController(
             MinExtractabilityScore = settings.MinExtractabilityScore,
             MinCatalogLikelihoodScore = settings.MinCatalogLikelihoodScore,
             MaxDuplicateRiskScore = settings.MaxDuplicateRiskScore,
-            MinYieldConfidenceScore = settings.MinYieldConfidenceScore
+            MinYieldConfidenceScore = settings.MinYieldConfidenceScore,
+            SuggestMinReachableCategorySamples = settings.SuggestMinReachableCategorySamples,
+            SuggestMinReachableProductSamples = settings.SuggestMinReachableProductSamples,
+            SuggestMinRuntimeCompatibleProductSamples = settings.SuggestMinRuntimeCompatibleProductSamples,
+            AutoAcceptMinReachableCategorySamples = settings.AutoAcceptMinReachableCategorySamples,
+            AutoAcceptMinReachableProductSamples = settings.AutoAcceptMinReachableProductSamples,
+            AutoAcceptMinRuntimeCompatibleProductSamples = settings.AutoAcceptMinRuntimeCompatibleProductSamples,
+            AutoAcceptMinStructuredEvidenceProductSamples = settings.AutoAcceptMinStructuredEvidenceProductSamples
         });
     }
 

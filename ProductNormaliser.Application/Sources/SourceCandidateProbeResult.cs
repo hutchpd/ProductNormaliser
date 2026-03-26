@@ -17,6 +17,13 @@ public sealed class SourceCandidateProbeResult
     public bool RepresentativeProductPageReachable { get; init; }
     public bool RuntimeExtractionCompatible { get; init; }
     public int RepresentativeRuntimeProductCount { get; init; }
+    public int AutomationCategorySampleCount { get; init; }
+    public int AutomationReachableCategorySampleCount { get; init; }
+    public int AutomationProductSampleCount { get; init; }
+    public int AutomationReachableProductSampleCount { get; init; }
+    public int AutomationRuntimeCompatibleProductSampleCount { get; init; }
+    public int AutomationStructuredProductEvidenceSampleCount { get; init; }
+    public int AutomationTechnicalAttributeEvidenceSampleCount { get; init; }
     public bool StructuredProductEvidenceDetected { get; init; }
     public bool TechnicalAttributeEvidenceDetected { get; init; }
     public bool LlmAcceptedRepresentativeProductPage { get; init; }
