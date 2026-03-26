@@ -9,6 +9,7 @@ public sealed class DiscoveryQueueService(
     IDiscoveryQueueStore discoveryQueueStore,
     IDiscoveredUrlStore discoveredUrlStore,
     ICrawlSourceStore crawlSourceStore,
+    DiscoveryLinkPolicy discoveryLinkPolicy,
     ProductTargetEnqueuer productTargetEnqueuer,
     DiscoveryJobProgressService discoveryJobProgressService) : IDiscoveryQueueService, IDiscoverySeedWriter
 {
@@ -36,12 +37,16 @@ public sealed class DiscoveryQueueService(
     public async Task<bool> EnqueueAsync(CrawlSource source, string categoryKey, string url, string itemType, int depth, string? parentUrl, string? jobId, CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
+        if (!discoveryLinkPolicy.TryNormalizeAndValidate(source, categoryKey, url, depth, out var normalizedUrl))
+        {
+            return false;
+        }
+
         if (!await HasCapacityAsync(source, categoryKey, jobId, cancellationToken))
         {
             return false;
         }
 
-        var normalizedUrl = DiscoveryIdentity.NormalizeUrl(url);
         var queueId = DiscoveryIdentity.BuildDiscoveryQueueId(source.Id, categoryKey, url, itemType);
         var existingQueueItem = await discoveryQueueStore.GetByIdAsync(queueId, cancellationToken);
 
@@ -104,12 +109,16 @@ public sealed class DiscoveryQueueService(
 
     public async Task<bool> EnqueueProductAsync(CrawlSource source, string categoryKey, string url, int depth, string? parentUrl, string? jobId, CancellationToken cancellationToken)
     {
+        if (!discoveryLinkPolicy.TryNormalizeAndValidate(source, categoryKey, url, depth, out var normalizedUrl))
+        {
+            return false;
+        }
+
         if (!await HasCapacityAsync(source, categoryKey, jobId, cancellationToken))
         {
             return false;
         }
 
-        var normalizedUrl = DiscoveryIdentity.NormalizeUrl(url);
         var now = DateTime.UtcNow;
         var enqueued = await productTargetEnqueuer.EnqueueAsync(jobId, source, categoryKey, url, cancellationToken);
         await RecordDiscoveredUrlAsync(jobId, source.Id, categoryKey, url, normalizedUrl, "product", "pending", depth, parentUrl, now, nextAttemptUtc: now, lastError: null, countForJob: false, cancellationToken);

@@ -9,6 +9,7 @@ public sealed class SourceDiscoveryService(
     ICrawlSourceStore crawlSourceStore,
     ISitemapLocator sitemapLocator,
     IDiscoverySeedWriter discoverySeedWriter,
+    IDiscoveryLinkPolicy discoveryLinkPolicy,
     ILogger<SourceDiscoveryService>? logger = null) : ISourceDiscoveryService
 {
     private readonly ILogger<SourceDiscoveryService> logger = logger ?? NullLogger<SourceDiscoveryService>.Instance;
@@ -50,13 +51,13 @@ public sealed class SourceDiscoveryService(
                 {
                     foreach (var entryPage in entryPages)
                     {
-                        AddSeed(selection.Source.Id, categoryKey, entryPage, "listing");
+                        AddSeed(selection.Source, categoryKey, entryPage, "listing");
                     }
                 }
 
                 foreach (var sitemapUrl in sitemapUrls)
                 {
-                    AddSeed(selection.Source.Id, categoryKey, sitemapUrl, "sitemap");
+                    AddSeed(selection.Source, categoryKey, sitemapUrl, "sitemap");
                 }
             }
         }
@@ -68,9 +69,14 @@ public sealed class SourceDiscoveryService(
             Seeds = seeds
         };
 
-        void AddSeed(string sourceId, string categoryKey, string url, string classification)
+        void AddSeed(CrawlSource source, string categoryKey, string url, string classification)
         {
-            var key = $"{sourceId}|{categoryKey}|{classification}|{url}";
+            if (!discoveryLinkPolicy.TryNormalizeAndValidate(source, categoryKey, url, depth: 0, out var normalizedUrl))
+            {
+                return;
+            }
+
+            var key = $"{source.Id}|{categoryKey}|{classification}|{normalizedUrl}";
             if (!seen.Add(key))
             {
                 return;
@@ -78,9 +84,9 @@ public sealed class SourceDiscoveryService(
 
             seeds.Add(new SourceDiscoverySeedDescriptor
             {
-                SourceId = sourceId,
+                SourceId = source.Id,
                 CategoryKey = categoryKey,
-                Url = url,
+                Url = normalizedUrl,
                 Classification = classification
             });
         }

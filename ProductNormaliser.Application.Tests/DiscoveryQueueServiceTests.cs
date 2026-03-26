@@ -284,6 +284,7 @@ public sealed class DiscoveryQueueServiceTests
             queueStore,
             discoveredStore,
             new FakeCrawlSourceStore(source),
+            new DiscoveryLinkPolicy(),
             new ProductTargetEnqueuer(new FakeProductTargetQueueStore(), new FakeCrawlJobQueueWriter(), new DiscoveryJobProgressService(new FakeCrawlJobStore())),
             new DiscoveryJobProgressService(new FakeCrawlJobStore()));
     }

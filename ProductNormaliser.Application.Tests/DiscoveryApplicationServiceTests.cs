@@ -2,6 +2,7 @@ using ProductNormaliser.Application.Crawls;
 using ProductNormaliser.Application.Discovery;
 using ProductNormaliser.Application.Sources;
 using ProductNormaliser.Core.Models;
+using ProductNormaliser.Infrastructure.Discovery;
 
 namespace ProductNormaliser.Tests;
 
@@ -19,7 +20,7 @@ public sealed class DiscoveryApplicationServiceTests
             ["alpha"] = ["https://alpha.example/sitemap.xml"]
         });
         var seedWriter = new RecordingDiscoverySeedWriter();
-        var sut = new SourceDiscoveryService(sourceStore, sitemapLocator, seedWriter);
+        var sut = new SourceDiscoveryService(sourceStore, sitemapLocator, seedWriter, new DiscoveryLinkPolicy());
 
         var result = await sut.SeedAsync(["tv"], [], "job_discovery", CancellationToken.None);
 
@@ -45,7 +46,7 @@ public sealed class DiscoveryApplicationServiceTests
             ["alpha"] = ["https://alpha.example/sitemap.xml"]
         });
         var seedWriter = new RecordingDiscoverySeedWriter();
-        var sut = new SourceDiscoveryService(sourceStore, sitemapLocator, seedWriter);
+        var sut = new SourceDiscoveryService(sourceStore, sitemapLocator, seedWriter, new DiscoveryLinkPolicy());
 
         var first = await sut.EnsureSeededAsync(CancellationToken.None);
         var second = await sut.EnsureSeededAsync(CancellationToken.None);
@@ -56,6 +57,55 @@ public sealed class DiscoveryApplicationServiceTests
             Assert.That(second.SeedCount, Is.EqualTo(2));
             Assert.That(seedWriter.Calls, Has.Count.EqualTo(4));
             Assert.That(seedWriter.Calls.Take(2).Select(call => (call.CategoryKey, call.Url, call.Classification)), Is.EqualTo(seedWriter.Calls.Skip(2).Select(call => (call.CategoryKey, call.Url, call.Classification))));
+        });
+    }
+
+    [Test]
+    public async Task SourceDiscoveryService_FiltersSeedsThatStronglyContradictMarketOrLocale()
+    {
+        var sourceStore = new FakeCrawlSourceStore(CreateSource("alpha", isEnabled: true, supportedCategories: ["tv"]));
+        var sitemapLocator = new FakeSitemapLocator(new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["alpha"] =
+            [
+                "https://alpha.example/sitemap.xml",
+                "https://alpha.example/en-us/sitemap.xml",
+                "https://alpha.example/us/sitemap.xml"
+            ]
+        });
+        var seedWriter = new RecordingDiscoverySeedWriter();
+        var sut = new SourceDiscoveryService(sourceStore, sitemapLocator, seedWriter, new DiscoveryLinkPolicy());
+
+        var result = await sut.SeedAsync(["tv"], [], "job_discovery", CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.SeedCount, Is.EqualTo(2));
+            Assert.That(seedWriter.Calls.Select(call => call.Url), Is.EqualTo(new[]
+            {
+                "https://alpha.example/category/tv",
+                "https://alpha.example/sitemap.xml"
+            }));
+        });
+    }
+
+    [Test]
+    public async Task SourceDiscoveryService_PreservesExplicitSeedOverridesForContradictoryPaths()
+    {
+        var source = CreateSource("alpha", isEnabled: true, supportedCategories: ["tv"]);
+        source.DiscoveryProfile.CategoryEntryPages["tv"] = ["https://alpha.example/en-us/tv"];
+
+        var sourceStore = new FakeCrawlSourceStore(source);
+        var sitemapLocator = new FakeSitemapLocator(new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase));
+        var seedWriter = new RecordingDiscoverySeedWriter();
+        var sut = new SourceDiscoveryService(sourceStore, sitemapLocator, seedWriter, new DiscoveryLinkPolicy());
+
+        var result = await sut.SeedAsync(["tv"], [], "job_discovery", CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.SeedCount, Is.EqualTo(1));
+            Assert.That(seedWriter.Calls.Select(call => call.Url), Is.EqualTo(new[] { "https://alpha.example/en-us/tv" }));
         });
     }
 

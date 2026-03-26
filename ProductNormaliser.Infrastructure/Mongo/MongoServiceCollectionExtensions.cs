@@ -122,6 +122,7 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<ICrawlQueueService, CrawlQueueService>();
         services.AddSingleton<ISourceProductBuilder, SourceProductBuilder>();
         services.AddSingleton<DiscoveryLinkPolicy>();
+        services.AddSingleton<IDiscoveryLinkPolicy>(serviceProvider => serviceProvider.GetRequiredService<DiscoveryLinkPolicy>());
         services.AddSingleton<SitemapLocator>();
         services.AddSingleton<ISitemapLocator>(serviceProvider => serviceProvider.GetRequiredService<SitemapLocator>());
         services.AddSingleton<SitemapParser>();

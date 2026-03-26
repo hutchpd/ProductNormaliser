@@ -1,8 +1,10 @@
+using System.Text.RegularExpressions;
+using ProductNormaliser.Application.Discovery;
 using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Infrastructure.Discovery;
 
-public sealed class DiscoveryLinkPolicy
+public sealed partial class DiscoveryLinkPolicy : IDiscoveryLinkPolicy
 {
     private static readonly HashSet<string> TrackingParameters = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -21,6 +23,25 @@ public sealed class DiscoveryLinkPolicy
         "utm_medium",
         "utm_source",
         "utm_term"
+    };
+
+    private static readonly IReadOnlyDictionary<string, IReadOnlyCollection<string>> MarketAliases = new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["UK"] = ["uk", "gb"],
+        ["GB"] = ["gb", "uk"],
+        ["US"] = ["us"],
+        ["IE"] = ["ie"],
+        ["EU"] = ["eu"]
+    };
+
+    private static readonly IReadOnlySet<string> KnownBoundaryMarketTokens = BuildKnownBoundaryMarketTokens();
+
+    private static readonly IReadOnlySet<string> NeutralBoundaryTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "global",
+        "intl",
+        "international",
+        "row"
     };
 
     public string NormalizeUrl(string url)
@@ -113,9 +134,17 @@ public sealed class DiscoveryLinkPolicy
             return false;
         }
 
+        if (HasExplicitRuntimeOverride(source, categoryKey, uri))
+        {
+            return true;
+        }
+
+        if (StronglyContradictsMarketOrLocale(source, uri))
+        {
+            return false;
+        }
+
         if (LooksLikeSitemap(path)
-            || MatchesAllowedPrefix(profile, path)
-            || MatchesCategoryEntryPrefix(profile, categoryKey, path)
             || MatchesProductPattern(source, uri.ToString())
             || MatchesListingPattern(source, uri.ToString()))
         {
@@ -128,10 +157,20 @@ public sealed class DiscoveryLinkPolicy
         return profile.AllowedPathPrefixes.Count == 0 && !hasCategoryRules;
     }
 
-    private static bool MatchesAllowedPrefix(SourceDiscoveryProfile profile, string path)
+    private static bool HasExplicitRuntimeOverride(CrawlSource source, string categoryKey, Uri uri)
     {
-        return profile.AllowedPathPrefixes.Count == 0
-            || profile.AllowedPathPrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        var profile = source.DiscoveryProfile;
+        var path = uri.AbsolutePath;
+
+        return MatchesConfiguredAllowedHost(profile, uri.Host)
+            || MatchesConfiguredAllowedPrefix(profile, path)
+            || MatchesCategoryEntryPrefix(profile, categoryKey, path)
+            || MatchesSitemapHint(source, uri);
+    }
+
+    private static bool MatchesConfiguredAllowedPrefix(SourceDiscoveryProfile profile, string path)
+    {
+        return profile.AllowedPathPrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool MatchesCategoryEntryPrefix(SourceDiscoveryProfile profile, string categoryKey, string path)
@@ -166,6 +205,235 @@ public sealed class DiscoveryLinkPolicy
     private static bool HostMatches(CrawlSource source, string candidateHost)
     {
         return source.GetDiscoveryHosts().Contains(NormaliseHost(candidateHost), StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool MatchesConfiguredAllowedHost(SourceDiscoveryProfile profile, string candidateHost)
+    {
+        var normalizedHost = NormaliseHost(candidateHost);
+        return profile.AllowedHosts.Any(allowedHost => string.Equals(NormaliseHost(allowedHost), normalizedHost, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool MatchesSitemapHint(CrawlSource source, Uri candidateUri)
+    {
+        foreach (var sitemapHint in source.DiscoveryProfile.SitemapHints)
+        {
+            if (!Uri.TryCreate(new Uri(source.BaseUrl, UriKind.Absolute), sitemapHint, out var absoluteHint))
+            {
+                continue;
+            }
+
+            if (string.Equals(absoluteHint.GetLeftPart(UriPartial.Path).TrimEnd('/'), candidateUri.GetLeftPart(UriPartial.Path).TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool StronglyContradictsMarketOrLocale(CrawlSource source, Uri uri)
+    {
+        var allowedMarketTokens = GetAllowedMarketTokens(source);
+        var preferredLocale = GetPreferredLocale(source);
+
+        foreach (var localeSignal in ExtractLocaleSignals(uri))
+        {
+            if (!string.IsNullOrWhiteSpace(preferredLocale)
+                && !string.Equals(localeSignal, preferredLocale, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        if (allowedMarketTokens.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var marketSignal in ExtractMarketSignals(uri))
+        {
+            if (!NeutralBoundaryTokens.Contains(marketSignal)
+                && !allowedMarketTokens.Contains(marketSignal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static HashSet<string> GetAllowedMarketTokens(CrawlSource source)
+    {
+        var effectiveMarkets = source.DiscoveryProfile.AllowedMarkets.Count > 0
+            ? source.DiscoveryProfile.AllowedMarkets
+            : source.AllowedMarkets;
+        var tokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var market in effectiveMarkets)
+        {
+            if (string.IsNullOrWhiteSpace(market))
+            {
+                continue;
+            }
+
+            var normalizedMarket = market.Trim().ToLowerInvariant();
+            tokens.Add(normalizedMarket);
+            if (MarketAliases.TryGetValue(market.Trim(), out var aliases))
+            {
+                foreach (var alias in aliases)
+                {
+                    tokens.Add(alias);
+                }
+            }
+        }
+
+        var preferredLocale = GetPreferredLocale(source);
+        if (!string.IsNullOrWhiteSpace(preferredLocale))
+        {
+            tokens.Add(preferredLocale);
+            var localeParts = preferredLocale.Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (localeParts.Length == 2)
+            {
+                tokens.Add(localeParts[1].ToLowerInvariant());
+                if (MarketAliases.TryGetValue(localeParts[1], out var aliases))
+                {
+                    foreach (var alias in aliases)
+                    {
+                        tokens.Add(alias);
+                    }
+                }
+            }
+        }
+
+        return tokens;
+    }
+
+    private static string? GetPreferredLocale(CrawlSource source)
+    {
+        var preferredLocale = string.IsNullOrWhiteSpace(source.DiscoveryProfile.PreferredLocale)
+            ? source.PreferredLocale
+            : source.DiscoveryProfile.PreferredLocale;
+        return NormalizeLocaleToken(preferredLocale);
+    }
+
+    private static IReadOnlyList<string> ExtractLocaleSignals(Uri uri)
+    {
+        var signals = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var token in EnumerateBoundaryTokens(uri))
+        {
+            var locale = NormalizeLocaleToken(token);
+            if (!string.IsNullOrWhiteSpace(locale))
+            {
+                signals.Add(locale);
+            }
+        }
+
+        return signals.ToArray();
+    }
+
+    private static IReadOnlyList<string> ExtractMarketSignals(Uri uri)
+    {
+        var signals = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var token in EnumerateBoundaryTokens(uri))
+        {
+            var locale = NormalizeLocaleToken(token);
+            if (!string.IsNullOrWhiteSpace(locale))
+            {
+                var localeParts = locale.Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (localeParts.Length == 2)
+                {
+                    signals.Add(localeParts[1]);
+                }
+
+                continue;
+            }
+
+            var normalized = token.Trim().ToLowerInvariant();
+            if (KnownBoundaryMarketTokens.Contains(normalized))
+            {
+                signals.Add(normalized);
+            }
+        }
+
+        return signals.ToArray();
+    }
+
+    private static IEnumerable<string> EnumerateBoundaryTokens(Uri uri)
+    {
+        foreach (var label in uri.Host.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (label.Length > 0)
+            {
+                yield return label;
+            }
+        }
+
+        foreach (var segment in uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (segment.Length > 0)
+            {
+                yield return segment;
+            }
+        }
+
+        foreach (var pair in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var parts = pair.Split('=', 2, StringSplitOptions.TrimEntries);
+            var key = parts[0];
+            if (!IsBoundaryQueryParameter(key))
+            {
+                continue;
+            }
+
+            if (parts.Length == 2 && parts[1].Length > 0)
+            {
+                yield return Uri.UnescapeDataString(parts[1]);
+            }
+        }
+    }
+
+    private static bool IsBoundaryQueryParameter(string key)
+    {
+        return key.Equals("lang", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("language", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("locale", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("market", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("region", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("country", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static HashSet<string> BuildKnownBoundaryMarketTokens()
+    {
+        var tokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in MarketAliases)
+        {
+            tokens.Add(entry.Key.ToLowerInvariant());
+            foreach (var alias in entry.Value)
+            {
+                tokens.Add(alias.ToLowerInvariant());
+            }
+        }
+
+        return tokens;
+    }
+
+    private static string? NormalizeLocaleToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var candidate = value.Trim().Replace('_', '-');
+        var match = LocaleTokenRegex().Match(candidate);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        return $"{match.Groups["language"].Value.ToLowerInvariant()}-{match.Groups["region"].Value.ToLowerInvariant()}";
     }
 
     private static string NormaliseHost(string host)
@@ -206,4 +474,7 @@ public sealed class DiscoveryLinkPolicy
 
         return new KeyValuePair<string, string>(key, value);
     }
+
+    [GeneratedRegex("^(?<language>[a-z]{2})[-_](?<region>[a-z]{2})$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex LocaleTokenRegex();
 }

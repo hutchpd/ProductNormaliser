@@ -178,6 +178,28 @@ public sealed class DiscoveryRuntimeTests
     }
 
     [Test]
+    public void DiscoveryLinkPolicy_RejectsStrongMarketAndLocaleContradictions_UnlessExplicitlyAllowed()
+    {
+        var source = CreateSource();
+        var sut = new DiscoveryLinkPolicy();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sut.IsAllowed(source, "tv", "https://alpha.example/en-us/category/tv", depth: 1), Is.False);
+            Assert.That(sut.IsAllowed(source, "tv", "https://alpha.example/us/product/oled-1", depth: 1), Is.False);
+        });
+
+        source.DiscoveryProfile.AllowedPathPrefixes.Add("/en-us/category");
+        source.DiscoveryProfile.AllowedHosts.Add("us.alpha.example");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sut.IsAllowed(source, "tv", "https://alpha.example/en-us/category/tv", depth: 1), Is.True);
+            Assert.That(sut.IsAllowed(source, "tv", "https://us.alpha.example/product/oled-1", depth: 1), Is.True);
+        });
+    }
+
+    [Test]
     public void ProductPageClassifier_PrefersJsonLdProductDetection()
     {
         const string html = """
@@ -318,6 +340,59 @@ public sealed class DiscoveryRuntimeTests
     }
 
     [Test]
+    public async Task RelatedLinkExpansionService_RejectsContradictoryMarketAndLocaleLinks()
+    {
+        const string html = """
+            <html>
+              <body>
+                <nav aria-label="breadcrumb">
+                  <a href="/category/tv">TV</a>
+                  <a href="/en-us/category/tv">US TV</a>
+                </nav>
+                <a class="product-card" href="/product/oled-2">OLED 2</a>
+                <a class="product-card" href="/us/product/oled-3">US OLED 3</a>
+                <a rel="next" href="/category/tv?page=2">Next</a>
+                <a rel="next" href="/en-us/category/tv?page=2">US Next</a>
+              </body>
+            </html>
+            """;
+
+        var source = CreateSource();
+        var queueService = new RecordingDiscoveryQueueService();
+        var linkPolicy = new DiscoveryLinkPolicy();
+        var sut = new RelatedLinkExpansionService(
+            new FakeCrawlSourceStore(source),
+            new ProductLinkExtractor(linkPolicy),
+            new ProductPageClassifier(new SchemaOrgJsonLdExtractor(), linkPolicy),
+            new ListingPageClassifier(new ProductLinkExtractor(linkPolicy), linkPolicy),
+            linkPolicy,
+            queueService,
+            new TestLogger<RelatedLinkExpansionService>());
+
+        var result = await sut.ExpandAsync(new CrawlTarget
+        {
+            Url = "https://alpha.example/product/oled-1",
+            CategoryKey = "tv",
+            Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["sourceName"] = source.Id
+            }
+        }, html, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.EnqueuedProductUrls, Is.EqualTo(1));
+            Assert.That(result.EnqueuedListingUrls, Is.EqualTo(2));
+            Assert.That(queueService.Enqueued.Select(item => (item.ItemType, item.Url)), Is.EqualTo(new[]
+            {
+                ("product", "https://alpha.example/product/oled-2"),
+                ("listing", "https://alpha.example/category/tv?page=2"),
+                ("listing", "https://alpha.example/category/tv")
+            }));
+        });
+    }
+
+    [Test]
     public async Task DiscoveryOrchestrator_RequeuedRootSeedCanSurfaceNewProductLinksOverTime()
     {
         var source = CreateSource();
@@ -332,6 +407,7 @@ public sealed class DiscoveryRuntimeTests
             queueStore,
             discoveredStore,
             new FakeCrawlSourceStore(source),
+            new DiscoveryLinkPolicy(),
             new ProductTargetEnqueuer(productQueueStore, queueWriter, progressService),
             progressService);
         var fetcher = new MutableHttpFetcher(new Dictionary<string, FetchResult>(StringComparer.OrdinalIgnoreCase)
@@ -380,6 +456,69 @@ public sealed class DiscoveryRuntimeTests
                 "https://alpha.example/product/oled-1",
                 "https://alpha.example/product/oled-2"
             }));
+        });
+    }
+
+    [Test]
+    public async Task DiscoveryOrchestrator_RequeuedRootSeedStillHonoursMarketLocaleBoundaries()
+    {
+        var source = CreateSource();
+        source.DiscoveryProfile.SeedReseedIntervalHours = 1;
+
+        var queueStore = new FakeDiscoveryQueueStore();
+        var discoveredStore = new FakeDiscoveredUrlStore();
+        var productQueueStore = new FakeProductTargetQueueStore();
+        var queueWriter = new RecordingCrawlJobQueueWriter(productQueueStore);
+        var progressService = new DiscoveryJobProgressService(new FakeCrawlJobStore());
+        var discoveryQueueService = new DiscoveryQueueService(
+            queueStore,
+            discoveredStore,
+            new FakeCrawlSourceStore(source),
+            new DiscoveryLinkPolicy(),
+            new ProductTargetEnqueuer(productQueueStore, queueWriter, progressService),
+            progressService);
+        var fetcher = new MutableHttpFetcher(new Dictionary<string, FetchResult>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["https://alpha.example/category/tv"] = new()
+            {
+                Url = "https://alpha.example/category/tv",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "<html><body><div class=\"product-grid\"><a class=\"product-card\" href=\"/us/product/oled-1\">US OLED 1</a></div></body></html>"
+            }
+        });
+        var linkPolicy = new DiscoveryLinkPolicy();
+        var orchestrator = new DiscoveryOrchestrator(
+            new FakeCrawlSourceStore(source),
+            new AllowAllRobotsPolicyService(),
+            fetcher,
+            new SitemapParser(),
+            linkPolicy,
+            new ProductPageClassifier(new SchemaOrgJsonLdExtractor(), linkPolicy),
+            new ListingPageClassifier(new ProductLinkExtractor(linkPolicy), linkPolicy),
+            discoveryQueueService,
+            new TestLogger<DiscoveryOrchestrator>());
+
+        var firstEnqueue = await discoveryQueueService.EnqueueAsync(source, "tv", "https://alpha.example/category/tv", "listing", 0, null, null, CancellationToken.None);
+        var firstLease = await discoveryQueueService.DequeueAsync(CancellationToken.None);
+        var firstResult = await orchestrator.ProcessAsync(firstLease!.Item, CancellationToken.None);
+        await discoveryQueueService.MarkCompletedAsync(firstLease.QueueItemId, CancellationToken.None);
+
+        queueStore.Items[firstLease.QueueItemId].CompletedUtc = DateTime.UtcNow.AddHours(-2);
+        fetcher.SetHtml("https://alpha.example/category/tv", "<html><body><div class=\"product-grid\"><a class=\"product-card\" href=\"/us/product/oled-1\">US OLED 1</a><a class=\"product-card\" href=\"/product/oled-2\">OLED 2</a></div></body></html>");
+
+        var secondEnqueue = await discoveryQueueService.EnqueueAsync(source, "tv", "https://alpha.example/category/tv", "listing", 0, null, null, CancellationToken.None);
+        var secondLease = await discoveryQueueService.DequeueAsync(CancellationToken.None);
+        var secondResult = await orchestrator.ProcessAsync(secondLease!.Item, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(firstEnqueue, Is.True);
+            Assert.That(firstResult.Status, Is.EqualTo("completed"));
+            Assert.That(secondEnqueue, Is.True);
+            Assert.That(secondResult.Status, Is.EqualTo("completed"));
+            Assert.That(queueWriter.Items, Has.Count.EqualTo(1));
+            Assert.That(queueWriter.Items.Select(item => item.SourceUrl), Is.EqualTo(new[] { "https://alpha.example/product/oled-2" }));
         });
     }
 
