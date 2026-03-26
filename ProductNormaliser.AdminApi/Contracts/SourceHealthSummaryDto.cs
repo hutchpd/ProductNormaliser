@@ -8,5 +8,6 @@ public sealed class SourceHealthSummaryDto
     public decimal SuccessfulCrawlRate { get; init; }
     public decimal ExtractabilityRate { get; init; }
     public decimal NoProductRate { get; init; }
+    public SourceAutomationPostureDto Automation { get; init; } = new();
     public DateTime? SnapshotUtc { get; init; }
 }

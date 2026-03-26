@@ -640,6 +640,14 @@
                             <td>
                                 <partial name="_StatusBadge" model="ProductNormaliser.Web.Models.SourceManagementPresentation.GetHealthBadge(source.Health)" />
                                 <div class="text-muted small">@ProductNormaliser.Web.Models.SourceManagementPresentation.FormatHealthSummary(source.Health)</div>
+                                <div class="mt-2">
+                                    <partial name="_StatusBadge" model="ProductNormaliser.Web.Models.SourceManagementPresentation.GetAutomationBadge(source.Health)" />
+                                </div>
+                                <div class="text-muted small">@ProductNormaliser.Web.Models.SourceManagementPresentation.FormatAutomationSummary(source.Health)</div>
+                                @if (!string.IsNullOrWhiteSpace(ProductNormaliser.Web.Models.SourceManagementPresentation.FormatAutomationReasons(source.Health)))
+                                {
+                                    <div class="text-muted small">@ProductNormaliser.Web.Models.SourceManagementPresentation.FormatAutomationReasons(source.Health)</div>
+                                }
                             </td>
                             <td>
                                 <partial name="_StatusBadge" model="ProductNormaliser.Web.Models.SourceManagementPresentation.GetLastActivityBadge(source.LastActivity)" />

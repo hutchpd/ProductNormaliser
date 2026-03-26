@@ -32,6 +32,24 @@ internal static class AdminApiContractValidator
         "auto_accept_and_seed"
     };
 
+    private static readonly IReadOnlySet<string> SourceAutomationPostureStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "advisory",
+        "healthy",
+        "downgraded",
+        "manual_review",
+        "quarantined"
+    };
+
+    private static readonly IReadOnlySet<string> SourceAutomationActions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "none",
+        "keep_current_mode",
+        "downgrade_to_suggest",
+        "flag_manual_review",
+        "pause_reseeding"
+    };
+
     private static readonly IReadOnlySet<string> SourceAutomationDecisions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "manual_only",
@@ -279,10 +297,28 @@ internal static class AdminApiContractValidator
         ValidateSourceDiscoveryProfile(payload.DiscoveryProfile, $"{path}.discoveryProfile");
         ValidateSourceThrottlingPolicy(payload.ThrottlingPolicy, $"{path}.throttlingPolicy");
         ValidateStringItems(payload.SupportedCategoryKeys, $"{path}.supportedCategoryKeys");
+        ValidateSourceHealth(payload.Health, $"{path}.health");
         if (payload.LastActivity is not null)
         {
             ValidateSourceLastActivity(payload.LastActivity, $"{path}.lastActivity");
         }
+    }
+
+    private static void ValidateSourceHealth(SourceHealthSummaryDto payload, string path)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        ValidateRequiredString(payload.Status, $"{path}.status");
+        ValidateSourceAutomationPosture(payload.Automation, $"{path}.automation");
+    }
+
+    private static void ValidateSourceAutomationPosture(SourceAutomationPostureDto payload, string path)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        ValidateEnumValue(payload.Status, SourceAutomationPostureStatuses, $"{path}.status", value => value);
+        ValidateEnumValue(payload.EffectiveMode, SourceAutomationModes, $"{path}.effectiveMode", value => value);
+        ValidateEnumValue(payload.RecommendedAction, SourceAutomationActions, $"{path}.recommendedAction", value => value);
+        ValidateStringItems(payload.SupportingReasons, $"{path}.supportingReasons");
+        ValidateStringItems(payload.BlockingReasons, $"{path}.blockingReasons");
     }
 
     private static void ValidateSourceDiscoveryProfile(SourceDiscoveryProfileDto payload, string path)

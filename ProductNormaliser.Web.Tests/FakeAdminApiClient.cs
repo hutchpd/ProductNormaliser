@@ -274,7 +274,13 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             },
             Health = new SourceHealthSummaryDto
             {
-                Status = "Unknown"
+                Status = "Unknown",
+                Automation = new SourceAutomationPostureDto
+                {
+                    Status = "advisory",
+                    EffectiveMode = "operator_assisted",
+                    RecommendedAction = "none"
+                }
             },
             CreatedUtc = DateTime.UtcNow,
             UpdatedUtc = DateTime.UtcNow
@@ -566,6 +572,20 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
                 SuccessfulCrawlRate = source.Health.SuccessfulCrawlRate,
                 ExtractabilityRate = source.Health.ExtractabilityRate,
                 NoProductRate = source.Health.NoProductRate,
+                Automation = new SourceAutomationPostureDto
+                {
+                    Status = source.Health.Automation.Status,
+                    EffectiveMode = source.Health.Automation.EffectiveMode,
+                    RecommendedAction = source.Health.Automation.RecommendedAction,
+                    SnapshotCount = source.Health.Automation.SnapshotCount,
+                    DiscoveryBreadthScore = source.Health.Automation.DiscoveryBreadthScore,
+                    ProductTargetPromotionRate = source.Health.Automation.ProductTargetPromotionRate,
+                    DownstreamYieldScore = source.Health.Automation.DownstreamYieldScore,
+                    TrustTrendDelta = source.Health.Automation.TrustTrendDelta,
+                    ExtractabilityTrendDelta = source.Health.Automation.ExtractabilityTrendDelta,
+                    SupportingReasons = source.Health.Automation.SupportingReasons.ToArray(),
+                    BlockingReasons = source.Health.Automation.BlockingReasons.ToArray()
+                },
                 SnapshotUtc = source.Health.SnapshotUtc
             },
             LastActivity = source.LastActivity is null ? null : new SourceLastActivityDto

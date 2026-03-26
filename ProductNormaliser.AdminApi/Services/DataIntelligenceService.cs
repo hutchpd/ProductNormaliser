@@ -205,6 +205,9 @@ public sealed class DataIntelligenceService(
                 SuccessfulCrawlRate = snapshot.SuccessfulCrawlRate,
                 ExtractabilityRate = snapshot.ExtractabilityRate,
                 NoProductRate = snapshot.NoProductRate,
+                DiscoveryBreadthScore = snapshot.DiscoveryBreadthScore,
+                ProductTargetPromotionRate = snapshot.ProductTargetPromotionRate,
+                DownstreamYieldScore = snapshot.DownstreamYieldScore,
                 PriceVolatilityScore = snapshot.PriceVolatilityScore,
                 SpecStabilityScore = snapshot.SpecStabilityScore,
                 HistoricalTrustScore = snapshot.HistoricalTrustScore

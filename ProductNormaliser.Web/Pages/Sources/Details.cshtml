@@ -189,6 +189,10 @@
                         <span>No-product rate</span>
                         <strong>@ProductNormaliser.Web.Models.AnalyticsPresentation.FormatPercent(Model.CurrentSource.Health.NoProductRate)</strong>
                     </article>
+                    <article>
+                        <span>Automation posture</span>
+                        <strong>@ProductNormaliser.Web.Models.SourceManagementPresentation.GetAutomationBadge(Model.CurrentSource.Health).Text</strong>
+                    </article>
                 </div>
 
                 <dl class="detail-grid">
@@ -209,12 +213,28 @@
                         <dd>@Model.CurrentSource.AutomationPolicy.Mode.Replace('_', ' ')</dd>
                     </div>
                     <div>
+                        <dt>Effective automation mode</dt>
+                        <dd>@ProductNormaliser.Web.Models.SourceManagementPresentation.FormatAutomationMode(Model.CurrentSource.Health.Automation.EffectiveMode)</dd>
+                    </div>
+                    <div>
+                        <dt>Recommended action</dt>
+                        <dd>@ProductNormaliser.Web.Models.SourceManagementPresentation.FormatAutomationAction(Model.CurrentSource.Health.Automation.RecommendedAction)</dd>
+                    </div>
+                    <div>
                         <dt>Last health snapshot</dt>
                         <dd>@(Model.CurrentSource.Health.SnapshotUtc?.ToString("u") ?? "No snapshot recorded")</dd>
                     </div>
                     <div>
                         <dt>Recent health</dt>
                         <dd>@ProductNormaliser.Web.Models.SourceManagementPresentation.FormatHealthSummary(Model.CurrentSource.Health)</dd>
+                    </div>
+                    <div>
+                        <dt>Automation summary</dt>
+                        <dd>@ProductNormaliser.Web.Models.SourceManagementPresentation.FormatAutomationSummary(Model.CurrentSource.Health)</dd>
+                    </div>
+                    <div>
+                        <dt>Automation reasons</dt>
+                        <dd>@(string.IsNullOrWhiteSpace(ProductNormaliser.Web.Models.SourceManagementPresentation.FormatAutomationReasons(Model.CurrentSource.Health)) ? "No supporting or blocking reasons recorded." : ProductNormaliser.Web.Models.SourceManagementPresentation.FormatAutomationReasons(Model.CurrentSource.Health))</dd>
                     </div>
                     <div>
                         <dt>Last crawl activity</dt>
@@ -225,6 +245,23 @@
                         <dd>@(Model.CurrentSource.LastActivity is null ? "No crawl recorded" : Model.CurrentSource.LastActivity.ExtractionOutcome.Replace('_', ' '))</dd>
                     </div>
                 </dl>
+
+                @if (Model.CurrentSource.Health.Automation.SupportingReasons.Count > 0 || Model.CurrentSource.Health.Automation.BlockingReasons.Count > 0)
+                {
+                    <div class="panel-section mt-3">
+                        <div class="subtle-copy">Automation evidence</div>
+                        <ul class="small mb-0">
+                            @foreach (var reason in Model.CurrentSource.Health.Automation.SupportingReasons)
+                            {
+                                <li>@reason</li>
+                            }
+                            @foreach (var reason in Model.CurrentSource.Health.Automation.BlockingReasons)
+                            {
+                                <li>@reason</li>
+                            }
+                        </ul>
+                    </div>
+                }
             </section>
 
             <section class="panel panel-muted">

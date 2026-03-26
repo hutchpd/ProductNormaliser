@@ -1,6 +1,8 @@
 using MongoDB.Driver;
+using Microsoft.Extensions.Options;
 using ProductNormaliser.AdminApi.Contracts;
 using ProductNormaliser.Application.Categories;
+using ProductNormaliser.Application.Sources;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Infrastructure.Mongo;
 
@@ -9,11 +11,13 @@ namespace ProductNormaliser.AdminApi.Services;
 public sealed class SourceOperationalInsightsProvider(
     MongoDbContext mongoDbContext,
     ICategoryMetadataService categoryMetadataService,
+    IOptions<SourceAutomationMonitoringOptions> monitoringOptions,
     ILogger<SourceOperationalInsightsProvider> logger) : ISourceOperationalInsightsProvider
 {
     private static readonly TimeSpan InsightLoadTimeout = TimeSpan.FromSeconds(2);
     private const string ExtractionOutcomeExtracted = "products_extracted";
     private const string ExtractionOutcomeNoProducts = "no_products";
+    private readonly SourceAutomationPostureEvaluator automationPostureEvaluator = new(monitoringOptions.Value);
 
     public async Task<IReadOnlyDictionary<string, SourceOperationalInsights>> BuildAsync(IReadOnlyList<CrawlSource> sources, CancellationToken cancellationToken)
     {
@@ -73,17 +77,13 @@ public sealed class SourceOperationalInsightsProvider(
                     .Limit(10000)
                     .ToListAsync(insightCancellationToken);
 
-            var latestSnapshotsBySourceAndCategory = snapshots
-                .GroupBy(snapshot => BuildSourceCategoryKey(snapshot.SourceName, snapshot.CategoryKey), StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-
             var latestActivityBySource = crawlLogs
                 .GroupBy(log => log.SourceName, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
 
             return sources.ToDictionary(
                 source => source.Id,
-                source => BuildInsights(source, categoriesByKey, latestSnapshotsBySourceAndCategory, latestActivityBySource, discoveryQueueItems, discoveredUrls),
+                source => BuildInsights(source, categoriesByKey, snapshots, latestActivityBySource, discoveryQueueItems, discoveredUrls),
                 StringComparer.OrdinalIgnoreCase);
         }
         catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -96,10 +96,10 @@ public sealed class SourceOperationalInsightsProvider(
         }
     }
 
-    private static SourceOperationalInsights BuildInsights(
+    private SourceOperationalInsights BuildInsights(
         CrawlSource source,
         IReadOnlyDictionary<string, CategoryMetadata> categoriesByKey,
-        IReadOnlyDictionary<string, SourceQualitySnapshot> latestSnapshotsBySourceAndCategory,
+        IReadOnlyList<SourceQualitySnapshot> snapshots,
         IReadOnlyDictionary<string, CrawlLog> latestActivityBySource,
         IReadOnlyList<DiscoveryQueueItem> discoveryQueueItems,
         IReadOnlyList<DiscoveredUrl> discoveredUrls)
@@ -111,10 +111,13 @@ public sealed class SourceOperationalInsightsProvider(
             .Select(category => category!)
             .ToArray();
 
-        var latestSnapshots = source.SupportedCategoryKeys
-            .Select(categoryKey => latestSnapshotsBySourceAndCategory.TryGetValue(BuildSourceCategoryKey(source.DisplayName, categoryKey), out var snapshot) ? snapshot : null)
-            .Where(snapshot => snapshot is not null)
-            .Select(snapshot => snapshot!)
+        var sourceSnapshots = snapshots
+            .Where(snapshot => string.Equals(snapshot.SourceName, source.DisplayName, StringComparison.OrdinalIgnoreCase)
+                && source.SupportedCategoryKeys.Contains(snapshot.CategoryKey, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
+        var latestSnapshots = sourceSnapshots
+            .GroupBy(snapshot => BuildSourceCategoryKey(snapshot.SourceName, snapshot.CategoryKey), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(snapshot => snapshot.TimestampUtc).First())
             .ToArray();
 
         latestActivityBySource.TryGetValue(source.DisplayName, out var latestActivity);
@@ -132,7 +135,7 @@ public sealed class SourceOperationalInsightsProvider(
         return new SourceOperationalInsights
         {
             Readiness = BuildReadiness(source, assignedCategories),
-            Health = BuildHealth(latestSnapshots),
+            Health = BuildHealth(source.AutomationPolicy?.Mode, latestSnapshots, sourceSnapshots),
             LastActivity = latestActivity is null ? null : new SourceLastActivityDto
             {
                 TimestampUtc = latestActivity.TimestampUtc,
@@ -182,7 +185,14 @@ public sealed class SourceOperationalInsightsProvider(
             },
             Health = new SourceHealthSummaryDto
             {
-                Status = "Unknown"
+                Status = "Unknown",
+                Automation = new SourceAutomationPostureDto
+                {
+                    Status = SourceAutomationPosture.StatusAdvisory,
+                    EffectiveMode = SourceAutomationModes.Normalize(source.AutomationPolicy?.Mode),
+                    RecommendedAction = SourceAutomationPosture.ActionNone,
+                    BlockingReasons = ["Operational insight data is currently unavailable."]
+                }
             },
             LastActivity = null,
             DiscoveryCoverageByCategory = source.SupportedCategoryKeys.ToDictionary(categoryKey => categoryKey, _ => 0m, StringComparer.OrdinalIgnoreCase)
@@ -236,13 +246,16 @@ public sealed class SourceOperationalInsightsProvider(
         };
     }
 
-    private static SourceHealthSummaryDto BuildHealth(IReadOnlyList<SourceQualitySnapshot> snapshots)
+    private SourceHealthSummaryDto BuildHealth(string? configuredMode, IReadOnlyList<SourceQualitySnapshot> snapshots, IReadOnlyList<SourceQualitySnapshot> sourceHistory)
     {
+        var automation = automationPostureEvaluator.Evaluate(configuredMode ?? SourceAutomationModes.OperatorAssisted, sourceHistory);
+
         if (snapshots.Count == 0)
         {
             return new SourceHealthSummaryDto
             {
-                Status = "Unknown"
+                Status = "Unknown",
+                Automation = MapAutomation(automation)
             };
         }
 
@@ -260,7 +273,26 @@ public sealed class SourceOperationalInsightsProvider(
             SuccessfulCrawlRate = successfulCrawlRate,
             ExtractabilityRate = extractabilityRate,
             NoProductRate = noProductRate,
+            Automation = MapAutomation(automation),
             SnapshotUtc = snapshots.Max(snapshot => snapshot.TimestampUtc)
+        };
+    }
+
+    private static SourceAutomationPostureDto MapAutomation(SourceAutomationPosture posture)
+    {
+        return new SourceAutomationPostureDto
+        {
+            Status = posture.Status,
+            EffectiveMode = posture.EffectiveMode,
+            RecommendedAction = posture.RecommendedAction,
+            SnapshotCount = posture.SnapshotCount,
+            DiscoveryBreadthScore = ToPercent(posture.DiscoveryBreadthScore),
+            ProductTargetPromotionRate = ToPercent(posture.ProductTargetPromotionRate),
+            DownstreamYieldScore = ToPercent(posture.DownstreamYieldScore),
+            TrustTrendDelta = ToPercent(posture.TrustTrendDelta),
+            ExtractabilityTrendDelta = ToPercent(posture.ExtractabilityTrendDelta),
+            SupportingReasons = posture.SupportingReasons,
+            BlockingReasons = posture.BlockingReasons
         };
     }
 

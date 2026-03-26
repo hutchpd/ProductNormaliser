@@ -65,6 +65,17 @@ public sealed class SourceManagementRenderingTests
                         SuccessfulCrawlRate = 93m,
                         ExtractabilityRate = 82m,
                         NoProductRate = 18m,
+                        Automation = new SourceAutomationPostureDto
+                        {
+                            Status = "downgraded",
+                            EffectiveMode = "suggest_accept",
+                            RecommendedAction = "downgrade_to_suggest",
+                            SnapshotCount = 4,
+                            DiscoveryBreadthScore = 68m,
+                            ProductTargetPromotionRate = 57m,
+                            DownstreamYieldScore = 62m,
+                            BlockingReasons = ["Trust trend moved -12 points over the monitoring window."]
+                        },
                         SnapshotUtc = new DateTime(2026, 03, 23, 08, 00, 00, DateTimeKind.Utc)
                     },
                     LastActivity = new SourceLastActivityDto
@@ -97,6 +108,8 @@ public sealed class SourceManagementRenderingTests
             Assert.That(html, Does.Contain("AO UK"));
             Assert.That(html, Does.Contain("en-GB"));
             Assert.That(html, Does.Contain("Healthy"));
+            Assert.That(html, Does.Contain("Automation downgraded"));
+            Assert.That(html, Does.Contain("downgrade to suggest-only"));
             Assert.That(html, Does.Contain("Ready"));
             Assert.That(html, Does.Contain("Last crawl succeeded"));
             Assert.That(html, Does.Contain("24 rpm, 2 concurrent, 1000-4000 ms"));
@@ -176,6 +189,17 @@ public sealed class SourceManagementRenderingTests
                         SuccessfulCrawlRate = 93m,
                         ExtractabilityRate = 82m,
                         NoProductRate = 18m,
+                        Automation = new SourceAutomationPostureDto
+                        {
+                            Status = "healthy",
+                            EffectiveMode = "auto_accept_and_seed",
+                            RecommendedAction = "keep_current_mode",
+                            SnapshotCount = 5,
+                            DiscoveryBreadthScore = 76m,
+                            ProductTargetPromotionRate = 71m,
+                            DownstreamYieldScore = 67m,
+                            SupportingReasons = ["Longitudinal evidence still supports guarded auto-accept."]
+                        },
                         SnapshotUtc = new DateTime(2026, 03, 23, 08, 00, 00, DateTimeKind.Utc)
                     },
                     CreatedUtc = new DateTime(2026, 03, 20, 10, 00, 00, DateTimeKind.Utc),
@@ -199,6 +223,8 @@ public sealed class SourceManagementRenderingTests
             Assert.That(html, Does.Contain("Save Discovery Profile"));
             Assert.That(html, Does.Contain("Extractability"));
             Assert.That(html, Does.Contain("No-product rate"));
+            Assert.That(html, Does.Contain("Effective automation mode"));
+            Assert.That(html, Does.Contain("Longitudinal evidence still supports guarded auto-accept."));
         });
     }
 

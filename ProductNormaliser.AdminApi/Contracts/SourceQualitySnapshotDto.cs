@@ -11,6 +11,9 @@ public sealed class SourceQualitySnapshotDto
     public decimal SuccessfulCrawlRate { get; init; }
     public decimal ExtractabilityRate { get; init; }
     public decimal NoProductRate { get; init; }
+    public decimal DiscoveryBreadthScore { get; init; }
+    public decimal ProductTargetPromotionRate { get; init; }
+    public decimal DownstreamYieldScore { get; init; }
     public decimal PriceVolatilityScore { get; init; }
     public decimal SpecStabilityScore { get; init; }
     public decimal HistoricalTrustScore { get; init; }

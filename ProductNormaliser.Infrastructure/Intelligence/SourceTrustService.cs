@@ -79,10 +79,23 @@ public sealed class SourceTrustService : ISourceTrustService
 
     private SourceQualitySnapshot BuildSnapshot(string sourceName, string categoryKey)
     {
+        var snapshotTimestampUtc = DateTime.UtcNow;
         var schema = ResolveSchema(categoryKey);
         var sourceProducts = mongoDbContext.SourceProducts
             .Find(product => product.SourceName == sourceName && product.CategoryKey == categoryKey)
             .ToList();
+        var source = mongoDbContext.CrawlSources
+            .Find(item => item.DisplayName == sourceName)
+            .FirstOrDefault();
+        var discoveredUrls = source is null
+            ? []
+            : mongoDbContext.DiscoveredUrls
+                .Find(item => item.SourceId == source.Id
+                    && item.CategoryKey == categoryKey
+                    && item.LastSeenUtc >= snapshotTimestampUtc.AddDays(-30))
+                .SortByDescending(item => item.LastSeenUtc)
+                .Limit(1000)
+                .ToList();
         var relatedCanonicalProducts = mongoDbContext.CanonicalProducts
             .Find(product => product.CategoryKey == categoryKey)
             .ToList()
@@ -106,6 +119,9 @@ public sealed class SourceTrustService : ISourceTrustService
         var successfulCrawlRate = CalculateSuccessfulCrawlRate(crawlLogs);
         var extractabilityRate = CalculateExtractabilityRate(crawlLogs);
         var noProductRate = CalculateNoProductRate(crawlLogs);
+        var discoveryBreadthScore = CalculateDiscoveryBreadthScore(discoveredUrls);
+        var productTargetPromotionRate = CalculateProductTargetPromotionRate(discoveredUrls);
+        var downstreamYieldScore = CalculateDownstreamYieldScore(discoveredUrls, crawlLogs);
         var priceVolatilityScore = CalculatePriceVolatility(changeEvents);
         var specStabilityScore = CalculateSpecStability(changeEvents);
         var disagreementPenalty = CalculateDisagreementPenalty(categoryKey, sourceName);
@@ -113,9 +129,12 @@ public sealed class SourceTrustService : ISourceTrustService
             attributeCoverage * 0.20m
             + (1m - conflictRate) * 0.15m
             + agreementRate * 0.20m
+            + discoveryBreadthScore * 0.10m
+            + productTargetPromotionRate * 0.05m
             + successfulCrawlRate * 0.15m
             + extractabilityRate * 0.15m
             + (1m - noProductRate) * 0.05m
+            + downstreamYieldScore * 0.05m
             + (1m - priceVolatilityScore) * 0.05m
             + specStabilityScore * 0.05m,
             4,
@@ -123,16 +142,19 @@ public sealed class SourceTrustService : ISourceTrustService
 
         return new SourceQualitySnapshot
         {
-            Id = $"source-trust:{sourceName}:{categoryKey}:{DateTime.UtcNow:yyyyMMddHHmmssfff}",
+            Id = $"source-trust:{sourceName}:{categoryKey}:{snapshotTimestampUtc:yyyyMMddHHmmssfff}",
             SourceName = sourceName,
             CategoryKey = categoryKey,
-            TimestampUtc = DateTime.UtcNow,
+            TimestampUtc = snapshotTimestampUtc,
             AttributeCoverage = attributeCoverage,
             ConflictRate = conflictRate,
             AgreementRate = agreementRate,
             SuccessfulCrawlRate = successfulCrawlRate,
             ExtractabilityRate = extractabilityRate,
             NoProductRate = noProductRate,
+            DiscoveryBreadthScore = discoveryBreadthScore,
+            ProductTargetPromotionRate = productTargetPromotionRate,
+            DownstreamYieldScore = downstreamYieldScore,
             PriceVolatilityScore = priceVolatilityScore,
             SpecStabilityScore = specStabilityScore,
             HistoricalTrustScore = historicalTrustScore
@@ -263,6 +285,56 @@ public sealed class SourceTrustService : ISourceTrustService
 
         var noProductCount = completedLogs.Count(log => string.Equals(GetExtractionOutcome(log), ExtractionOutcomeNoProducts, StringComparison.OrdinalIgnoreCase));
         return Clamp(decimal.Round((decimal)noProductCount / completedLogs.Length, 4, MidpointRounding.AwayFromZero));
+    }
+
+    private static decimal CalculateDiscoveryBreadthScore(IReadOnlyCollection<DiscoveredUrl> discoveredUrls)
+    {
+        if (discoveredUrls.Count == 0)
+        {
+            return 0m;
+        }
+
+        var listingCount = discoveredUrls
+            .Where(item => string.Equals(item.Classification, "listing", StringComparison.OrdinalIgnoreCase))
+            .Select(item => item.NormalizedUrl)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+        var productCount = discoveredUrls
+            .Where(item => string.Equals(item.Classification, "product", StringComparison.OrdinalIgnoreCase))
+            .Select(item => item.NormalizedUrl)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+        var listingScore = Math.Min(1m, listingCount / 10m);
+        var productScore = Math.Min(1m, productCount / 20m);
+        return Clamp(decimal.Round(listingScore * 0.40m + productScore * 0.60m, 4, MidpointRounding.AwayFromZero));
+    }
+
+    private static decimal CalculateProductTargetPromotionRate(IReadOnlyCollection<DiscoveredUrl> discoveredUrls)
+    {
+        var productTargets = discoveredUrls
+            .Where(item => string.Equals(item.Classification, "product", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (productTargets.Length == 0)
+        {
+            return 0m;
+        }
+
+        var promotedCount = productTargets.Count(item => item.PromotedToCrawlUtc is not null);
+        return Clamp(decimal.Round((decimal)promotedCount / productTargets.Length, 4, MidpointRounding.AwayFromZero));
+    }
+
+    private static decimal CalculateDownstreamYieldScore(IReadOnlyCollection<DiscoveredUrl> discoveredUrls, IReadOnlyCollection<CrawlLog> crawlLogs)
+    {
+        var promotedCount = discoveredUrls.Count(item => string.Equals(item.Classification, "product", StringComparison.OrdinalIgnoreCase) && item.PromotedToCrawlUtc is not null);
+        if (promotedCount == 0)
+        {
+            return 0m;
+        }
+
+        var extractedProductCount = crawlLogs
+            .Where(log => string.Equals(log.Status, "completed", StringComparison.OrdinalIgnoreCase))
+            .Sum(log => Math.Max(0, log.ExtractedProductCount));
+        return Clamp(decimal.Round((decimal)extractedProductCount / promotedCount, 4, MidpointRounding.AwayFromZero));
     }
 
     private static string GetExtractionOutcome(CrawlLog log)
