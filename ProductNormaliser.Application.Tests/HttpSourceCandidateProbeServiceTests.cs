@@ -502,6 +502,71 @@ public sealed class HttpSourceCandidateProbeServiceTests
     }
 
     [Test]
+    public async Task ProbeAsync_UsesDiscoveryRunLlmBudgetInsteadOfLegacyClassifierTimeout()
+    {
+        var fetcher = CreateRepresentativeProductFetcher();
+        var service = new HttpSourceCandidateProbeService(
+            fetcher,
+            new SchemaOrgJsonLdExtractor(),
+            new SlowPageClassificationService(40),
+            Options.Create(new SourceCandidateDiscoveryOptions { ProbeTimeoutSeconds = 5 }),
+            Options.Create(new SourceOnboardingAutomationOptions()),
+            Options.Create(new DiscoveryRunOperationsOptions { ProbeTimeoutSeconds = 5, LlmVerificationTimeoutMs = 250 }),
+            Options.Create(new LlmOptions { Enabled = true, TimeoutMs = 1 }),
+            NullLogger<HttpSourceCandidateProbeService>.Instance);
+
+        var result = await service.ProbeAsync(new SourceCandidateSearchResult
+        {
+            CandidateKey = "candidate_example",
+            DisplayName = "Candidate Example",
+            BaseUrl = "https://candidate.example/",
+            Host = "candidate.example",
+            CandidateType = "retailer"
+        }, ["tv"], SourceAutomationModes.OperatorAssisted);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.LlmReason, Is.Not.EqualTo("LLM timeout"));
+            Assert.That(result.LlmElapsedMs, Is.Not.Null);
+            Assert.That(result.LlmElapsedMs, Is.GreaterThanOrEqualTo(30));
+            Assert.That(result.RepresentativeProductPageReachable, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task ProbeAsync_TimesOutClassificationUsingDiscoveryRunBudgetAndContinuesWithHeuristics()
+    {
+        var fetcher = CreateRepresentativeProductFetcher();
+        var service = new HttpSourceCandidateProbeService(
+            fetcher,
+            new SchemaOrgJsonLdExtractor(),
+            new SlowPageClassificationService(150),
+            Options.Create(new SourceCandidateDiscoveryOptions { ProbeTimeoutSeconds = 5 }),
+            Options.Create(new SourceOnboardingAutomationOptions()),
+            Options.Create(new DiscoveryRunOperationsOptions { ProbeTimeoutSeconds = 5, LlmVerificationTimeoutMs = 25 }),
+            Options.Create(new LlmOptions { Enabled = true, TimeoutMs = 5000 }),
+            NullLogger<HttpSourceCandidateProbeService>.Instance);
+
+        var result = await service.ProbeAsync(new SourceCandidateSearchResult
+        {
+            CandidateKey = "candidate_example",
+            DisplayName = "Candidate Example",
+            BaseUrl = "https://candidate.example/",
+            Host = "candidate.example",
+            CandidateType = "retailer"
+        }, ["tv"], SourceAutomationModes.OperatorAssisted);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.RepresentativeProductPageReachable, Is.True);
+            Assert.That(result.LlmReason, Is.EqualTo("LLM timeout"));
+            Assert.That(result.LlmAcceptedRepresentativeProductPage, Is.False);
+            Assert.That(result.LlmRejectedRepresentativeProductPage, Is.False);
+            Assert.That(result.ExtractabilityScore, Is.EqualTo(100m));
+        });
+    }
+
+    [Test]
     public async Task ProbeAsync_Continues_WhenLlmInferenceFails()
     {
         var fetcher = CreateRepresentativeProductFetcher();

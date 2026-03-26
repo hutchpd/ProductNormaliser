@@ -9,6 +9,60 @@ namespace ProductNormaliser.AdminApi.Tests;
 public sealed class DiscoveryRunsControllerTests
 {
     [Test]
+    public async Task List_ReturnsPagedRunContractsAndPassesQueryToService()
+    {
+        var run = CreateRun("discovery_run_1", DiscoveryRunStatuses.Recoverable);
+        run.SearchElapsedMs = 321;
+        run.SearchTimeoutBudgetMs = 20000;
+        run.ProbeTimeoutBudgetMs = 12000;
+        run.LlmTimeoutBudgetMs = 15000;
+        run.ProbeTotalElapsedMs = 480;
+        run.ProbeAverageElapsedMs = 240;
+        run.LlmQueueDepth = 2;
+        run.LlmCompletedCount = 1;
+        run.LlmTotalElapsedMs = 125;
+        run.LlmAverageElapsedMs = 125;
+        run.CandidateThroughputPerMinute = 3.5m;
+        run.AcceptanceRate = 0.5m;
+        run.ManualReviewRate = 0.5m;
+        run.TimeToFirstAcceptedCandidateMs = 900;
+        run.FirstAcceptedUtc = DateTime.UtcNow.AddMinutes(-1);
+        run.RecoveryAttemptCount = 1;
+
+        var service = new FakeDiscoveryRunService
+        {
+            CreatedRun = run
+        };
+        var controller = new DiscoveryRunsController(service);
+
+        var result = await controller.List(DiscoveryRunStatuses.Recoverable, 2, 15, CancellationToken.None);
+
+        Assert.That(result, Is.TypeOf<OkObjectResult>());
+        var ok = (OkObjectResult)result;
+        var dto = ok.Value as DiscoveryRunPageDto;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(dto, Is.Not.Null);
+            Assert.That(dto!.Items, Has.Count.EqualTo(1));
+            Assert.That(dto.Page, Is.EqualTo(2));
+            Assert.That(dto.PageSize, Is.EqualTo(15));
+            Assert.That(dto.TotalCount, Is.EqualTo(1));
+            Assert.That(dto.TotalPages, Is.EqualTo(1));
+            Assert.That(dto.Items[0].RunId, Is.EqualTo("discovery_run_1"));
+            Assert.That(dto.Items[0].Status, Is.EqualTo(DiscoveryRunStatuses.Recoverable));
+            Assert.That(dto.Items[0].SearchElapsedMs, Is.EqualTo(321));
+            Assert.That(dto.Items[0].ProbeAverageElapsedMs, Is.EqualTo(240));
+            Assert.That(dto.Items[0].LlmTimeoutBudgetMs, Is.EqualTo(15000));
+            Assert.That(dto.Items[0].RecoveryAttemptCount, Is.EqualTo(1));
+            Assert.That(service.LastListQuery, Is.Not.Null);
+            Assert.That(service.LastListQuery!.Status, Is.EqualTo(DiscoveryRunStatuses.Recoverable));
+            Assert.That(service.LastListQuery.Page, Is.EqualTo(2));
+            Assert.That(service.LastListQuery.PageSize, Is.EqualTo(15));
+        });
+    }
+
+    [Test]
     public async Task Create_ReturnsCreatedContract()
     {
         var service = new FakeDiscoveryRunService
@@ -156,6 +210,7 @@ public sealed class DiscoveryRunsControllerTests
         public DiscoveryRun? CreatedRun { get; set; }
         public InvalidOperationException? PauseException { get; set; }
         public DiscoveryRunCandidate? RestoredCandidate { get; set; }
+        public DiscoveryRunQuery? LastListQuery { get; private set; }
         public int? LastRestoreExpectedRevision { get; private set; }
 
         public Task<DiscoveryRun> CreateAsync(ProductNormaliser.Application.Sources.CreateDiscoveryRunRequest request, CancellationToken cancellationToken = default)
@@ -165,13 +220,16 @@ public sealed class DiscoveryRunsControllerTests
             => Task.FromResult(CreatedRun is not null && string.Equals(CreatedRun.RunId, runId, StringComparison.OrdinalIgnoreCase) ? CreatedRun : null);
 
         public Task<DiscoveryRunPage> ListAsync(DiscoveryRunQuery query, CancellationToken cancellationToken = default)
-            => Task.FromResult(new DiscoveryRunPage
+        {
+            LastListQuery = query;
+            return Task.FromResult(new DiscoveryRunPage
             {
                 Items = CreatedRun is null ? [] : [CreatedRun],
                 Page = query.Page,
                 PageSize = query.PageSize,
                 TotalCount = CreatedRun is null ? 0 : 1
             });
+        }
 
         public Task<IReadOnlyList<DiscoveryRunCandidate>> ListCandidatesAsync(string runId, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<DiscoveryRunCandidate>>(RestoredCandidate is null ? [] : [RestoredCandidate]);

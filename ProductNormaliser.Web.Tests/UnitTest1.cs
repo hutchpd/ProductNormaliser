@@ -461,6 +461,7 @@ public sealed class AdminApiClientTests
                 Locale = "en-GB",
                 Market = "UK",
                 AutomationMode = "operator_assisted",
+                LlmStatus = "disabled",
                 BrandHints = ["Samsung"],
                 GeneratedUtc = new DateTime(2026, 03, 25, 10, 00, 00, DateTimeKind.Utc),
                 Candidates =
@@ -533,6 +534,7 @@ public sealed class AdminApiClientTests
                         {
                             "requestedCategoryKeys": ["tv"],
                             "automationMode": "operator_assisted",
+                            "llmStatus": "disabled",
                             "generatedUtc": "2026-03-25T10:00:00Z",
                             "candidates": [
                                 {

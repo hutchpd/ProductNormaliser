@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using ProductNormaliser.Application.Governance;
+using ProductNormaliser.Application.Observability;
 using ProductNormaliser.Application.Sources;
 using ProductNormaliser.Core.Models;
 
@@ -7,6 +8,41 @@ namespace ProductNormaliser.Tests;
 
 public sealed class DiscoveryRunProcessorTests
 {
+    [Test]
+    public async Task ProcessNextAsync_EmitsDiscoveryTelemetryIncludingLlmQueueDepth()
+    {
+        using var collector = new TelemetryMetricCollector(ProductNormaliserTelemetry.TelemetryName);
+
+        var run = CreateQueuedRun(SourceAutomationModes.AutoAcceptAndSeed, llmStatus: "active");
+        var runStore = new FakeDiscoveryRunStore(run);
+        var candidateStore = new FakeDiscoveryRunCandidateStore();
+        var processor = CreateProcessor(
+            runStore,
+            candidateStore,
+            new FakeCrawlSourceStore(),
+            new RecordingSourceManagementService(),
+            new FixedSearchProvider(CreateSearchCandidate(), CreateSecondarySearchCandidate()),
+            new FixedProbeService(CreateStrongProbeResult()));
+
+        await processor.ProcessNextAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(collector.GetMeasurements("productnormaliser.discovery.runs.started").Count, Is.EqualTo(1));
+            Assert.That(collector.GetMeasurements("productnormaliser.discovery.search.duration").Count, Is.EqualTo(1));
+            Assert.That(collector.GetMeasurements("productnormaliser.discovery.probe.duration").Count, Is.EqualTo(2));
+            Assert.That(collector.GetMeasurements("productnormaliser.discovery.llm.duration").Count, Is.EqualTo(2));
+            Assert.That(collector.GetMeasurements("productnormaliser.discovery.candidates.processed").Count, Is.EqualTo(2));
+            Assert.That(collector.GetMeasurements("productnormaliser.discovery.candidate_throughput_per_minute"), Is.Not.Empty);
+            Assert.That(collector.GetMeasurements("productnormaliser.discovery.acceptance_rate"), Is.Not.Empty);
+            Assert.That(collector.GetMeasurements("productnormaliser.discovery.manual_review_rate"), Is.Not.Empty);
+            Assert.That(collector.GetMeasurements("productnormaliser.discovery.time_to_first_accepted"), Is.Not.Empty);
+            Assert.That(
+                collector.GetMeasurements("productnormaliser.discovery.llm.queue_depth").Select(item => Convert.ToInt32(item.Value)).ToArray(),
+                Is.EqualTo(new[] { 1, 0 }));
+        });
+    }
+
     [Test]
     public async Task ProcessNextAsync_CompletesRunAndPublishesAutoAcceptedCandidate()
     {
@@ -370,6 +406,25 @@ public sealed class DiscoveryRunProcessorTests
             MatchedCategoryKeys = ["tv"],
             MatchedBrandHints = ["Sony"],
             SearchReasons = ["Mirror host."]
+        };
+    }
+
+    private static SourceCandidateSearchResult CreateSecondarySearchCandidate()
+    {
+        return new SourceCandidateSearchResult
+        {
+            CandidateKey = "trusted_retail",
+            DisplayName = "Trusted Retail",
+            BaseUrl = "https://trusted.example/",
+            Host = "trusted.example",
+            CandidateType = "retailer",
+            AllowedMarkets = ["UK"],
+            PreferredLocale = "en-GB",
+            MarketEvidence = "explicit",
+            LocaleEvidence = "explicit",
+            MatchedCategoryKeys = ["tv"],
+            MatchedBrandHints = ["Samsung"],
+            SearchReasons = ["Distinct retailer candidate."]
         };
     }
 

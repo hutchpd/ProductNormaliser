@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using ProductNormaliser.Application.Observability;
 using ProductNormaliser.Application.Sources;
 using ProductNormaliser.Core.Models;
 
@@ -6,6 +7,87 @@ namespace ProductNormaliser.Tests;
 
 public sealed class DiscoveryRunMaintenanceServiceTests
 {
+    [Test]
+    public async Task SweepAsync_EmitsRecoveryAndArchiveMetrics()
+    {
+        using var collector = new TelemetryMetricCollector(ProductNormaliserTelemetry.TelemetryName);
+
+        var staleRun = CreateRun("run_recover_metric", DiscoveryRunStatuses.Running);
+        staleRun.LastHeartbeatUtc = DateTime.UtcNow.AddMinutes(-30);
+        staleRun.UpdatedUtc = staleRun.LastHeartbeatUtc.Value;
+
+        var archivedRun = CreateRun("run_archive_metric", DiscoveryRunStatuses.Completed);
+        archivedRun.CompletedUtc = DateTime.UtcNow.AddDays(-2);
+
+        var archivedCandidate = new DiscoveryRunCandidate
+        {
+            Id = "run_archive_metric:safe_shop",
+            RunId = archivedRun.RunId,
+            CandidateKey = "safe_shop",
+            Revision = 2,
+            State = DiscoveryRunCandidateStates.ManuallyAccepted,
+            PreviousState = DiscoveryRunCandidateStates.Suggested,
+            AcceptedSourceId = "safe_shop",
+            DisplayName = "Safe Shop",
+            BaseUrl = "https://safe.example/",
+            Host = "safe.example",
+            CandidateType = "retailer",
+            AllowedMarkets = ["UK"],
+            PreferredLocale = "en-GB",
+            MatchedCategoryKeys = ["tv"],
+            AllowedByGovernance = true,
+            CreatedUtc = DateTime.UtcNow.AddDays(-4),
+            UpdatedUtc = DateTime.UtcNow.AddDays(-2),
+            DecisionUtc = DateTime.UtcNow.AddDays(-2)
+        };
+
+        var runStore = new FakeDiscoveryRunStore(staleRun, archivedRun);
+        var candidateStore = new FakeDiscoveryRunCandidateStore(archivedCandidate);
+        var service = new DiscoveryRunMaintenanceService(
+            runStore,
+            candidateStore,
+            Options.Create(new DiscoveryRunOperationsOptions
+            {
+                AbandonedHeartbeatTimeoutMinutes = 5,
+                MaxRecoveryAttempts = 2,
+                CandidateArchiveRetentionHours = 24
+            }));
+
+        await service.SweepAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(collector.GetMeasurements("productnormaliser.discovery.runs.recovered").Count, Is.EqualTo(1));
+            Assert.That(collector.GetMeasurements("productnormaliser.discovery.candidates.archived").Count, Is.EqualTo(1));
+            Assert.That(collector.GetMeasurements("productnormaliser.discovery.candidates.archived").Select(item => item.Tags.Single(tag => tag.Key == "reason").Value), Contains.Item("retention_window_elapsed"));
+        });
+    }
+
+    [Test]
+    public async Task SweepAsync_EmitsFailedRecoveryMetricWhenRecoveryBudgetIsExhausted()
+    {
+        using var collector = new TelemetryMetricCollector(ProductNormaliserTelemetry.TelemetryName);
+
+        var run = CreateRun("run_failed_metric", DiscoveryRunStatuses.Running);
+        run.LastHeartbeatUtc = DateTime.UtcNow.AddMinutes(-30);
+        run.UpdatedUtc = run.LastHeartbeatUtc.Value;
+        run.RecoveryAttemptCount = 1;
+
+        var service = new DiscoveryRunMaintenanceService(
+            new FakeDiscoveryRunStore(run),
+            new FakeDiscoveryRunCandidateStore(),
+            Options.Create(new DiscoveryRunOperationsOptions
+            {
+                AbandonedHeartbeatTimeoutMinutes = 5,
+                MaxRecoveryAttempts = 1,
+                CandidateArchiveRetentionHours = 24
+            }));
+
+        await service.SweepAsync(CancellationToken.None);
+
+        Assert.That(collector.GetMeasurements("productnormaliser.discovery.runs.recovery_failed").Count, Is.EqualTo(1));
+    }
+
     [Test]
     public async Task SweepAsync_RequeuesAbandonedRunningRunWithinRecoveryBudget()
     {
