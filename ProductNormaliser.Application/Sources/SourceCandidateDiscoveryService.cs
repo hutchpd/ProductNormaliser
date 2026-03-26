@@ -278,6 +278,20 @@ public sealed class SourceCandidateDiscoveryService(
             });
         }
 
+        if (!string.IsNullOrWhiteSpace(probe.LlmReason)
+            && (probe.LlmReason.Contains("unavailable", StringComparison.OrdinalIgnoreCase)
+                || probe.LlmReason.Contains("timeout", StringComparison.OrdinalIgnoreCase)
+                || probe.LlmReason.Contains("low confidence", StringComparison.OrdinalIgnoreCase)
+                || probe.LlmReason.Contains("disabled", StringComparison.OrdinalIgnoreCase)))
+        {
+            reasons.Add(new SourceCandidateReason
+            {
+                Code = "llm_neutral",
+                Message = probe.LlmReason,
+                Weight = 0m
+            });
+        }
+
         if (probe.LlmDisagreedWithHeuristics)
         {
             reasons.Add(new SourceCandidateReason

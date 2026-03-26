@@ -20,6 +20,7 @@ public sealed class LlamaPageClassificationServiceTests
             Assert.That(result.HasSpecifications, Is.True);
             Assert.That(result.DetectedCategory, Is.EqualTo("tv"));
             Assert.That(result.Confidence, Is.EqualTo(0.8d));
+            Assert.That(result.Reason, Does.Contain("accepted"));
         });
     }
 
@@ -38,7 +39,8 @@ public sealed class LlamaPageClassificationServiceTests
             Assert.That(result.IsProductPage, Is.False);
             Assert.That(result.HasSpecifications, Is.False);
             Assert.That(result.DetectedCategory, Is.Null);
-            Assert.That(result.Confidence, Is.EqualTo(0.2d));
+            Assert.That(result.Confidence, Is.EqualTo(0d));
+            Assert.That(result.Reason, Is.EqualTo("LLM low confidence"));
         });
     }
 
@@ -63,6 +65,27 @@ public sealed class LlamaPageClassificationServiceTests
             Assert.That(observedPrompt, Does.Contain(leading));
             Assert.That(observedPrompt, Does.Not.Contain(trailing));
             Assert.That(observedPrompt.Length, Is.LessThan((leading + trailing).Length + 200));
+        });
+    }
+
+    [Test]
+    public async Task ClassifyAsync_TimesOutGracefully()
+    {
+        var service = new LlamaPageClassificationService(
+            new LlmOptions { ModelPath = "models/test.gguf", TimeoutMs = 25 },
+            async (_, cancellationToken) =>
+            {
+                await Task.Delay(250, cancellationToken);
+                return "YES";
+            });
+
+        var result = await service.ClassifyAsync("content", "tv", CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsProductPage, Is.False);
+            Assert.That(result.Confidence, Is.EqualTo(0d));
+            Assert.That(result.Reason, Is.EqualTo("LLM timeout"));
         });
     }
 }

@@ -279,6 +279,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
             Assert.That(result.LlmAcceptedRepresentativeProductPage, Is.False);
             Assert.That(result.LlmRejectedRepresentativeProductPage, Is.False);
             Assert.That(result.ExtractabilityScore, Is.EqualTo(100m));
+            Assert.That(result.LlmReason, Is.Null);
         });
     }
 
@@ -311,6 +312,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
             Assert.That(result.LlmAcceptedRepresentativeProductPage, Is.False);
             Assert.That(result.LlmRejectedRepresentativeProductPage, Is.False);
             Assert.That(result.ExtractabilityScore, Is.EqualTo(100m));
+            Assert.That(result.LlmReason, Is.EqualTo("LLM unavailable"));
         });
     }
 

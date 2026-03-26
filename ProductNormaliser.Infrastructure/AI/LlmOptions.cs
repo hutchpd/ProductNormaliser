@@ -6,9 +6,13 @@ public sealed class LlmOptions
 
     public bool Enabled { get; set; } = true;
 
+    public bool EvaluationMode { get; set; }
+
     public int MaxContentLength { get; set; } = 4000;
 
     public double ConfidenceThreshold { get; set; } = 0.7d;
+
+    public int TimeoutMs { get; set; } = 2000;
 
     public string ModelPath { get; set; } = "models/tinyllama.gguf";
 

@@ -55,34 +55,48 @@ public sealed class LlamaPageClassificationService : IPageClassificationService,
 
         if (!options.Enabled)
         {
-            return CreateNeutralResult();
+            return CreateNeutralResult("LLM disabled");
         }
 
         try
         {
             var normalizedCategory = NormalizeCategory(category);
             var prompt = BuildPrompt(content, normalizedCategory, options.MaxContentLength);
-            var output = await inferenceRunner(prompt, cancellationToken);
+            var inferenceTask = inferenceRunner(prompt, cancellationToken);
+            var completedTask = await Task.WhenAny(inferenceTask, Task.Delay(Math.Max(1, options.TimeoutMs), cancellationToken));
+            if (completedTask != inferenceTask)
+            {
+                logger.LogWarning("LLM page classification timed out after {TimeoutMs}ms. Continuing without LLM page classification for this request.", options.TimeoutMs);
+                return CreateNeutralResult("LLM timeout");
+            }
+
+            var output = await inferenceTask;
             var isYes = YesPattern.IsMatch(output ?? string.Empty);
+            var confidence = isYes ? 0.8d : 0.2d;
+            if (confidence < options.ConfidenceThreshold)
+            {
+                return CreateNeutralResult("LLM low confidence");
+            }
 
             return new PageClassificationResult
             {
                 IsProductPage = isYes,
                 HasSpecifications = isYes,
                 DetectedCategory = isYes ? normalizedCategory : null,
-                Confidence = isYes ? 0.8d : 0.2d
+                Confidence = confidence,
+                Reason = isYes ? "LLM accepted representative product page." : "LLM rejected representative product page."
             };
         }
         catch (FileNotFoundException exception)
         {
             logger.LogWarning(exception, "The configured GGUF model could not be found. Continuing without LLM page classification.");
             initializationUnavailable = true;
-            return CreateNeutralResult();
+            return CreateNeutralResult("LLM unavailable");
         }
         catch (Exception exception)
         {
             logger.LogWarning(exception, "LLM page classification failed. Continuing without LLM page classification for this request.");
-            return CreateNeutralResult();
+            return CreateNeutralResult("LLM unavailable");
         }
     }
 
@@ -220,13 +234,14 @@ Content:
             : Path.GetFullPath(path, AppContext.BaseDirectory);
     }
 
-    private static PageClassificationResult CreateNeutralResult()
+    private static PageClassificationResult CreateNeutralResult(string reason)
     {
         return new PageClassificationResult
         {
             IsProductPage = false,
             HasSpecifications = false,
-            Confidence = 0d
+            Confidence = 0d,
+            Reason = reason
         };
     }
 

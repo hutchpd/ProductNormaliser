@@ -53,11 +53,14 @@ public sealed partial class HttpSourceCandidateProbeService(
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault() ?? "product";
         var llmResult = await TryClassifyRepresentativeProductPageAsync(representativeProductPageHtml, requestedCategory, timeoutCts.Token);
+        var llmNeutral = llmResult is not null && IsNeutralLlmResult(llmResult);
         var llmAcceptedRepresentativeProductPage = llmResult is not null
+            && !llmNeutral
             && llmResult.IsProductPage
             && llmResult.HasSpecifications
             && llmResult.Confidence >= llmOptions.ConfidenceThreshold;
         var llmRejectedRepresentativeProductPage = llmResult is not null
+            && !llmNeutral
             && !llmResult.IsProductPage;
         var llmDisagreedWithHeuristics = llmResult is not null && llmAcceptedRepresentativeProductPage != heuristicProductEvidenceDetected;
         var catalogLikelihoodScore = ScoreCatalogLikelihood(homePageHtml, representativeCategoryPageHtml, representativeProductPageUrl);
@@ -69,6 +72,17 @@ public sealed partial class HttpSourceCandidateProbeService(
             llmAcceptedRepresentativeProductPage,
             llmRejectedRepresentativeProductPage,
             heuristicProductEvidenceDetected);
+
+        if (llmOptions.EvaluationMode)
+        {
+            logger.LogInformation(
+                "LLM evaluation: heuristicProduct={HeuristicProduct}, llmProduct={LlmProduct}, finalAccepted={FinalAccepted}, llmReason={LlmReason}, llmConfidence={LlmConfidence}",
+                heuristicProductEvidenceDetected,
+                llmResult?.IsProductPage,
+                llmAcceptedRepresentativeProductPage,
+                llmResult?.Reason,
+                llmResult?.Confidence);
+        }
 
         return new SourceCandidateProbeResult
         {
@@ -93,6 +107,7 @@ public sealed partial class HttpSourceCandidateProbeService(
             LlmDetectedSpecifications = llmResult?.HasSpecifications == true,
             LlmDetectedCategory = llmResult?.DetectedCategory,
             LlmConfidenceScore = llmResult is null ? null : decimal.Round((decimal)llmResult.Confidence * 100m, 2, MidpointRounding.AwayFromZero),
+            LlmReason = llmResult?.Reason,
             NonCatalogContentHeavy = catalogLikelihoodScore <= 40m,
             CategoryPageHints = categoryPageHints,
             LikelyListingUrlPatterns = likelyListingUrlPatterns,
@@ -379,8 +394,22 @@ public sealed partial class HttpSourceCandidateProbeService(
         catch (Exception exception)
         {
             logger.LogWarning(exception, "Representative product-page classification failed for category {Category} during candidate probing.", category);
-            return null;
+            return new PageClassificationResult
+            {
+                IsProductPage = false,
+                HasSpecifications = false,
+                Confidence = 0d,
+                Reason = "LLM unavailable"
+            };
         }
+    }
+
+    private static bool IsNeutralLlmResult(PageClassificationResult result)
+    {
+        return string.Equals(result.Reason, "LLM unavailable", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(result.Reason, "LLM timeout", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(result.Reason, "LLM low confidence", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(result.Reason, "LLM disabled", StringComparison.OrdinalIgnoreCase);
     }
 
     private static decimal ScoreCrawlability(string? homePageHtml, string? robotsText, bool sitemapDetected, string? representativeCategoryPageHtml, string? representativeProductPageHtml)
