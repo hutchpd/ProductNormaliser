@@ -280,6 +280,10 @@
                     <strong>@Model.CandidateDiscoveryResult.Candidates.Count</strong>
                 </article>
                 <article>
+                    <span>Diagnostics</span>
+                    <strong>@Model.CandidateDiscoveryResult.Diagnostics.Count</strong>
+                </article>
+                <article>
                     <span>Already registered</span>
                     <strong>@Model.CandidateDiscoveryResult.Candidates.Count(candidate => candidate.AlreadyRegistered)</strong>
                 </article>
@@ -289,11 +293,24 @@
                 </article>
             </div>
 
+            @if (Model.CandidateDiscoveryResult.Diagnostics.Count > 0)
+            {
+                <div class="mt-3 d-flex flex-column gap-2">
+                @foreach (var diagnostic in Model.CandidateDiscoveryResult.Diagnostics)
+                {
+                    <div class="@Model.GetDiscoveryDiagnosticNoticeClass(diagnostic)">
+                        <strong>@diagnostic.Title</strong>
+                        <div>@diagnostic.Message</div>
+                    </div>
+                }
+                </div>
+            }
+
             @if (Model.CandidateDiscoveryResult.Candidates.Count == 0)
             {
                 <div class="empty-panel mt-3">
-                    <p class="empty-state">No candidate hosts matched this discovery request.</p>
-                    <p class="subtle-copy">Try broadening the category scope, reducing brand hints, or using a different market or locale. Registered sources remain unchanged.</p>
+                    <p class="empty-state">@Model.GetCandidateDiscoveryEmptyStateHeading()</p>
+                    <p class="subtle-copy">@Model.GetCandidateDiscoveryEmptyStateMessage()</p>
                 </div>
             }
             else

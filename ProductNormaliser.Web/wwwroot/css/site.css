@@ -301,6 +301,18 @@ h3,
   border-color: rgba(15, 118, 110, 0.18);
 }
 
+.notice.info {
+  background: rgba(148, 163, 184, 0.14);
+  border-color: rgba(100, 116, 139, 0.22);
+  color: var(--ink);
+}
+
+.notice.warning {
+  background: rgba(180, 83, 9, 0.08);
+  border-color: rgba(180, 83, 9, 0.18);
+  color: #9a3412;
+}
+
 .notice.error,
 .validation-summary-errors {
   background: rgba(180, 35, 24, 0.08);

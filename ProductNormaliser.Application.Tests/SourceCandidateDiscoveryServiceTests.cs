@@ -241,7 +241,81 @@ public sealed class SourceCandidateDiscoveryServiceTests
             Assert.That(result.Candidates[0].Probe.RobotsTxtReachable, Is.False);
             Assert.That(result.Candidates[0].Probe.SitemapDetected, Is.False);
             Assert.That(result.Candidates[0].RecommendationStatus, Is.EqualTo(SourceCandidateResult.RecommendationDoNotAccept));
+            Assert.That(result.Diagnostics, Is.Empty);
         });
+    }
+
+    [Test]
+    public async Task DiscoverAsync_PreservesProviderDiagnostics_WhenSearchProviderIsDegraded()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                diagnostics:
+                [
+                    new SourceCandidateDiscoveryDiagnostic
+                    {
+                        Code = "search_provider_config_missing",
+                        Severity = SourceCandidateDiscoveryDiagnostic.SeverityError,
+                        Title = "Search API key missing",
+                        Message = "Configured search lookup is unavailable without an API key."
+                    }
+                ]),
+            new FakeSourceCandidateProbeService(),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"]
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Candidates, Is.Empty);
+            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Is.EqualTo(new[] { "search_provider_config_missing" }));
+        });
+    }
+
+    [Test]
+    public async Task DiscoverAsync_AddsLlmDiagnostic_WhenProbeFallsBackToHeuristics()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "llm_disabled_shop",
+                    DisplayName = "LLM Disabled Shop",
+                    BaseUrl = "https://llm-disabled.example/",
+                    Host = "llm-disabled.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new FakeSourceCandidateProbeService(
+                new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["llm-disabled.example"] = new SourceCandidateProbeResult
+                    {
+                        HomePageReachable = true,
+                        RepresentativeProductPageReachable = true,
+                        CategoryRelevanceScore = 50m,
+                        CatalogLikelihoodScore = 50m,
+                        CrawlabilityScore = 50m,
+                        ExtractabilityScore = 50m,
+                        LlmReason = "LLM disabled"
+                    }
+                }),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"]
+        });
+
+        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Does.Contain("llm_disabled"));
     }
 
     [Test]
@@ -1220,19 +1294,35 @@ public sealed class SourceCandidateDiscoveryServiceTests
         }
     }
 
-    private sealed class FakeSourceCandidateSearchProvider(params SourceCandidateSearchResult[] results) : ISourceCandidateSearchProvider
+    private sealed class FakeSourceCandidateSearchProvider : ISourceCandidateSearchProvider
     {
-        private readonly IReadOnlyList<SourceCandidateSearchResult> results = results;
+        private readonly IReadOnlyList<SourceCandidateSearchResult> results;
+        private readonly IReadOnlyList<SourceCandidateDiscoveryDiagnostic> diagnostics;
+
+        public FakeSourceCandidateSearchProvider(params SourceCandidateSearchResult[] results)
+            : this(null, results)
+        {
+        }
+
+        public FakeSourceCandidateSearchProvider(IReadOnlyList<SourceCandidateDiscoveryDiagnostic>? diagnostics, params SourceCandidateSearchResult[] results)
+        {
+            this.results = results ?? [];
+            this.diagnostics = diagnostics ?? [];
+        }
 
         public int CallCount { get; private set; }
 
         public DiscoverSourceCandidatesRequest? LastRequest { get; private set; }
 
-        public Task<IReadOnlyList<SourceCandidateSearchResult>> SearchAsync(DiscoverSourceCandidatesRequest request, CancellationToken cancellationToken = default)
+        public Task<SourceCandidateSearchResponse> SearchAsync(DiscoverSourceCandidatesRequest request, CancellationToken cancellationToken = default)
         {
             CallCount++;
             LastRequest = request;
-            return Task.FromResult(results);
+            return Task.FromResult(new SourceCandidateSearchResponse
+            {
+                Candidates = results,
+                Diagnostics = diagnostics
+            });
         }
     }
 

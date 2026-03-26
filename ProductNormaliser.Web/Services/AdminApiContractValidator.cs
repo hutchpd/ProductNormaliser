@@ -18,6 +18,13 @@ internal static class AdminApiContractValidator
         "not_compatible"
     };
 
+    private static readonly IReadOnlySet<string> CandidateDiscoveryDiagnosticSeverities = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "info",
+        "warning",
+        "error"
+    };
+
     private static readonly IReadOnlySet<string> SourceAutomationModes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "operator_assisted",
@@ -137,6 +144,7 @@ internal static class AdminApiContractValidator
         ValidateStringItems(payload.RequestedCategoryKeys, "sourceCandidateDiscovery.requestedCategoryKeys");
         ValidateEnumValue(payload.AutomationMode, SourceAutomationModes, "sourceCandidateDiscovery.automationMode", value => value);
         ValidateStringItems(payload.BrandHints, "sourceCandidateDiscovery.brandHints");
+        ValidateItems(payload.Diagnostics, "sourceCandidateDiscovery.diagnostics", ValidateSourceCandidateDiscoveryDiagnostic);
         ValidateItems(payload.Candidates, "sourceCandidateDiscovery.candidates", ValidateSourceCandidate);
     }
 
@@ -316,6 +324,14 @@ internal static class AdminApiContractValidator
         ValidateSourceCandidateProbe(payload.Probe, $"{path}.probe");
         ValidateSourceCandidateAutomationAssessment(payload.AutomationAssessment, $"{path}.automationAssessment");
         ValidateItems(payload.Reasons, $"{path}.reasons", ValidateSourceCandidateReason);
+    }
+
+    private static void ValidateSourceCandidateDiscoveryDiagnostic(SourceCandidateDiscoveryDiagnosticDto payload, string path)
+    {
+        ValidateRequiredString(payload.Code, $"{path}.code");
+        ValidateEnumValue(payload.Severity, CandidateDiscoveryDiagnosticSeverities, $"{path}.severity", value => value);
+        ValidateRequiredString(payload.Title, $"{path}.title");
+        ValidateRequiredString(payload.Message, $"{path}.message");
     }
 
     private static void ValidateSourceCandidateAutomationAssessment(SourceCandidateAutomationAssessmentDto payload, string path)

@@ -34,6 +34,13 @@ public sealed class SourceCandidateDiscoveryController(ISourceCandidateDiscovery
                 AutomationMode = result.AutomationMode,
                 BrandHints = result.BrandHints,
                 GeneratedUtc = result.GeneratedUtc,
+                Diagnostics = result.Diagnostics.Select(diagnostic => new Contracts.SourceCandidateDiscoveryDiagnosticDto
+                {
+                    Code = diagnostic.Code,
+                    Severity = diagnostic.Severity,
+                    Title = diagnostic.Title,
+                    Message = diagnostic.Message
+                }).ToArray(),
                 Candidates = result.Candidates.Select(candidate => new Contracts.SourceCandidateDto
                 {
                     CandidateKey = candidate.CandidateKey,

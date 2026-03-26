@@ -298,6 +298,36 @@ public sealed class IndexModel(
         };
     }
 
+    public string GetDiscoveryDiagnosticNoticeClass(SourceCandidateDiscoveryDiagnosticDto diagnostic)
+    {
+        return diagnostic.Severity switch
+        {
+            "error" => "notice error",
+            "warning" => "notice warning",
+            _ => "notice info"
+        };
+    }
+
+    public string GetCandidateDiscoveryEmptyStateHeading()
+    {
+        if (CandidateDiscoveryResult?.Diagnostics.Any(diagnostic => string.Equals(diagnostic.Severity, "error", StringComparison.OrdinalIgnoreCase)) == true)
+        {
+            return "Candidate discovery is currently degraded.";
+        }
+
+        return "No candidate hosts matched this discovery request.";
+    }
+
+    public string GetCandidateDiscoveryEmptyStateMessage()
+    {
+        if (CandidateDiscoveryResult?.Diagnostics.Any(diagnostic => string.Equals(diagnostic.Severity, "error", StringComparison.OrdinalIgnoreCase)) == true)
+        {
+            return "Review the diagnostics above, then retry discovery once provider configuration or upstream availability has been restored. Manual registration remains available in the meantime.";
+        }
+
+        return "Try broadening the category scope, reducing brand hints, or using a different market or locale. Registered sources remain unchanged.";
+    }
+
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
         try
@@ -583,6 +613,7 @@ public sealed class IndexModel(
             AutomationMode = CandidateDiscoveryResult.AutomationMode,
             BrandHints = CandidateDiscoveryResult.BrandHints,
             GeneratedUtc = CandidateDiscoveryResult.GeneratedUtc,
+            Diagnostics = CandidateDiscoveryResult.Diagnostics,
             Candidates = CandidateDiscoveryResult.Candidates.Select(candidate => acceptedCandidateKeys.Contains(candidate.CandidateKey)
                 ? new SourceCandidateDto
                 {

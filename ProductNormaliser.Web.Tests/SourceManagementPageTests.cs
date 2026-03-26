@@ -116,6 +116,16 @@ public sealed class SourceManagementPageTests
             {
                 RequestedCategoryKeys = ["tv"],
                 GeneratedUtc = new DateTime(2026, 03, 25, 11, 00, 00, DateTimeKind.Utc),
+                Diagnostics =
+                [
+                    new SourceCandidateDiscoveryDiagnosticDto
+                    {
+                        Code = "search_provider_rate_limited",
+                        Severity = "error",
+                        Title = "Search provider rate-limited",
+                        Message = "Candidate lookup was rate-limited upstream."
+                    }
+                ],
                 Candidates =
                 [
                     new SourceCandidateDto
@@ -162,6 +172,7 @@ public sealed class SourceManagementPageTests
             Assert.That(client.LastSourceCandidateDiscoveryRequest!.CategoryKeys, Is.EqualTo(new[] { "tv" }));
             Assert.That(client.LastSourceCandidateDiscoveryRequest.Market, Is.EqualTo("UK"));
             Assert.That(model.CandidateDiscoveryResult, Is.Not.Null);
+            Assert.That(model.CandidateDiscoveryResult!.Diagnostics.Select(diagnostic => diagnostic.Code), Is.EqualTo(new[] { "search_provider_rate_limited" }));
             Assert.That(model.CandidateDiscoveryResult!.Candidates.Select(candidate => candidate.DisplayName), Is.EqualTo(new[] { "Currys" }));
             Assert.That(model.CandidateDiscoveryResult.Candidates[0].RuntimeExtractionStatus, Is.EqualTo("not_compatible"));
             Assert.That(model.CandidateDiscoveryResult.Candidates[0].RuntimeExtractionMessage, Is.EqualTo("Representative runtime extraction did not produce products from the sampled product page."));
@@ -251,6 +262,16 @@ public sealed class SourceManagementPageTests
                 Locale = "en-GB",
                 AutomationMode = "auto_accept_and_seed",
                 GeneratedUtc = DateTime.UtcNow,
+                Diagnostics =
+                [
+                    new SourceCandidateDiscoveryDiagnosticDto
+                    {
+                        Code = "llm_disabled",
+                        Severity = "info",
+                        Title = "LLM validation disabled",
+                        Message = "Representative product-page classification stayed heuristic-only because LLM evaluation is disabled."
+                    }
+                ],
                 Candidates =
                 [
                     new SourceCandidateDto
@@ -308,6 +329,8 @@ public sealed class SourceManagementPageTests
             Assert.That(client.LastCreatedJobRequest!.RequestedSources, Is.EqualTo(new[] { "guarded_example" }));
             Assert.That(client.LastDisabledSourceId, Is.EqualTo("guarded_example"));
             Assert.That(toggleResult, Is.TypeOf<RedirectToPageResult>());
+            Assert.That(model.CandidateDiscoveryResult, Is.Not.Null);
+            Assert.That(model.CandidateDiscoveryResult!.Diagnostics.Select(diagnostic => diagnostic.Code), Is.EqualTo(new[] { "llm_disabled" }));
         });
     }
 

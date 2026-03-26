@@ -8,5 +8,14 @@ public sealed class SourceCandidateDiscoveryResponseDto
     public string AutomationMode { get; init; } = string.Empty;
     public IReadOnlyList<string> BrandHints { get; init; } = [];
     public DateTime GeneratedUtc { get; init; }
+    public IReadOnlyList<SourceCandidateDiscoveryDiagnosticDto> Diagnostics { get; init; } = [];
     public IReadOnlyList<SourceCandidateDto> Candidates { get; init; } = [];
+}
+
+public sealed class SourceCandidateDiscoveryDiagnosticDto
+{
+    public string Code { get; init; } = string.Empty;
+    public string Severity { get; init; } = string.Empty;
+    public string Title { get; init; } = string.Empty;
+    public string Message { get; init; } = string.Empty;
 }

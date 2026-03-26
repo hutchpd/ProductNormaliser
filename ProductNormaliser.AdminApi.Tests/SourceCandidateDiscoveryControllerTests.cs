@@ -16,6 +16,16 @@ public sealed class SourceCandidateDiscoveryControllerTests
             Market = "UK",
             BrandHints = ["Samsung"],
             GeneratedUtc = new DateTime(2026, 03, 25, 12, 00, 00, DateTimeKind.Utc),
+            Diagnostics =
+            [
+                new SourceCandidateDiscoveryDiagnostic
+                {
+                    Code = "llm_disabled",
+                    Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
+                    Title = "LLM validation disabled",
+                    Message = "Representative classification stayed heuristic-only because LLM evaluation is disabled."
+                }
+            ],
             Candidates =
             [
                 new SourceCandidateResult
@@ -88,6 +98,7 @@ public sealed class SourceCandidateDiscoveryControllerTests
         {
             Assert.That(payload!.RequestedCategoryKeys, Is.EqualTo(new[] { "tv" }));
             Assert.That(payload.Locale, Is.EqualTo("en-GB"));
+            Assert.That(payload.Diagnostics.Select(diagnostic => diagnostic.Code), Is.EqualTo(new[] { "llm_disabled" }));
             Assert.That(payload.Candidates, Has.Count.EqualTo(1));
             Assert.That(payload.Candidates[0].DisplayName, Is.EqualTo("Samsung Official Store"));
             Assert.That(payload.Candidates[0].RecommendationStatus, Is.EqualTo("recommended"));

@@ -10,17 +10,49 @@ public sealed class SearchApiSourceCandidateSearchProvider(HttpClient httpClient
     private static readonly Uri DefaultBaseAddress = new("https://api.search.brave.com", UriKind.Absolute);
     private readonly SourceCandidateDiscoveryOptions options = options.Value;
 
-    public async Task<IReadOnlyList<SourceCandidateSearchResult>> SearchAsync(DiscoverSourceCandidatesRequest request, CancellationToken cancellationToken = default)
+    public async Task<SourceCandidateSearchResponse> SearchAsync(DiscoverSourceCandidatesRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        if (string.IsNullOrWhiteSpace(options.SearchApiKey))
+        {
+            return new SourceCandidateSearchResponse
+            {
+                Diagnostics =
+                [
+                    new SourceCandidateDiscoveryDiagnostic
+                    {
+                        Code = "search_provider_config_missing",
+                        Severity = SourceCandidateDiscoveryDiagnostic.SeverityError,
+                        Title = "Search API key missing",
+                        Message = "Source candidate lookup is enabled, but SourceCandidateDiscovery.SearchApiKey is not configured. Manual source registration still works while provider-backed discovery is unavailable."
+                    }
+                ]
+            };
+        }
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, options.SearchTimeoutSeconds)));
 
         var candidatesByHost = new Dictionary<string, SourceCandidateSearchResult>(StringComparer.OrdinalIgnoreCase);
+        var diagnostics = new List<SourceCandidateDiscoveryDiagnostic>();
+        if (!Uri.TryCreate(options.SearchApiBaseUrl, UriKind.Absolute, out _))
+        {
+            diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
+            {
+                Code = "search_provider_base_url_invalid",
+                Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
+                Title = "Search API base URL invalid",
+                Message = "The configured search provider base URL is not a valid absolute URI. Discovery is falling back to the default provider endpoint."
+            });
+        }
+
         foreach (var query in BuildQueries(request).Take(Math.Max(1, options.MaxSearchQueries)))
         {
-            foreach (var candidate in await SearchQueryAsync(query, request, timeoutCts.Token))
+            var queryResponse = await SearchQueryAsync(query, request, timeoutCts.Token);
+            MergeDiagnostics(diagnostics, queryResponse.Diagnostics);
+
+            foreach (var candidate in queryResponse.Candidates)
             {
                 var candidateKey = BuildCandidateGroupingKey(candidate);
                 if (candidatesByHost.TryGetValue(candidateKey, out var existing))
@@ -67,11 +99,31 @@ public sealed class SearchApiSourceCandidateSearchProvider(HttpClient httpClient
                     candidatesByHost[candidateKey] = candidate;
                 }
             }
+
+            if (queryResponse.Diagnostics.Any(IsBlockingDiagnostic))
+            {
+                break;
+            }
         }
 
-        return candidatesByHost.Values
-            .OrderBy(candidate => candidate.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        if (candidatesByHost.Count == 0 && diagnostics.All(diagnostic => !IsBlockingDiagnostic(diagnostic)))
+        {
+            diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
+            {
+                Code = "search_provider_no_results",
+                Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
+                Title = "No search candidates returned",
+                Message = "The search provider completed successfully, but it did not return any eligible hosts for this request. Try broader category terms, fewer brand hints, or a different market or locale."
+            });
+        }
+
+        return new SourceCandidateSearchResponse
+        {
+            Candidates = candidatesByHost.Values
+                .OrderBy(candidate => candidate.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
+            Diagnostics = diagnostics
+        };
     }
 
     private IReadOnlyList<string> BuildQueries(DiscoverSourceCandidatesRequest request)
@@ -101,27 +153,59 @@ public sealed class SearchApiSourceCandidateSearchProvider(HttpClient httpClient
             .ToArray();
     }
 
-    private async Task<IReadOnlyList<SourceCandidateSearchResult>> SearchQueryAsync(string query, DiscoverSourceCandidatesRequest request, CancellationToken cancellationToken)
+    private async Task<SourceCandidateSearchResponse> SearchQueryAsync(string query, DiscoverSourceCandidatesRequest request, CancellationToken cancellationToken)
     {
         try
         {
             using var message = new HttpRequestMessage(HttpMethod.Get, BuildRequestUri(query));
             using var response = await httpClient.SendAsync(message, cancellationToken);
-            if (response.StatusCode == HttpStatusCode.TooManyRequests || !response.IsSuccessStatusCode)
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
-                return [];
+                return new SourceCandidateSearchResponse
+                {
+                    Diagnostics =
+                    [
+                        new SourceCandidateDiscoveryDiagnostic
+                        {
+                            Code = "search_provider_rate_limited",
+                            Severity = SourceCandidateDiscoveryDiagnostic.SeverityError,
+                            Title = "Search provider rate-limited",
+                            Message = "The search provider rejected source-candidate lookup with HTTP 429. Candidate discovery can still accept manual registrations, but provider-backed lookup should be retried later."
+                        }
+                    ]
+                };
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return new SourceCandidateSearchResponse
+                {
+                    Diagnostics =
+                    [
+                        new SourceCandidateDiscoveryDiagnostic
+                        {
+                            Code = "search_provider_http_error",
+                            Severity = SourceCandidateDiscoveryDiagnostic.SeverityError,
+                            Title = "Search provider request failed",
+                            Message = $"The search provider returned HTTP {(int)response.StatusCode} while looking up source candidates. Manual source registration is still available while provider-backed lookup is degraded."
+                        }
+                    ]
+                };
             }
 
             var payload = await response.Content.ReadFromJsonAsync<SearchApiResponse>(cancellationToken: cancellationToken);
             if (payload?.Web?.Results is null || payload.Web.Results.Count == 0)
             {
-                return [];
+                return new SourceCandidateSearchResponse();
             }
 
-            return payload.Web.Results
-                .Select(result => TryMapCandidate(result, request, query))
-                .OfType<SourceCandidateSearchResult>()
-                .ToArray();
+            return new SourceCandidateSearchResponse
+            {
+                Candidates = payload.Web.Results
+                    .Select(result => TryMapCandidate(result, request, query))
+                    .OfType<SourceCandidateSearchResult>()
+                    .ToArray()
+            };
         }
         catch (OperationCanceledException)
         {
@@ -129,8 +213,38 @@ public sealed class SearchApiSourceCandidateSearchProvider(HttpClient httpClient
         }
         catch
         {
-            return [];
+            return new SourceCandidateSearchResponse
+            {
+                Diagnostics =
+                [
+                    new SourceCandidateDiscoveryDiagnostic
+                    {
+                        Code = "search_provider_request_failed",
+                        Severity = SourceCandidateDiscoveryDiagnostic.SeverityError,
+                        Title = "Search provider request failed",
+                        Message = "The search provider request failed before a usable response was returned. Manual source registration is still available while provider-backed lookup is degraded."
+                    }
+                ]
+            };
         }
+    }
+
+    private static void MergeDiagnostics(List<SourceCandidateDiscoveryDiagnostic> target, IEnumerable<SourceCandidateDiscoveryDiagnostic> diagnostics)
+    {
+        foreach (var diagnostic in diagnostics)
+        {
+            if (target.Any(existing => string.Equals(existing.Code, diagnostic.Code, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            target.Add(diagnostic);
+        }
+    }
+
+    private static bool IsBlockingDiagnostic(SourceCandidateDiscoveryDiagnostic diagnostic)
+    {
+        return string.Equals(diagnostic.Severity, SourceCandidateDiscoveryDiagnostic.SeverityError, StringComparison.OrdinalIgnoreCase);
     }
 
     private SourceCandidateSearchResult? TryMapCandidate(SearchApiWebResult result, DiscoverSourceCandidatesRequest request, string query)

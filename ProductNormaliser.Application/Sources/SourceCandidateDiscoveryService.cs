@@ -47,7 +47,9 @@ public sealed class SourceCandidateDiscoveryService(
         };
 
         var registeredSources = await crawlSourceStore.ListAsync(cancellationToken);
-        var searchResults = CollapseEquivalentCandidates(await sourceCandidateSearchProvider.SearchAsync(normalizedRequest, cancellationToken));
+        var searchResponse = await sourceCandidateSearchProvider.SearchAsync(normalizedRequest, cancellationToken);
+        var searchResults = CollapseEquivalentCandidates(searchResponse.Candidates);
+        var diagnostics = new List<SourceCandidateDiscoveryDiagnostic>(searchResponse.Diagnostics);
 
         var candidates = new List<SourceCandidateResult>(searchResults.Count);
         foreach (var searchResult in searchResults)
@@ -109,6 +111,8 @@ public sealed class SourceCandidateDiscoveryService(
             });
         }
 
+        MergeDiagnostics(diagnostics, BuildLlmDiagnostics(candidates));
+
         return new SourceCandidateDiscoveryResult
         {
             RequestedCategoryKeys = categoryKeys,
@@ -117,6 +121,7 @@ public sealed class SourceCandidateDiscoveryService(
             AutomationMode = normalizedRequest.AutomationMode ?? SourceAutomationModes.OperatorAssisted,
             BrandHints = NormalizeValues(normalizedRequest.BrandHints),
             GeneratedUtc = DateTime.UtcNow,
+            Diagnostics = diagnostics,
             Candidates = candidates
                 .OrderByDescending(candidate => ScoreMarketAlignment(candidate, normalizedRequest))
                 .ThenByDescending(candidate => candidate.ConfidenceScore)
@@ -124,6 +129,94 @@ public sealed class SourceCandidateDiscoveryService(
                 .Take(normalizedRequest.MaxCandidates)
                 .ToArray()
         };
+    }
+
+    private static IReadOnlyList<SourceCandidateDiscoveryDiagnostic> BuildLlmDiagnostics(IReadOnlyCollection<SourceCandidateResult> candidates)
+    {
+        var diagnostics = new List<SourceCandidateDiscoveryDiagnostic>();
+        var neutralReasons = candidates
+            .Select(candidate => NormalizeNeutralLlmReason(candidate.Probe.LlmReason))
+            .Where(reason => reason is not null)
+            .GroupBy(reason => reason!, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in neutralReasons)
+        {
+            var count = group.Count();
+            switch (group.Key)
+            {
+                case "LLM unavailable":
+                    diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
+                    {
+                        Code = "llm_unavailable",
+                        Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
+                        Title = "LLM validation unavailable",
+                        Message = $"Representative product-page classification fell back to heuristics for {count} candidate(s) because the LLM was unavailable."
+                    });
+                    break;
+
+                case "LLM timeout":
+                    diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
+                    {
+                        Code = "llm_timeout",
+                        Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
+                        Title = "LLM validation timed out",
+                        Message = $"Representative product-page classification fell back to heuristics for {count} candidate(s) because the LLM timed out."
+                    });
+                    break;
+
+                case "LLM low confidence":
+                    diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
+                    {
+                        Code = "llm_low_confidence",
+                        Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
+                        Title = "LLM stayed neutral",
+                        Message = $"Representative product-page classification stayed heuristic-only for {count} candidate(s) because the LLM did not reach its confidence threshold."
+                    });
+                    break;
+
+                case "LLM disabled":
+                    diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
+                    {
+                        Code = "llm_disabled",
+                        Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
+                        Title = "LLM validation disabled",
+                        Message = $"Representative product-page classification stayed heuristic-only for {count} candidate(s) because LLM evaluation is currently disabled."
+                    });
+                    break;
+            }
+        }
+
+        return diagnostics;
+    }
+
+    private static string? NormalizeNeutralLlmReason(string? reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return null;
+        }
+
+        return reason.Trim() switch
+        {
+            "LLM unavailable" => "LLM unavailable",
+            "LLM timeout" => "LLM timeout",
+            "LLM low confidence" => "LLM low confidence",
+            "LLM disabled" => "LLM disabled",
+            _ => null
+        };
+    }
+
+    private static void MergeDiagnostics(List<SourceCandidateDiscoveryDiagnostic> target, IEnumerable<SourceCandidateDiscoveryDiagnostic> diagnostics)
+    {
+        foreach (var diagnostic in diagnostics)
+        {
+            if (target.Any(existing => string.Equals(existing.Code, diagnostic.Code, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            target.Add(diagnostic);
+        }
     }
 
     private static IReadOnlyList<SourceCandidateSearchResult> CollapseEquivalentCandidates(IReadOnlyList<SourceCandidateSearchResult> candidates)

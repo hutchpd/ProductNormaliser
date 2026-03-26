@@ -401,9 +401,20 @@ public sealed partial class HttpSourceCandidateProbeService(
 
     private async Task<PageClassificationResult?> TryClassifyRepresentativeProductPageAsync(string? representativeProductPageHtml, string category, CancellationToken cancellationToken)
     {
-        if (!llmOptions.Enabled || string.IsNullOrWhiteSpace(representativeProductPageHtml))
+        if (string.IsNullOrWhiteSpace(representativeProductPageHtml))
         {
             return null;
+        }
+
+        if (!llmOptions.Enabled)
+        {
+            return new PageClassificationResult
+            {
+                IsProductPage = false,
+                HasSpecifications = false,
+                Confidence = 0d,
+                Reason = "LLM disabled"
+            };
         }
 
         try
