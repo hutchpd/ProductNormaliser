@@ -9,6 +9,7 @@ public static class MongoCollectionNames
     public const string CrawlSources = "crawl_sources";
     public const string DiscoveryRuns = "discovery_runs";
     public const string DiscoveryRunCandidates = "discovery_run_candidates";
+    public const string DiscoveryRunCandidateDispositions = "discovery_run_candidate_dispositions";
     public const string DiscoveryQueue = "discovery_queue";
     public const string DiscoveredUrls = "discovered_urls";
     public const string RawPages = "raw_pages";

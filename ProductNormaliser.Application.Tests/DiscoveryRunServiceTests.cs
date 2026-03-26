@@ -83,7 +83,7 @@ public sealed class DiscoveryRunServiceTests
         var sourceManagement = new RecordingSourceManagementService();
         var service = CreateService(runStore, candidateStore, sourceManagement);
 
-        var candidate = await service.AcceptCandidateAsync("run_1", "safe_shop", CancellationToken.None);
+        var candidate = await service.AcceptCandidateAsync("run_1", "safe_shop", 1, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -91,6 +91,7 @@ public sealed class DiscoveryRunServiceTests
             Assert.That(candidate!.State, Is.EqualTo(DiscoveryRunCandidateStates.ManuallyAccepted));
             Assert.That(candidate.PreviousState, Is.EqualTo(DiscoveryRunCandidateStates.Suggested));
             Assert.That(candidate.AcceptedSourceId, Is.EqualTo("safe_shop"));
+            Assert.That(candidate.Revision, Is.EqualTo(3));
             Assert.That(sourceManagement.Registrations, Has.Count.EqualTo(1));
             Assert.That(sourceManagement.Registrations[0].SupportedCategoryKeys, Is.EqualTo(new[] { "tv" }));
         });
@@ -101,21 +102,70 @@ public sealed class DiscoveryRunServiceTests
     {
         var runStore = new FakeDiscoveryRunStore(CreateRun("run_1", DiscoveryRunStatuses.Completed));
         var candidateStore = new FakeDiscoveryRunCandidateStore(CreateCandidate("run_1", "safe_shop", DiscoveryRunCandidateStates.Suggested));
-        var service = CreateService(runStore, candidateStore);
+        var dispositionStore = new FakeDiscoveryRunCandidateDispositionStore();
+        var service = CreateService(runStore, candidateStore, dispositionStore: dispositionStore);
 
-        var dismissed = await service.DismissCandidateAsync("run_1", "safe_shop", CancellationToken.None);
+        var dismissed = await service.DismissCandidateAsync("run_1", "safe_shop", 1, CancellationToken.None);
         Assert.That(dismissed, Is.Not.Null);
         Assert.That(dismissed!.State, Is.EqualTo(DiscoveryRunCandidateStates.Dismissed));
         Assert.That(dismissed.PreviousState, Is.EqualTo(DiscoveryRunCandidateStates.Suggested));
 
-        var restored = await service.RestoreCandidateAsync("run_1", "safe_shop", CancellationToken.None);
+        var activeDisposition = dispositionStore.Items.Single();
+        Assert.Multiple(() =>
+        {
+            Assert.That(activeDisposition.State, Is.EqualTo(DiscoveryRunCandidateStates.Dismissed));
+            Assert.That(activeDisposition.IsActive, Is.True);
+            Assert.That(activeDisposition.ScopeFingerprint, Is.EqualTo("market:uk|locale:en-gb|categories:tv"));
+        });
+
+        var restored = await service.RestoreCandidateAsync("run_1", "safe_shop", 2, CancellationToken.None);
+        var restoredDisposition = dispositionStore.Items.Single();
 
         Assert.Multiple(() =>
         {
             Assert.That(restored, Is.Not.Null);
             Assert.That(restored!.State, Is.EqualTo(DiscoveryRunCandidateStates.Suggested));
             Assert.That(restored.StateMessage, Is.EqualTo("Restored to the active candidate queue."));
+            Assert.That(restoredDisposition.IsActive, Is.False);
+            Assert.That(restoredDisposition.RestoredUtc, Is.Not.Null);
         });
+    }
+
+    [Test]
+    public async Task AcceptCandidateAsync_SupersedesMatchingInFlightDuplicatesImmediately()
+    {
+        var runStore = new FakeDiscoveryRunStore(CreateRun("run_1", DiscoveryRunStatuses.Running));
+        var primary = CreateCandidate("run_1", "safe_shop", DiscoveryRunCandidateStates.Suggested);
+        var duplicate = CreateCandidate("run_1", "safe_shop_duplicate", DiscoveryRunCandidateStates.Suggested);
+        duplicate.BaseUrl = "https://safe.example/";
+        duplicate.Host = "safe.example";
+
+        var candidateStore = new FakeDiscoveryRunCandidateStore(primary, duplicate);
+        var service = CreateService(runStore, candidateStore, new RecordingSourceManagementService());
+
+        var accepted = await service.AcceptCandidateAsync("run_1", "safe_shop", 1, CancellationToken.None);
+        var superseded = await candidateStore.GetAsync("run_1", "safe_shop_duplicate", CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(accepted, Is.Not.Null);
+            Assert.That(superseded, Is.Not.Null);
+            Assert.That(superseded!.State, Is.EqualTo(DiscoveryRunCandidateStates.Superseded));
+            Assert.That(superseded.SupersededByCandidateKey, Is.EqualTo("safe_shop"));
+            Assert.That(superseded.PreviousState, Is.EqualTo(DiscoveryRunCandidateStates.Suggested));
+        });
+    }
+
+    [Test]
+    public void AcceptCandidateAsync_RejectsStaleRevision()
+    {
+        var runStore = new FakeDiscoveryRunStore(CreateRun("run_1", DiscoveryRunStatuses.Running));
+        var candidateStore = new FakeDiscoveryRunCandidateStore(CreateCandidate("run_1", "safe_shop", DiscoveryRunCandidateStates.Suggested));
+        var service = CreateService(runStore, candidateStore, new RecordingSourceManagementService());
+
+        var action = async () => await service.AcceptCandidateAsync("run_1", "safe_shop", 99, CancellationToken.None);
+
+        Assert.That(action, Throws.TypeOf<InvalidOperationException>().With.Message.Contains("changed while this action was in progress"));
     }
 
     [Test]
@@ -125,7 +175,7 @@ public sealed class DiscoveryRunServiceTests
         var candidateStore = new FakeDiscoveryRunCandidateStore(CreateCandidate("run_1", "failed_shop", DiscoveryRunCandidateStates.Failed));
         var service = CreateService(runStore, candidateStore);
 
-        var action = async () => await service.AcceptCandidateAsync("run_1", "failed_shop", CancellationToken.None);
+        var action = async () => await service.AcceptCandidateAsync("run_1", "failed_shop", 1, CancellationToken.None);
 
         Assert.That(action, Throws.TypeOf<InvalidOperationException>());
     }
@@ -133,11 +183,13 @@ public sealed class DiscoveryRunServiceTests
     private static DiscoveryRunService CreateService(
         FakeDiscoveryRunStore runStore,
         FakeDiscoveryRunCandidateStore? candidateStore = null,
-        RecordingSourceManagementService? sourceManagement = null)
+        RecordingSourceManagementService? sourceManagement = null,
+        FakeDiscoveryRunCandidateDispositionStore? dispositionStore = null)
     {
         return new DiscoveryRunService(
             runStore,
             candidateStore ?? new FakeDiscoveryRunCandidateStore(),
+            dispositionStore ?? new FakeDiscoveryRunCandidateDispositionStore(),
             new FakeCategoryMetadataService(new CategoryMetadata { CategoryKey = "tv", DisplayName = "TV", IsEnabled = true }),
             sourceManagement ?? new RecordingSourceManagementService(),
             new RecordingAuditService(),
@@ -170,6 +222,7 @@ public sealed class DiscoveryRunServiceTests
             RunId = runId,
             CandidateKey = candidateKey,
             State = state,
+            Revision = 1,
             DisplayName = "Safe Shop",
             BaseUrl = "https://safe.example/",
             Host = "safe.example",
@@ -208,6 +261,9 @@ public sealed class DiscoveryRunServiceTests
         public Task<DiscoveryRun?> GetNextQueuedAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(items.Values.OrderBy(run => run.CreatedUtc).FirstOrDefault(run => string.Equals(run.Status, DiscoveryRunStatuses.Queued, StringComparison.OrdinalIgnoreCase)));
 
+        public Task<IReadOnlyList<DiscoveryRun>> ListByStatusesAsync(IReadOnlyCollection<string> statuses, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<DiscoveryRun>>(items.Values.Where(run => statuses.Contains(run.Status)).ToArray());
+
         public Task UpsertAsync(DiscoveryRun run, CancellationToken cancellationToken = default)
         {
             items[run.RunId] = run;
@@ -228,6 +284,50 @@ public sealed class DiscoveryRunServiceTests
         public Task UpsertAsync(DiscoveryRunCandidate candidate, CancellationToken cancellationToken = default)
         {
             items[$"{candidate.RunId}:{candidate.CandidateKey}"] = candidate;
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> TryUpdateAsync(DiscoveryRunCandidate candidate, int expectedRevision, CancellationToken cancellationToken = default)
+        {
+            var key = $"{candidate.RunId}:{candidate.CandidateKey}";
+            if (!items.TryGetValue(key, out var existing) || existing.Revision != expectedRevision)
+            {
+                return Task.FromResult(false);
+            }
+
+            items[key] = candidate;
+            return Task.FromResult(true);
+        }
+    }
+
+    private sealed class FakeDiscoveryRunCandidateDispositionStore : IDiscoveryRunCandidateDispositionStore
+    {
+        private readonly Dictionary<string, DiscoveryRunCandidateDisposition> items = new(StringComparer.OrdinalIgnoreCase);
+
+        public IReadOnlyList<DiscoveryRunCandidateDisposition> Items => items.Values.ToArray();
+
+        public Task<IReadOnlyList<DiscoveryRunCandidateDisposition>> FindActiveMatchesAsync(
+            string scopeFingerprint,
+            string normalizedHost,
+            string normalizedBaseUrl,
+            string normalizedDisplayName,
+            IReadOnlyCollection<string> allowedMarkets,
+            CancellationToken cancellationToken = default)
+        {
+            var matches = items.Values
+                .Where(item => item.IsActive
+                    && string.Equals(item.ScopeFingerprint, scopeFingerprint, StringComparison.OrdinalIgnoreCase)
+                    && (string.Equals(item.NormalizedHost, normalizedHost, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(item.NormalizedBaseUrl, normalizedBaseUrl, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(item.NormalizedDisplayName, normalizedDisplayName, StringComparison.OrdinalIgnoreCase)))
+                .ToArray();
+
+            return Task.FromResult<IReadOnlyList<DiscoveryRunCandidateDisposition>>(matches);
+        }
+
+        public Task UpsertAsync(DiscoveryRunCandidateDisposition disposition, CancellationToken cancellationToken = default)
+        {
+            items[disposition.Id] = disposition;
             return Task.CompletedTask;
         }
     }

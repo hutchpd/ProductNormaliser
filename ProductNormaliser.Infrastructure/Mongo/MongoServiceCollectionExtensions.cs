@@ -61,6 +61,7 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<CrawlSourceRepository>();
         services.AddSingleton<DiscoveryRunRepository>();
         services.AddSingleton<DiscoveryRunCandidateRepository>();
+        services.AddSingleton<DiscoveryRunCandidateDispositionRepository>();
         services.AddSingleton<DiscoveryQueueRepository>();
         services.AddSingleton<DiscoveredUrlRepository>();
         services.AddSingleton<CategoryMetadataRepository>();
@@ -73,6 +74,7 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<IKnownCrawlTargetStore>(serviceProvider => serviceProvider.GetRequiredService<KnownCrawlTargetRepository>());
         services.AddSingleton<IDiscoveryRunStore>(serviceProvider => serviceProvider.GetRequiredService<DiscoveryRunRepository>());
         services.AddSingleton<IDiscoveryRunCandidateStore>(serviceProvider => serviceProvider.GetRequiredService<DiscoveryRunCandidateRepository>());
+        services.AddSingleton<IDiscoveryRunCandidateDispositionStore>(serviceProvider => serviceProvider.GetRequiredService<DiscoveryRunCandidateDispositionRepository>());
         services.AddSingleton<IDiscoveryQueueStore>(serviceProvider => serviceProvider.GetRequiredService<DiscoveryQueueRepository>());
         services.AddSingleton<IDiscoveredUrlStore>(serviceProvider => serviceProvider.GetRequiredService<DiscoveredUrlRepository>());
         services.AddSingleton<ISourceProductStore>(serviceProvider => serviceProvider.GetRequiredService<SourceProductRepository>());
@@ -114,6 +116,9 @@ public static class MongoServiceCollectionExtensions
 
         services.AddOptions<CrawlPipelineOptions>()
             .Bind(configuration.GetSection(CrawlPipelineOptions.SectionName));
+
+        services.AddOptions<DiscoveryRunOperationsOptions>()
+            .Bind(configuration.GetSection(DiscoveryRunOperationsOptions.SectionName));
 
         services.AddOptions<CrawlGovernanceOptions>()
             .Bind(configuration.GetSection(CrawlGovernanceOptions.SectionName));

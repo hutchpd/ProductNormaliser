@@ -11,6 +11,7 @@ internal static class DiscoveryRunMapper
             Id = $"{runId}:{candidate.CandidateKey}",
             RunId = runId,
             CandidateKey = candidate.CandidateKey,
+            Revision = 1,
             State = state,
             DisplayName = candidate.DisplayName,
             BaseUrl = candidate.BaseUrl,

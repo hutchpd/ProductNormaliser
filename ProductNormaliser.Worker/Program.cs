@@ -24,6 +24,7 @@ builder.Services.AddSingleton<IConflictDetector, ConflictDetector>();
 builder.Services.AddSingleton<ICrawlJobService, CrawlJobService>();
 builder.Services.Configure<SourceCandidateDiscoveryOptions>(builder.Configuration.GetSection(SourceCandidateDiscoveryOptions.SectionName));
 builder.Services.Configure<SourceOnboardingAutomationOptions>(builder.Configuration.GetSection(SourceOnboardingAutomationOptions.SectionName));
+builder.Services.Configure<DiscoveryRunOperationsOptions>(builder.Configuration.GetSection(DiscoveryRunOperationsOptions.SectionName));
 builder.Services.Configure<LlmOptions>(builder.Configuration.GetSection(LlmOptions.SectionName));
 builder.Services.AddSingleton<CrawlOrchestrator>();
 builder.Services.AddSingleton<DiscoveryOrchestrator>();
@@ -40,6 +41,7 @@ builder.Services.AddSingleton<IPageClassificationService>(serviceProvider => ser
 builder.Services.AddSingleton<ILlmStatusProvider>(serviceProvider => serviceProvider.GetRequiredService<LlamaPageClassificationService>());
 builder.Services.AddSingleton<ISourceCandidateProbeService, HttpSourceCandidateProbeService>();
 builder.Services.AddSingleton<IDiscoveryRunProcessor, DiscoveryRunProcessor>();
+builder.Services.AddSingleton<DiscoveryRunMaintenanceService>();
 builder.Services.AddHttpClient<ISourceCandidateSearchProvider, SearchApiSourceCandidateSearchProvider>((serviceProvider, client) =>
 {
 	var options = serviceProvider.GetRequiredService<IOptions<SourceCandidateDiscoveryOptions>>().Value;
@@ -59,6 +61,7 @@ builder.Services.AddHttpClient<IRobotsPolicyService, RobotsPolicyService>();
 builder.Services.AddHostedService<CrawlWorker>();
 builder.Services.AddHostedService<DiscoveryWorker>();
 builder.Services.AddHostedService<DiscoveryRunWorker>();
+builder.Services.AddHostedService<DiscoveryRunMaintenanceWorker>();
 
 var host = builder.Build();
 host.Run();

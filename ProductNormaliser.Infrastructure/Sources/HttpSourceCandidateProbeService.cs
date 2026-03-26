@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using ProductNormaliser.Application.AI;
 using ProductNormaliser.Application.Sources;
@@ -17,12 +18,34 @@ public sealed partial class HttpSourceCandidateProbeService(
     IPageClassificationService pageClassifier,
     IOptions<SourceCandidateDiscoveryOptions> options,
     IOptions<SourceOnboardingAutomationOptions> onboardingAutomationOptions,
+    IOptions<DiscoveryRunOperationsOptions> discoveryRunOperationsOptions,
     IOptions<LlmOptions> llmOptions,
     ILogger<HttpSourceCandidateProbeService> logger) : ISourceCandidateProbeService
 {
     private readonly SourceCandidateDiscoveryOptions options = options.Value;
     private readonly SourceOnboardingAutomationOptions onboardingAutomationOptions = onboardingAutomationOptions.Value;
+    private readonly DiscoveryRunOperationsOptions discoveryRunOperationsOptions = discoveryRunOperationsOptions.Value;
     private readonly LlmOptions llmOptions = llmOptions.Value;
+
+    public HttpSourceCandidateProbeService(
+        IHttpFetcher httpFetcher,
+        IStructuredDataExtractor structuredDataExtractor,
+        IPageClassificationService pageClassifier,
+        IOptions<SourceCandidateDiscoveryOptions> options,
+        IOptions<SourceOnboardingAutomationOptions> onboardingAutomationOptions,
+        IOptions<LlmOptions> llmOptions,
+        ILogger<HttpSourceCandidateProbeService>? logger = null)
+        : this(
+            httpFetcher,
+            structuredDataExtractor,
+            pageClassifier,
+            options,
+            onboardingAutomationOptions,
+            Options.Create(new DiscoveryRunOperationsOptions()),
+            llmOptions,
+            logger ?? NullLogger<HttpSourceCandidateProbeService>.Instance)
+    {
+    }
 
     public async Task<SourceCandidateProbeResult> ProbeAsync(
         SourceCandidateSearchResult candidate,
@@ -66,7 +89,7 @@ public sealed partial class HttpSourceCandidateProbeService(
         var collectAutomationEvidence = normalizedAutomationMode is SourceAutomationModes.SuggestAccept or SourceAutomationModes.AutoAcceptAndSeed;
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, options.ProbeTimeoutSeconds)));
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, discoveryRunOperationsOptions.ProbeTimeoutSeconds)));
 
         var homePageTask = TryFetchTextAsync(candidate.BaseUrl, timeoutCts.Token);
         var robotsTask = TryFetchTextAsync(new Uri(new Uri(candidate.BaseUrl, UriKind.Absolute), "/robots.txt").ToString(), timeoutCts.Token);
@@ -116,7 +139,9 @@ public sealed partial class HttpSourceCandidateProbeService(
             .Select(value => value.Trim())
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault() ?? "product";
-        var timedClassification = await TryClassifyRepresentativeProductPageAsync(representativeProductPageHtml, requestedCategory, timeoutCts.Token);
+        using var llmTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        llmTimeoutCts.CancelAfter(TimeSpan.FromMilliseconds(Math.Max(1, discoveryRunOperationsOptions.LlmVerificationTimeoutMs)));
+        var timedClassification = await TryClassifyRepresentativeProductPageAsync(representativeProductPageHtml, requestedCategory, llmTimeoutCts.Token, cancellationToken);
         var llmResult = timedClassification.Result;
         var llmNeutral = llmResult is not null && IsNeutralLlmResult(llmResult);
         var llmAcceptedRepresentativeProductPage = llmResult is not null
@@ -561,7 +586,7 @@ public sealed partial class HttpSourceCandidateProbeService(
         return extractabilityScore;
     }
 
-    private async Task<TimedPageClassificationResult> TryClassifyRepresentativeProductPageAsync(string? representativeProductPageHtml, string category, CancellationToken cancellationToken)
+    private async Task<TimedPageClassificationResult> TryClassifyRepresentativeProductPageAsync(string? representativeProductPageHtml, string category, CancellationToken llmCancellationToken, CancellationToken outerCancellationToken)
     {
         if (string.IsNullOrWhiteSpace(representativeProductPageHtml))
         {
@@ -586,8 +611,21 @@ public sealed partial class HttpSourceCandidateProbeService(
         try
         {
             return new TimedPageClassificationResult(
-                await pageClassifier.ClassifyAsync(representativeProductPageHtml, category, cancellationToken),
+                await pageClassifier.ClassifyAsync(representativeProductPageHtml, category, llmCancellationToken),
                 stopwatch.ElapsedMilliseconds);
+        }
+        catch (OperationCanceledException) when (!outerCancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning("Representative product-page classification timed out after {TimeoutMs}ms for category {Category} during candidate probing.", discoveryRunOperationsOptions.LlmVerificationTimeoutMs, category);
+            return new TimedPageClassificationResult(new PageClassificationResult
+            {
+                IsProductPage = false,
+                HasSpecifications = false,
+                Confidence = 0d,
+                LlmStatus = LlmStatusCodes.Active,
+                LlmStatusMessage = GetStatusMessage(),
+                Reason = "LLM timeout"
+            }, stopwatch.ElapsedMilliseconds);
         }
         catch (Exception exception)
         {
@@ -602,6 +640,13 @@ public sealed partial class HttpSourceCandidateProbeService(
                 Reason = "LLM runtime failed"
             }, stopwatch.ElapsedMilliseconds);
         }
+    }
+
+    private string GetStatusMessage()
+    {
+        return llmOptions.Enabled
+            ? $"LLM verification timed out after {discoveryRunOperationsOptions.LlmVerificationTimeoutMs}ms. Discovery used heuristics only for this candidate."
+            : "LLM validation is disabled for this environment. Set Llm:Enabled=true and configure a local GGUF model to enable it. Discovery uses heuristics only.";
     }
 
     private static TimeSpan GetRetryDelay(int attempt, int baseDelayMs)

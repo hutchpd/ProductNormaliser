@@ -3,10 +3,13 @@ namespace ProductNormaliser.AdminApi.Contracts;
 public sealed class DiscoveryRunCandidateDto
 {
     public string CandidateKey { get; init; } = string.Empty;
+    public int Revision { get; init; }
     public string State { get; init; } = string.Empty;
     public string? PreviousState { get; init; }
+    public string? SupersededByCandidateKey { get; init; }
     public string? AcceptedSourceId { get; init; }
     public string? StateMessage { get; init; }
+    public string? ArchiveReason { get; init; }
     public string DisplayName { get; init; } = string.Empty;
     public string BaseUrl { get; init; } = string.Empty;
     public string Host { get; init; } = string.Empty;
@@ -29,6 +32,7 @@ public sealed class DiscoveryRunCandidateDto
     public IReadOnlyList<string> DuplicateSourceDisplayNames { get; init; } = [];
     public bool AllowedByGovernance { get; init; }
     public string? GovernanceWarning { get; init; }
+    public DateTime? ArchivedUtc { get; init; }
     public SourceCandidateProbeDto Probe { get; init; } = new();
     public SourceCandidateAutomationAssessmentDto AutomationAssessment { get; init; } = new();
     public IReadOnlyList<SourceCandidateReasonDto> Reasons { get; init; } = [];

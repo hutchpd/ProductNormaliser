@@ -293,6 +293,131 @@
         </form>
     </section>
 
+    <section class="panel panel-muted">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Run History</p>
+                <h2>Recent discovery runs</h2>
+            </div>
+        </div>
+
+        <div class="metric-strip">
+            <article>
+                <span>Visible runs</span>
+                <strong>@(Model.ExpandedDiscoveryRuns.Count + Model.CollapsedDiscoveryRuns.Count)</strong>
+            </article>
+            <article>
+                <span>Active</span>
+                <strong>@Model.ActiveDiscoveryRunCount</strong>
+            </article>
+            <article>
+                <span>Expanded</span>
+                <strong>@Model.ExpandedDiscoveryRuns.Count</strong>
+            </article>
+            <article>
+                <span>Collapsed older runs</span>
+                <strong>@Model.CollapsedDiscoveryRuns.Count</strong>
+            </article>
+        </div>
+
+        @if (Model.ExpandedDiscoveryRuns.Count == 0 && !Model.HasCollapsedDiscoveryRuns)
+        {
+            <div class="empty-panel mt-3">
+                <p class="empty-state">No persisted discovery runs yet.</p>
+                <p class="subtle-copy">Start a discovery run above to create a background record with archive, suppression, and recovery history.</p>
+            </div>
+        }
+        else
+        {
+            <div class="job-card-grid mt-3">
+            @foreach (var run in Model.ExpandedDiscoveryRuns)
+            {
+                var badge = ProductNormaliser.Web.Models.DiscoveryRunPresentation.GetStatusBadge(run.Status);
+
+                <article class="job-card">
+                    <div class="job-card-header">
+                        <div>
+                            <strong>@run.RunId</strong>
+                            <div class="subtle-copy">@Model.GetDiscoveryRunScopeSummary(run)</div>
+                            <div class="subtle-copy">Created @run.CreatedUtc.ToString("u")</div>
+                        </div>
+                        <div class="d-flex flex-column align-items-end gap-2">
+                            <partial name="_StatusBadge" model='new ProductNormaliser.Web.Models.StatusBadgeModel { Text = badge.Text, Tone = badge.Tone }' />
+                            <span class="chip">@ProductNormaliser.Web.Models.DiscoveryRunPresentation.GetStageLabel(run.CurrentStage)</span>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(run.StatusMessage))
+                    {
+                        <p class="subtle-copy mt-2">@run.StatusMessage</p>
+                    }
+
+                    <div class="chip-row compact-wrap mt-2">
+                        <span class="chip">@Model.GetAutomationModeLabel(run.AutomationMode)</span>
+                        <span class="chip">@run.SearchResultCount search hits</span>
+                        <span class="chip">@run.CollapsedCandidateCount candidates</span>
+                        <span class="chip">@run.ProbeCompletedCount probes completed</span>
+                        @if (run.RecoveryAttemptCount > 0)
+                        {
+                            <span class="chip">recovery attempts @run.RecoveryAttemptCount</span>
+                        }
+                    </div>
+
+                    <div class="subtle-copy mt-2">@Model.GetDiscoveryRunOutcomeSummary(run)</div>
+
+                    @if (!string.IsNullOrWhiteSpace(Model.GetDiscoveryRunTimingSummary(run)))
+                    {
+                        <div class="subtle-copy mt-1">@Model.GetDiscoveryRunTimingSummary(run)</div>
+                    }
+
+                    <div class="actions-bar inline-actions mt-3">
+                        <a asp-page="/Sources/DiscoveryRuns/Details" asp-route-runId="@run.RunId" class="btn btn-outline-dark">Open run</a>
+                    </div>
+                </article>
+            }
+            </div>
+
+            @if (Model.HasCollapsedDiscoveryRuns)
+            {
+                <details class="candidate-detail-disclosure mt-3">
+                    <summary>Show @Model.CollapsedDiscoveryRuns.Count older run(s)</summary>
+
+                    <div class="job-card-grid mt-3">
+                    @foreach (var run in Model.CollapsedDiscoveryRuns)
+                    {
+                        var badge = ProductNormaliser.Web.Models.DiscoveryRunPresentation.GetStatusBadge(run.Status);
+
+                        <article class="job-card">
+                            <div class="job-card-header">
+                                <div>
+                                    <strong>@run.RunId</strong>
+                                    <div class="subtle-copy">@Model.GetDiscoveryRunScopeSummary(run)</div>
+                                    <div class="subtle-copy">Created @run.CreatedUtc.ToString("u")</div>
+                                </div>
+                                <div class="d-flex flex-column align-items-end gap-2">
+                                    <partial name="_StatusBadge" model='new ProductNormaliser.Web.Models.StatusBadgeModel { Text = badge.Text, Tone = badge.Tone }' />
+                                    <span class="chip">@ProductNormaliser.Web.Models.DiscoveryRunPresentation.GetStageLabel(run.CurrentStage)</span>
+                                </div>
+                            </div>
+
+                            <div class="subtle-copy mt-2">@Model.GetDiscoveryRunOutcomeSummary(run)</div>
+
+                            @if (!string.IsNullOrWhiteSpace(Model.GetDiscoveryRunTimingSummary(run)))
+                            {
+                                <div class="subtle-copy mt-1">@Model.GetDiscoveryRunTimingSummary(run)</div>
+                            }
+
+                            <div class="actions-bar inline-actions mt-3">
+                                <a asp-page="/Sources/DiscoveryRuns/Details" asp-route-runId="@run.RunId" class="btn btn-outline-dark">Open run</a>
+                            </div>
+                        </article>
+                    }
+                    </div>
+                </details>
+            }
+        }
+    </section>
+
     @if (Model.CandidateDiscoveryResult is not null)
     {
         var visibleCandidates = Model.GetVisibleCandidateResults();

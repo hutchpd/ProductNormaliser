@@ -39,6 +39,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public SourceCandidateDiscoveryResponseDto SourceCandidateDiscoveryResponse { get; set; } = new();
     public DiscoveryRunDto? DiscoveryRun { get; set; }
     public DiscoveryRunDto? CreatedDiscoveryRun { get; set; }
+    public DiscoveryRunPageDto DiscoveryRunPage { get; set; } = new();
     public IReadOnlyList<DiscoveryRunCandidateDto> DiscoveryRunCandidates { get; set; } = [];
     public RegisterSourceRequest? LastRegisteredSourceRequest { get; private set; }
     public DiscoverSourceCandidatesRequest? LastSourceCandidateDiscoveryRequest { get; private set; }
@@ -62,15 +63,21 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public string? LastCancelledJobId { get; private set; }
     public string? LastRequestedCrawlJobId { get; private set; }
     public string? LastRequestedDiscoveryRunId { get; private set; }
+    public string? LastRequestedDiscoveryRunStatus { get; private set; }
+    public int? LastRequestedDiscoveryRunPageNumber { get; private set; }
+    public int? LastRequestedDiscoveryRunPageSize { get; private set; }
     public string? LastPausedDiscoveryRunId { get; private set; }
     public string? LastResumedDiscoveryRunId { get; private set; }
     public string? LastStoppedDiscoveryRunId { get; private set; }
     public string? LastAcceptedDiscoveryRunCandidateRunId { get; private set; }
     public string? LastAcceptedDiscoveryRunCandidateKey { get; private set; }
+    public int? LastAcceptedDiscoveryRunCandidateRevision { get; private set; }
     public string? LastDismissedDiscoveryRunCandidateRunId { get; private set; }
     public string? LastDismissedDiscoveryRunCandidateKey { get; private set; }
+    public int? LastDismissedDiscoveryRunCandidateRevision { get; private set; }
     public string? LastRestoredDiscoveryRunCandidateRunId { get; private set; }
     public string? LastRestoredDiscoveryRunCandidateKey { get; private set; }
+    public int? LastRestoredDiscoveryRunCandidateRevision { get; private set; }
     public ProductListResponseDto ProductPage { get; set; } = new();
     public ProductDetailDto? Product { get; set; }
     public IReadOnlyList<ProductChangeEventDto> ProductHistory { get; set; } = [];
@@ -443,6 +450,33 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             : null);
     }
 
+    public Task<DiscoveryRunPageDto> GetDiscoveryRunsAsync(string? status = null, int page = 1, int pageSize = 10, CancellationToken cancellationToken = default)
+    {
+        LastRequestedDiscoveryRunStatus = status;
+        LastRequestedDiscoveryRunPageNumber = page;
+        LastRequestedDiscoveryRunPageSize = pageSize;
+
+        if (DiscoveryRunException is not null)
+        {
+            return Task.FromException<DiscoveryRunPageDto>(DiscoveryRunException);
+        }
+
+        if (DiscoveryRunPage.Items.Count > 0)
+        {
+            return Task.FromResult(DiscoveryRunPage);
+        }
+
+        DiscoveryRunDto[] items = DiscoveryRun is null ? [] : [DiscoveryRun];
+        return Task.FromResult(new DiscoveryRunPageDto
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = items.Length,
+            TotalPages = items.Length == 0 ? 0 : 1
+        });
+    }
+
     public Task<IReadOnlyList<DiscoveryRunCandidateDto>> GetDiscoveryRunCandidatesAsync(string runId, CancellationToken cancellationToken = default)
     {
         LastRequestedDiscoveryRunId = runId;
@@ -472,25 +506,28 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         return MutateRunAsync(runId, "cancelled", "Discovery run was cancelled before more background work started.");
     }
 
-    public Task<DiscoveryRunCandidateDto> AcceptDiscoveryRunCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default)
+    public Task<DiscoveryRunCandidateDto> AcceptDiscoveryRunCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default)
     {
         LastAcceptedDiscoveryRunCandidateRunId = runId;
         LastAcceptedDiscoveryRunCandidateKey = candidateKey;
-        return MutateCandidateAsync(candidateKey, "manually_accepted", "Accepted by operator.", acceptedSourceId: candidateKey);
+        LastAcceptedDiscoveryRunCandidateRevision = expectedRevision;
+        return MutateCandidateAsync(candidateKey, expectedRevision, "manually_accepted", "Accepted by operator.", acceptedSourceId: candidateKey);
     }
 
-    public Task<DiscoveryRunCandidateDto> DismissDiscoveryRunCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default)
+    public Task<DiscoveryRunCandidateDto> DismissDiscoveryRunCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default)
     {
         LastDismissedDiscoveryRunCandidateRunId = runId;
         LastDismissedDiscoveryRunCandidateKey = candidateKey;
-        return MutateCandidateAsync(candidateKey, "dismissed", "Dismissed by operator.");
+        LastDismissedDiscoveryRunCandidateRevision = expectedRevision;
+        return MutateCandidateAsync(candidateKey, expectedRevision, "dismissed", "Dismissed by operator.");
     }
 
-    public Task<DiscoveryRunCandidateDto> RestoreDiscoveryRunCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default)
+    public Task<DiscoveryRunCandidateDto> RestoreDiscoveryRunCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default)
     {
         LastRestoredDiscoveryRunCandidateRunId = runId;
         LastRestoredDiscoveryRunCandidateKey = candidateKey;
-        return MutateCandidateAsync(candidateKey, "suggested", "Restored to the active candidate queue.");
+        LastRestoredDiscoveryRunCandidateRevision = expectedRevision;
+        return MutateCandidateAsync(candidateKey, expectedRevision, "suggested", "Restored to the active candidate queue.");
     }
     public Task<CrawlJobListResponseDto> GetCrawlJobsAsync(CrawlJobQueryDto? query = null, CancellationToken cancellationToken = default)
         => CrawlJobsException is null ? Task.FromResult(CrawlJobsPage) : Task.FromException<CrawlJobListResponseDto>(CrawlJobsException);
@@ -668,7 +705,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         return Task.FromResult(DiscoveryRun);
     }
 
-    private Task<DiscoveryRunCandidateDto> MutateCandidateAsync(string candidateKey, string state, string stateMessage, string? acceptedSourceId = null)
+    private Task<DiscoveryRunCandidateDto> MutateCandidateAsync(string candidateKey, int expectedRevision, string state, string stateMessage, string? acceptedSourceId = null)
     {
         if (DiscoveryRunException is not null)
         {
@@ -678,11 +715,23 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         var candidate = DiscoveryRunCandidates.FirstOrDefault(item => string.Equals(item.CandidateKey, candidateKey, StringComparison.OrdinalIgnoreCase))
             ?? throw new KeyNotFoundException(candidateKey);
 
+        if (candidate.Revision != expectedRevision)
+        {
+            return Task.FromException<DiscoveryRunCandidateDto>(new AdminApiValidationException(
+                $"Candidate '{candidateKey}' changed while this action was in progress. Refresh the run and retry.",
+                new Dictionary<string, string[]>
+                {
+                    ["request"] = [$"Candidate '{candidateKey}' changed while this action was in progress. Refresh the run and retry."]
+                }));
+        }
+
         var updated = new DiscoveryRunCandidateDto
         {
             CandidateKey = candidate.CandidateKey,
+            Revision = candidate.Revision + 1,
             State = state,
             PreviousState = candidate.State,
+            SupersededByCandidateKey = candidate.SupersededByCandidateKey,
             AcceptedSourceId = acceptedSourceId,
             StateMessage = stateMessage,
             DisplayName = candidate.DisplayName,

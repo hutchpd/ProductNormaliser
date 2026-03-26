@@ -152,6 +152,18 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
         return SendAsync<DiscoveryRunDto>(HttpMethod.Post, "api/sources/discovery-runs", request, AdminApiContractValidator.ValidateDiscoveryRun, cancellationToken);
     }
 
+    public Task<DiscoveryRunPageDto> GetDiscoveryRunsAsync(string? status = null, int page = 1, int pageSize = 10, CancellationToken cancellationToken = default)
+    {
+        var relativeUri = BuildRelativeUri("api/sources/discovery-runs", new Dictionary<string, string?>
+        {
+            ["status"] = status,
+            ["page"] = page.ToString(CultureInfo.InvariantCulture),
+            ["pageSize"] = pageSize.ToString(CultureInfo.InvariantCulture)
+        });
+
+        return GetRequiredAsync<DiscoveryRunPageDto>(relativeUri, AdminApiContractValidator.ValidateDiscoveryRunPage, cancellationToken);
+    }
+
     public Task<DiscoveryRunDto?> GetDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default)
     {
         return GetOptionalAsync<DiscoveryRunDto>($"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}", AdminApiContractValidator.ValidateDiscoveryRun, cancellationToken);
@@ -177,19 +189,19 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
         return SendAsync<DiscoveryRunDto>(HttpMethod.Post, $"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}/stop", body: null, AdminApiContractValidator.ValidateDiscoveryRun, cancellationToken);
     }
 
-    public Task<DiscoveryRunCandidateDto> AcceptDiscoveryRunCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default)
+    public Task<DiscoveryRunCandidateDto> AcceptDiscoveryRunCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default)
     {
-        return SendAsync<DiscoveryRunCandidateDto>(HttpMethod.Post, $"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}/candidates/{Uri.EscapeDataString(candidateKey)}/accept", body: null, payload => AdminApiContractValidator.ValidateDiscoveryRunCandidates([payload]), cancellationToken);
+        return SendAsync<DiscoveryRunCandidateDto>(HttpMethod.Post, $"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}/candidates/{Uri.EscapeDataString(candidateKey)}/accept", new DiscoveryRunCandidateMutationRequest { ExpectedRevision = expectedRevision }, payload => AdminApiContractValidator.ValidateDiscoveryRunCandidates([payload]), cancellationToken);
     }
 
-    public Task<DiscoveryRunCandidateDto> DismissDiscoveryRunCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default)
+    public Task<DiscoveryRunCandidateDto> DismissDiscoveryRunCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default)
     {
-        return SendAsync<DiscoveryRunCandidateDto>(HttpMethod.Post, $"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}/candidates/{Uri.EscapeDataString(candidateKey)}/dismiss", body: null, payload => AdminApiContractValidator.ValidateDiscoveryRunCandidates([payload]), cancellationToken);
+        return SendAsync<DiscoveryRunCandidateDto>(HttpMethod.Post, $"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}/candidates/{Uri.EscapeDataString(candidateKey)}/dismiss", new DiscoveryRunCandidateMutationRequest { ExpectedRevision = expectedRevision }, payload => AdminApiContractValidator.ValidateDiscoveryRunCandidates([payload]), cancellationToken);
     }
 
-    public Task<DiscoveryRunCandidateDto> RestoreDiscoveryRunCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default)
+    public Task<DiscoveryRunCandidateDto> RestoreDiscoveryRunCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default)
     {
-        return SendAsync<DiscoveryRunCandidateDto>(HttpMethod.Post, $"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}/candidates/{Uri.EscapeDataString(candidateKey)}/restore", body: null, payload => AdminApiContractValidator.ValidateDiscoveryRunCandidates([payload]), cancellationToken);
+        return SendAsync<DiscoveryRunCandidateDto>(HttpMethod.Post, $"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}/candidates/{Uri.EscapeDataString(candidateKey)}/restore", new DiscoveryRunCandidateMutationRequest { ExpectedRevision = expectedRevision }, payload => AdminApiContractValidator.ValidateDiscoveryRunCandidates([payload]), cancellationToken);
     }
 
     public Task<CrawlJobListResponseDto> GetCrawlJobsAsync(CrawlJobQueryDto? query = null, CancellationToken cancellationToken = default)
@@ -376,13 +388,16 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
             return;
         }
 
-        if (response.StatusCode == HttpStatusCode.BadRequest)
+        if (response.StatusCode == HttpStatusCode.BadRequest || response.StatusCode == HttpStatusCode.Conflict)
         {
             var problem = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>(JsonOptions, cancellationToken);
             if (problem is not null)
             {
+                var flattenedMessage = problem.Errors
+                    .SelectMany(entry => entry.Value)
+                    .FirstOrDefault(message => !string.IsNullOrWhiteSpace(message));
                 throw new AdminApiValidationException(
-                    problem.Title ?? "Validation failed.",
+                    flattenedMessage ?? problem.Detail ?? problem.Title ?? "Validation failed.",
                     problem.Errors.ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.OrdinalIgnoreCase));
             }
         }

@@ -9,6 +9,27 @@ namespace ProductNormaliser.AdminApi.Controllers;
 [Route("api/sources/discovery-runs")]
 public sealed class DiscoveryRunsController(IDiscoveryRunService discoveryRunService) : ControllerBase
 {
+    [HttpGet]
+    [ProducesResponseType(typeof(Contracts.DiscoveryRunPageDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> List([FromQuery] string? status = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 10, CancellationToken cancellationToken = default)
+    {
+        var results = await discoveryRunService.ListAsync(new DiscoveryRunQuery
+        {
+            Status = status,
+            Page = Math.Max(1, page),
+            PageSize = Math.Clamp(pageSize, 1, 50)
+        }, cancellationToken);
+
+        return Ok(new Contracts.DiscoveryRunPageDto
+        {
+            Items = results.Items.Select(Map).ToArray(),
+            Page = results.Page,
+            PageSize = results.PageSize,
+            TotalCount = results.TotalCount,
+            TotalPages = results.TotalPages
+        });
+    }
+
     [HttpPost]
     [ProducesResponseType(typeof(Contracts.DiscoveryRunDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -83,22 +104,22 @@ public sealed class DiscoveryRunsController(IDiscoveryRunService discoveryRunSer
     [ProducesResponseType(typeof(Contracts.DiscoveryRunCandidateDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status409Conflict)]
-    public Task<IActionResult> AcceptCandidate(string runId, string candidateKey, CancellationToken cancellationToken = default)
-        => MutateCandidateAsync(() => discoveryRunService.AcceptCandidateAsync(runId, candidateKey, cancellationToken));
+    public Task<IActionResult> AcceptCandidate(string runId, string candidateKey, [FromBody] Contracts.DiscoveryRunCandidateMutationRequest request, CancellationToken cancellationToken = default)
+        => MutateCandidateAsync(() => discoveryRunService.AcceptCandidateAsync(runId, candidateKey, request.ExpectedRevision, cancellationToken));
 
     [HttpPost("{runId}/candidates/{candidateKey}/dismiss")]
     [ProducesResponseType(typeof(Contracts.DiscoveryRunCandidateDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status409Conflict)]
-    public Task<IActionResult> DismissCandidate(string runId, string candidateKey, CancellationToken cancellationToken = default)
-        => MutateCandidateAsync(() => discoveryRunService.DismissCandidateAsync(runId, candidateKey, cancellationToken));
+    public Task<IActionResult> DismissCandidate(string runId, string candidateKey, [FromBody] Contracts.DiscoveryRunCandidateMutationRequest request, CancellationToken cancellationToken = default)
+        => MutateCandidateAsync(() => discoveryRunService.DismissCandidateAsync(runId, candidateKey, request.ExpectedRevision, cancellationToken));
 
     [HttpPost("{runId}/candidates/{candidateKey}/restore")]
     [ProducesResponseType(typeof(Contracts.DiscoveryRunCandidateDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status409Conflict)]
-    public Task<IActionResult> RestoreCandidate(string runId, string candidateKey, CancellationToken cancellationToken = default)
-        => MutateCandidateAsync(() => discoveryRunService.RestoreCandidateAsync(runId, candidateKey, cancellationToken));
+    public Task<IActionResult> RestoreCandidate(string runId, string candidateKey, [FromBody] Contracts.DiscoveryRunCandidateMutationRequest request, CancellationToken cancellationToken = default)
+        => MutateCandidateAsync(() => discoveryRunService.RestoreCandidateAsync(runId, candidateKey, request.ExpectedRevision, cancellationToken));
 
     private async Task<IActionResult> MutateRunAsync(Func<Task<DiscoveryRun?>> action)
     {
@@ -154,13 +175,25 @@ public sealed class DiscoveryRunsController(IDiscoveryRunService discoveryRunSer
             SearchResultCount = run.SearchResultCount,
             CollapsedCandidateCount = run.CollapsedCandidateCount,
             ProbeCompletedCount = run.ProbeCompletedCount,
+            ProbeTotalElapsedMs = run.ProbeTotalElapsedMs,
+            ProbeAverageElapsedMs = run.ProbeAverageElapsedMs,
             LlmQueueDepth = run.LlmQueueDepth,
             LlmCompletedCount = run.LlmCompletedCount,
             LlmTotalElapsedMs = run.LlmTotalElapsedMs,
             LlmAverageElapsedMs = run.LlmAverageElapsedMs,
+            SearchElapsedMs = run.SearchElapsedMs,
+            SearchTimeoutBudgetMs = run.SearchTimeoutBudgetMs,
+            ProbeTimeoutBudgetMs = run.ProbeTimeoutBudgetMs,
+            LlmTimeoutBudgetMs = run.LlmTimeoutBudgetMs,
             SuggestedCandidateCount = run.SuggestedCandidateCount,
             AutoAcceptedCandidateCount = run.AutoAcceptedCandidateCount,
             PublishedCandidateCount = run.PublishedCandidateCount,
+            CandidateThroughputPerMinute = run.CandidateThroughputPerMinute,
+            AcceptanceRate = run.AcceptanceRate,
+            ManualReviewRate = run.ManualReviewRate,
+            TimeToFirstAcceptedCandidateMs = run.TimeToFirstAcceptedCandidateMs,
+            FirstAcceptedUtc = run.FirstAcceptedUtc,
+            RecoveryAttemptCount = run.RecoveryAttemptCount,
             CreatedUtc = run.CreatedUtc,
             UpdatedUtc = run.UpdatedUtc,
             StartedUtc = run.StartedUtc,
@@ -181,10 +214,13 @@ public sealed class DiscoveryRunsController(IDiscoveryRunService discoveryRunSer
         return new Contracts.DiscoveryRunCandidateDto
         {
             CandidateKey = candidate.CandidateKey,
+            Revision = candidate.Revision,
             State = candidate.State,
             PreviousState = candidate.PreviousState,
+            SupersededByCandidateKey = candidate.SupersededByCandidateKey,
             AcceptedSourceId = candidate.AcceptedSourceId,
             StateMessage = candidate.StateMessage,
+            ArchiveReason = candidate.ArchiveReason,
             DisplayName = candidate.DisplayName,
             BaseUrl = candidate.BaseUrl,
             Host = candidate.Host,
@@ -207,6 +243,7 @@ public sealed class DiscoveryRunsController(IDiscoveryRunService discoveryRunSer
             DuplicateSourceDisplayNames = candidate.DuplicateSourceDisplayNames,
             AllowedByGovernance = candidate.AllowedByGovernance,
             GovernanceWarning = candidate.GovernanceWarning,
+            ArchivedUtc = candidate.ArchivedUtc,
             Probe = new Contracts.SourceCandidateProbeDto
             {
                 HomePageReachable = candidate.Probe.HomePageReachable,

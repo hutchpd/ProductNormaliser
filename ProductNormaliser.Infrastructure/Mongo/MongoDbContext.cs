@@ -26,6 +26,7 @@ public sealed class MongoDbContext
         CrawlSources = Database.GetCollection<CrawlSource>(MongoCollectionNames.CrawlSources);
         DiscoveryRuns = Database.GetCollection<DiscoveryRun>(MongoCollectionNames.DiscoveryRuns);
         DiscoveryRunCandidates = Database.GetCollection<DiscoveryRunCandidate>(MongoCollectionNames.DiscoveryRunCandidates);
+        DiscoveryRunCandidateDispositions = Database.GetCollection<DiscoveryRunCandidateDisposition>(MongoCollectionNames.DiscoveryRunCandidateDispositions);
         DiscoveryQueueItems = Database.GetCollection<DiscoveryQueueItem>(MongoCollectionNames.DiscoveryQueue);
         DiscoveredUrls = Database.GetCollection<DiscoveredUrl>(MongoCollectionNames.DiscoveredUrls);
         RawPages = Database.GetCollection<RawPage>(MongoCollectionNames.RawPages);
@@ -60,6 +61,8 @@ public sealed class MongoDbContext
     public IMongoCollection<DiscoveryRun> DiscoveryRuns { get; }
 
     public IMongoCollection<DiscoveryRunCandidate> DiscoveryRunCandidates { get; }
+
+    public IMongoCollection<DiscoveryRunCandidateDisposition> DiscoveryRunCandidateDispositions { get; }
 
     public IMongoCollection<DiscoveryQueueItem> DiscoveryQueueItems { get; }
 
@@ -158,6 +161,26 @@ public sealed class MongoDbContext
                 new CreateIndexModel<DiscoveryRunCandidate>(Builders<DiscoveryRunCandidate>.IndexKeys
                     .Ascending(candidate => candidate.RunId)
                     .Descending(candidate => candidate.ConfidenceScore))
+            ],
+            cancellationToken: cancellationToken);
+
+        await DiscoveryRunCandidateDispositions.Indexes.CreateManyAsync(
+            [
+                new CreateIndexModel<DiscoveryRunCandidateDisposition>(Builders<DiscoveryRunCandidateDisposition>.IndexKeys
+                    .Ascending(disposition => disposition.IsActive)
+                    .Ascending(disposition => disposition.ScopeFingerprint)
+                    .Ascending(disposition => disposition.NormalizedHost)
+                    .Descending(disposition => disposition.UpdatedUtc)),
+                new CreateIndexModel<DiscoveryRunCandidateDisposition>(Builders<DiscoveryRunCandidateDisposition>.IndexKeys
+                    .Ascending(disposition => disposition.IsActive)
+                    .Ascending(disposition => disposition.ScopeFingerprint)
+                    .Ascending(disposition => disposition.NormalizedBaseUrl)
+                    .Descending(disposition => disposition.UpdatedUtc)),
+                new CreateIndexModel<DiscoveryRunCandidateDisposition>(Builders<DiscoveryRunCandidateDisposition>.IndexKeys
+                    .Ascending(disposition => disposition.IsActive)
+                    .Ascending(disposition => disposition.ScopeFingerprint)
+                    .Ascending(disposition => disposition.NormalizedDisplayName)
+                    .Descending(disposition => disposition.UpdatedUtc))
             ],
             cancellationToken: cancellationToken);
 

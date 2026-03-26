@@ -350,13 +350,25 @@ public sealed class DiscoveryRunDto
     public int SearchResultCount { get; init; }
     public int CollapsedCandidateCount { get; init; }
     public int ProbeCompletedCount { get; init; }
+    public long ProbeTotalElapsedMs { get; init; }
+    public long? ProbeAverageElapsedMs { get; init; }
     public int LlmQueueDepth { get; init; }
     public int LlmCompletedCount { get; init; }
     public long LlmTotalElapsedMs { get; init; }
     public long? LlmAverageElapsedMs { get; init; }
+    public long? SearchElapsedMs { get; init; }
+    public long? SearchTimeoutBudgetMs { get; init; }
+    public long? ProbeTimeoutBudgetMs { get; init; }
+    public long? LlmTimeoutBudgetMs { get; init; }
     public int SuggestedCandidateCount { get; init; }
     public int AutoAcceptedCandidateCount { get; init; }
     public int PublishedCandidateCount { get; init; }
+    public decimal? CandidateThroughputPerMinute { get; init; }
+    public decimal? AcceptanceRate { get; init; }
+    public decimal? ManualReviewRate { get; init; }
+    public long? TimeToFirstAcceptedCandidateMs { get; init; }
+    public DateTime? FirstAcceptedUtc { get; init; }
+    public int RecoveryAttemptCount { get; init; }
     public DateTime CreatedUtc { get; init; }
     public DateTime UpdatedUtc { get; init; }
     public DateTime? StartedUtc { get; init; }
@@ -365,13 +377,25 @@ public sealed class DiscoveryRunDto
     public IReadOnlyList<SourceCandidateDiscoveryDiagnosticDto> Diagnostics { get; init; } = [];
 }
 
+public sealed class DiscoveryRunPageDto
+{
+    public IReadOnlyList<DiscoveryRunDto> Items { get; init; } = [];
+    public int Page { get; init; }
+    public int PageSize { get; init; }
+    public long TotalCount { get; init; }
+    public int TotalPages { get; init; }
+}
+
 public sealed class DiscoveryRunCandidateDto
 {
     public string CandidateKey { get; init; } = string.Empty;
+    public int Revision { get; init; }
     public string State { get; init; } = string.Empty;
     public string? PreviousState { get; init; }
+    public string? SupersededByCandidateKey { get; init; }
     public string? AcceptedSourceId { get; init; }
     public string? StateMessage { get; init; }
+    public string? ArchiveReason { get; init; }
     public string DisplayName { get; init; } = string.Empty;
     public string BaseUrl { get; init; } = string.Empty;
     public string Host { get; init; } = string.Empty;
@@ -394,9 +418,15 @@ public sealed class DiscoveryRunCandidateDto
     public IReadOnlyList<string> DuplicateSourceDisplayNames { get; init; } = [];
     public bool AllowedByGovernance { get; init; }
     public string? GovernanceWarning { get; init; }
+    public DateTime? ArchivedUtc { get; init; }
     public SourceCandidateProbeDto Probe { get; init; } = new();
     public SourceCandidateAutomationAssessmentDto AutomationAssessment { get; init; } = new();
     public IReadOnlyList<SourceCandidateReasonDto> Reasons { get; init; } = [];
+}
+
+public sealed class DiscoveryRunCandidateMutationRequest
+{
+    public int ExpectedRevision { get; init; }
 }
 
 public sealed class SourceCandidateDiscoveryResponseDto

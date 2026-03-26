@@ -5,10 +5,19 @@ using ProductNormaliser.Application.Sources;
 
 namespace ProductNormaliser.Infrastructure.Sources;
 
-public sealed class SearchApiSourceCandidateSearchProvider(HttpClient httpClient, IOptions<SourceCandidateDiscoveryOptions> options) : ISourceCandidateSearchProvider
+public sealed class SearchApiSourceCandidateSearchProvider(
+    HttpClient httpClient,
+    IOptions<SourceCandidateDiscoveryOptions> options,
+    IOptions<DiscoveryRunOperationsOptions> operationsOptions) : ISourceCandidateSearchProvider
 {
     private static readonly Uri DefaultBaseAddress = new("https://api.search.brave.com", UriKind.Absolute);
     private readonly SourceCandidateDiscoveryOptions options = options.Value;
+    private readonly DiscoveryRunOperationsOptions operationsOptions = operationsOptions.Value;
+
+    public SearchApiSourceCandidateSearchProvider(HttpClient httpClient, IOptions<SourceCandidateDiscoveryOptions> options)
+        : this(httpClient, options, Options.Create(new DiscoveryRunOperationsOptions()))
+    {
+    }
 
     public async Task<SourceCandidateSearchResponse> SearchAsync(DiscoverSourceCandidatesRequest request, CancellationToken cancellationToken = default)
     {
@@ -32,7 +41,7 @@ public sealed class SearchApiSourceCandidateSearchProvider(HttpClient httpClient
         }
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, options.SearchTimeoutSeconds)));
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, operationsOptions.SearchTimeoutSeconds)));
 
         var candidatesByHost = new Dictionary<string, SourceCandidateSearchResult>(StringComparer.OrdinalIgnoreCase);
         var diagnostics = new List<SourceCandidateDiscoveryDiagnostic>();

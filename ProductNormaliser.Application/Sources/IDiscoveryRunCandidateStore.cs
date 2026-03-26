@@ -9,4 +9,6 @@ public interface IDiscoveryRunCandidateStore
     Task<DiscoveryRunCandidate?> GetAsync(string runId, string candidateKey, CancellationToken cancellationToken = default);
 
     Task UpsertAsync(DiscoveryRunCandidate candidate, CancellationToken cancellationToken = default);
+
+    Task<bool> TryUpdateAsync(DiscoveryRunCandidate candidate, int expectedRevision, CancellationToken cancellationToken = default);
 }

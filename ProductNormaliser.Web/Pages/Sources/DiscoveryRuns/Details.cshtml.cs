@@ -30,12 +30,14 @@ public sealed class DetailsModel(
 
     public IReadOnlyList<DiscoveryRunCandidateDto> ActiveCandidates => Candidates
         .Where(candidate => !string.Equals(candidate.State, "dismissed", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(candidate.State, "archived", StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(candidate.State, "archived", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(candidate.State, "superseded", StringComparison.OrdinalIgnoreCase))
         .ToArray();
 
     public IReadOnlyList<DiscoveryRunCandidateDto> ArchivedCandidates => Candidates
         .Where(candidate => string.Equals(candidate.State, "dismissed", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(candidate.State, "archived", StringComparison.OrdinalIgnoreCase))
+            || string.Equals(candidate.State, "archived", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(candidate.State, "superseded", StringComparison.OrdinalIgnoreCase))
         .ToArray();
 
     public PageHeroModel Hero => Run is null
@@ -80,19 +82,19 @@ public sealed class DetailsModel(
         return await RunMutationAsync(() => adminApiClient.StopDiscoveryRunAsync(RunId, cancellationToken), "Stopped discovery run");
     }
 
-    public async Task<IActionResult> OnPostAcceptCandidateAsync(string candidateKey, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostAcceptCandidateAsync(string candidateKey, int expectedRevision, CancellationToken cancellationToken)
     {
-        return await CandidateMutationAsync(() => adminApiClient.AcceptDiscoveryRunCandidateAsync(RunId, candidateKey, cancellationToken), $"Accepted candidate '{candidateKey}'.");
+        return await CandidateMutationAsync(() => adminApiClient.AcceptDiscoveryRunCandidateAsync(RunId, candidateKey, expectedRevision, cancellationToken), $"Accepted candidate '{candidateKey}'.");
     }
 
-    public async Task<IActionResult> OnPostDismissCandidateAsync(string candidateKey, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostDismissCandidateAsync(string candidateKey, int expectedRevision, CancellationToken cancellationToken)
     {
-        return await CandidateMutationAsync(() => adminApiClient.DismissDiscoveryRunCandidateAsync(RunId, candidateKey, cancellationToken), $"Dismissed candidate '{candidateKey}'.");
+        return await CandidateMutationAsync(() => adminApiClient.DismissDiscoveryRunCandidateAsync(RunId, candidateKey, expectedRevision, cancellationToken), $"Dismissed candidate '{candidateKey}'.");
     }
 
-    public async Task<IActionResult> OnPostRestoreCandidateAsync(string candidateKey, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostRestoreCandidateAsync(string candidateKey, int expectedRevision, CancellationToken cancellationToken)
     {
-        return await CandidateMutationAsync(() => adminApiClient.RestoreDiscoveryRunCandidateAsync(RunId, candidateKey, cancellationToken), $"Restored candidate '{candidateKey}'.");
+        return await CandidateMutationAsync(() => adminApiClient.RestoreDiscoveryRunCandidateAsync(RunId, candidateKey, expectedRevision, cancellationToken), $"Restored candidate '{candidateKey}'.");
     }
 
     public string GetCandidateStatusTone(DiscoveryRunCandidateDto candidate)
@@ -102,6 +104,7 @@ public sealed class DetailsModel(
             "auto_accepted" => "completed",
             "manually_accepted" => "completed",
             "suggested" => "pending",
+            "superseded" => "neutral",
             "failed" => "danger",
             _ => "neutral"
         };

@@ -33,6 +33,15 @@ internal static class DiscoveryRunStateMachine
             || string.Equals(status, DiscoveryRunStatuses.Failed, StringComparison.OrdinalIgnoreCase);
     }
 
+    public static bool IsActiveStatus(string status)
+    {
+        return string.Equals(status, DiscoveryRunStatuses.Queued, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, DiscoveryRunStatuses.Running, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, DiscoveryRunStatuses.Paused, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, DiscoveryRunStatuses.CancelRequested, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, DiscoveryRunStatuses.Recoverable, StringComparison.OrdinalIgnoreCase);
+    }
+
     public static bool CanAcceptCandidate(string state)
     {
         return string.Equals(state, DiscoveryRunCandidateStates.Suggested, StringComparison.OrdinalIgnoreCase);
@@ -49,5 +58,21 @@ internal static class DiscoveryRunStateMachine
     {
         return string.Equals(state, DiscoveryRunCandidateStates.Dismissed, StringComparison.OrdinalIgnoreCase)
             || string.Equals(state, DiscoveryRunCandidateStates.Archived, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool CanWorkerProgressCandidate(string state)
+    {
+        return string.Equals(state, DiscoveryRunCandidateStates.Pending, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(state, DiscoveryRunCandidateStates.Probing, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(state, DiscoveryRunCandidateStates.AwaitingLlm, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool CanSupersedeCandidate(string state)
+    {
+        return string.Equals(state, DiscoveryRunCandidateStates.Pending, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(state, DiscoveryRunCandidateStates.Probing, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(state, DiscoveryRunCandidateStates.AwaitingLlm, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(state, DiscoveryRunCandidateStates.Suggested, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(state, DiscoveryRunCandidateStates.AutoAccepted, StringComparison.OrdinalIgnoreCase);
     }
 }

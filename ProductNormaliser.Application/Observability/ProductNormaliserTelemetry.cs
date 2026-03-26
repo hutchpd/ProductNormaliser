@@ -65,4 +65,69 @@ public static class ProductNormaliserTelemetry
         "productnormaliser.crawl.job.target_count",
         unit: "{target}",
         description: "Number of targets included in each crawl job.");
+
+    public static readonly Counter<long> DiscoveryRunsStarted = Meter.CreateCounter<long>(
+        "productnormaliser.discovery.runs.started",
+        unit: "{run}",
+        description: "Number of persisted discovery runs started by the worker.");
+
+    public static readonly Counter<long> DiscoveryRunsRecovered = Meter.CreateCounter<long>(
+        "productnormaliser.discovery.runs.recovered",
+        unit: "{run}",
+        description: "Number of stale discovery runs re-queued by the recovery sweeper.");
+
+    public static readonly Counter<long> DiscoveryRunsFailedRecovery = Meter.CreateCounter<long>(
+        "productnormaliser.discovery.runs.recovery_failed",
+        unit: "{run}",
+        description: "Number of stale discovery runs failed after exhausting recovery attempts.");
+
+    public static readonly Counter<long> DiscoveryCandidatesProcessed = Meter.CreateCounter<long>(
+        "productnormaliser.discovery.candidates.processed",
+        unit: "{candidate}",
+        description: "Candidate processing outcomes by final state.");
+
+    public static readonly Counter<long> DiscoveryCandidatesArchived = Meter.CreateCounter<long>(
+        "productnormaliser.discovery.candidates.archived",
+        unit: "{candidate}",
+        description: "Candidates moved into archive by suppression or retention policy.");
+
+    public static readonly Histogram<double> DiscoverySearchDurationMs = Meter.CreateHistogram<double>(
+        "productnormaliser.discovery.search.duration",
+        unit: "ms",
+        description: "Search-provider latency per discovery run.");
+
+    public static readonly Histogram<double> DiscoveryProbeDurationMs = Meter.CreateHistogram<double>(
+        "productnormaliser.discovery.probe.duration",
+        unit: "ms",
+        description: "Probe latency per candidate.");
+
+    public static readonly Histogram<double> DiscoveryLlmDurationMs = Meter.CreateHistogram<double>(
+        "productnormaliser.discovery.llm.duration",
+        unit: "ms",
+        description: "LLM verification latency per candidate.");
+
+    public static readonly Histogram<int> DiscoveryLlmQueueDepth = Meter.CreateHistogram<int>(
+        "productnormaliser.discovery.llm.queue_depth",
+        unit: "{candidate}",
+        description: "Observed LLM queue depth while a discovery run is processing candidates.");
+
+    public static readonly Histogram<double> DiscoveryCandidateThroughputPerMinute = Meter.CreateHistogram<double>(
+        "productnormaliser.discovery.candidate_throughput_per_minute",
+        unit: "{candidate}/min",
+        description: "Observed candidate throughput per run.");
+
+    public static readonly Histogram<double> DiscoveryAcceptanceRate = Meter.CreateHistogram<double>(
+        "productnormaliser.discovery.acceptance_rate",
+        unit: "ratio",
+        description: "Accepted-candidate ratio per discovery run.");
+
+    public static readonly Histogram<double> DiscoveryManualReviewRate = Meter.CreateHistogram<double>(
+        "productnormaliser.discovery.manual_review_rate",
+        unit: "ratio",
+        description: "Manual-review ratio per discovery run.");
+
+    public static readonly Histogram<double> DiscoveryTimeToFirstAcceptedMs = Meter.CreateHistogram<double>(
+        "productnormaliser.discovery.time_to_first_accepted",
+        unit: "ms",
+        description: "Elapsed time from run start to first accepted candidate.");
 }

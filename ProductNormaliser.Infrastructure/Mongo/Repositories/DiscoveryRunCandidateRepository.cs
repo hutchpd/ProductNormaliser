@@ -29,4 +29,17 @@ public sealed class DiscoveryRunCandidateRepository(MongoDbContext context)
             new ReplaceOptions { IsUpsert = true },
             cancellationToken);
     }
+
+    public async Task<bool> TryUpdateAsync(DiscoveryRunCandidate candidate, int expectedRevision, CancellationToken cancellationToken = default)
+    {
+        var result = await Collection.ReplaceOneAsync(
+            existing => existing.RunId == candidate.RunId
+                && existing.CandidateKey == candidate.CandidateKey
+                && existing.Revision == expectedRevision,
+            candidate,
+            new ReplaceOptions { IsUpsert = false },
+            cancellationToken);
+
+        return result.ModifiedCount == 1;
+    }
 }

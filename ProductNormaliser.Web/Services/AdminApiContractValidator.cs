@@ -111,6 +111,7 @@ internal static class AdminApiContractValidator
     {
         "queued",
         "running",
+        "recoverable",
         "paused",
         "cancel_requested",
         "cancelled",
@@ -219,13 +220,33 @@ internal static class AdminApiContractValidator
 
     public static void ValidateDiscoveryRun(DiscoveryRunDto payload)
     {
-        ValidateRequiredString(payload.RunId, "discoveryRun.runId");
-        ValidateStringItems(payload.RequestedCategoryKeys, "discoveryRun.requestedCategoryKeys");
-        ValidateEnumValue(payload.AutomationMode, SourceAutomationModes, "discoveryRun.automationMode", value => value);
-        ValidateEnumValue(payload.Status, DiscoveryRunStatuses, "discoveryRun.status", NormalizeLowerUnderscore);
-        ValidateEnumValue(payload.CurrentStage, DiscoveryRunStages, "discoveryRun.currentStage", NormalizeLowerUnderscore);
-        ValidateEnumValue(payload.LlmStatus, LlmStatuses, "discoveryRun.llmStatus", value => value);
-        ValidateItems(payload.Diagnostics, "discoveryRun.diagnostics", ValidateSourceCandidateDiscoveryDiagnostic);
+        ValidateDiscoveryRun(payload, "discoveryRun");
+    }
+
+    public static void ValidateDiscoveryRunPage(DiscoveryRunPageDto payload)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        if (payload.Page <= 0)
+        {
+            throw new InvalidOperationException("discoveryRunPage.page must be a positive integer.");
+        }
+
+        if (payload.PageSize <= 0)
+        {
+            throw new InvalidOperationException("discoveryRunPage.pageSize must be a positive integer.");
+        }
+
+        if (payload.TotalCount < 0)
+        {
+            throw new InvalidOperationException("discoveryRunPage.totalCount must be zero or greater.");
+        }
+
+        if (payload.TotalPages < 0)
+        {
+            throw new InvalidOperationException("discoveryRunPage.totalPages must be zero or greater.");
+        }
+
+        ValidateItems(payload.Items, "discoveryRunPage.items", ValidateDiscoveryRun);
     }
 
     public static void ValidateDiscoveryRunCandidates(IReadOnlyList<DiscoveryRunCandidateDto> payload)
@@ -433,6 +454,11 @@ internal static class AdminApiContractValidator
     private static void ValidateDiscoveryRunCandidate(DiscoveryRunCandidateDto payload, string path)
     {
         ValidateRequiredString(payload.CandidateKey, $"{path}.candidateKey");
+        if (payload.Revision <= 0)
+        {
+            throw new InvalidOperationException($"{path}.revision must be a positive integer.");
+        }
+
         ValidateEnumValue(payload.State, DiscoveryRunCandidateStates, $"{path}.state", NormalizeLowerUnderscore);
         ValidateSourceCandidate(new SourceCandidateDto
         {
@@ -463,6 +489,17 @@ internal static class AdminApiContractValidator
             AutomationAssessment = payload.AutomationAssessment,
             Reasons = payload.Reasons
         }, path);
+    }
+
+    private static void ValidateDiscoveryRun(DiscoveryRunDto payload, string path)
+    {
+        ValidateRequiredString(payload.RunId, $"{path}.runId");
+        ValidateStringItems(payload.RequestedCategoryKeys, $"{path}.requestedCategoryKeys");
+        ValidateEnumValue(payload.AutomationMode, SourceAutomationModes, $"{path}.automationMode", value => value);
+        ValidateEnumValue(payload.Status, DiscoveryRunStatuses, $"{path}.status", NormalizeLowerUnderscore);
+        ValidateEnumValue(payload.CurrentStage, DiscoveryRunStages, $"{path}.currentStage", NormalizeLowerUnderscore);
+        ValidateEnumValue(payload.LlmStatus, LlmStatuses, $"{path}.llmStatus", value => value);
+        ValidateItems(payload.Diagnostics, $"{path}.diagnostics", ValidateSourceCandidateDiscoveryDiagnostic);
     }
 
     private static void ValidateSourceCandidateDiscoveryDiagnostic(SourceCandidateDiscoveryDiagnosticDto payload, string path)

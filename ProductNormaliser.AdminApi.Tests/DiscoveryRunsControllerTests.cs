@@ -82,7 +82,7 @@ public sealed class DiscoveryRunsControllerTests
         };
         var controller = new DiscoveryRunsController(service);
 
-        var result = await controller.RestoreCandidate("discovery_run_1", "safe_shop", CancellationToken.None);
+        var result = await controller.RestoreCandidate("discovery_run_1", "safe_shop", new DiscoveryRunCandidateMutationRequest { ExpectedRevision = 4 }, CancellationToken.None);
 
         Assert.That(result, Is.TypeOf<OkObjectResult>());
         var ok = (OkObjectResult)result;
@@ -92,8 +92,10 @@ public sealed class DiscoveryRunsControllerTests
         {
             Assert.That(dto, Is.Not.Null);
             Assert.That(dto!.CandidateKey, Is.EqualTo("safe_shop"));
+            Assert.That(dto.Revision, Is.EqualTo(4));
             Assert.That(dto.State, Is.EqualTo(DiscoveryRunCandidateStates.Suggested));
             Assert.That(dto.DisplayName, Is.EqualTo("Safe Shop"));
+            Assert.That(service.LastRestoreExpectedRevision, Is.EqualTo(4));
         });
     }
 
@@ -123,6 +125,7 @@ public sealed class DiscoveryRunsControllerTests
             Id = $"discovery_run_1:{candidateKey}",
             RunId = "discovery_run_1",
             CandidateKey = candidateKey,
+            Revision = 4,
             State = state,
             DisplayName = "Safe Shop",
             BaseUrl = "https://safe.example/",
@@ -153,12 +156,22 @@ public sealed class DiscoveryRunsControllerTests
         public DiscoveryRun? CreatedRun { get; set; }
         public InvalidOperationException? PauseException { get; set; }
         public DiscoveryRunCandidate? RestoredCandidate { get; set; }
+        public int? LastRestoreExpectedRevision { get; private set; }
 
         public Task<DiscoveryRun> CreateAsync(ProductNormaliser.Application.Sources.CreateDiscoveryRunRequest request, CancellationToken cancellationToken = default)
             => Task.FromResult(CreatedRun ?? throw new InvalidOperationException("No run configured."));
 
         public Task<DiscoveryRun?> GetAsync(string runId, CancellationToken cancellationToken = default)
             => Task.FromResult(CreatedRun is not null && string.Equals(CreatedRun.RunId, runId, StringComparison.OrdinalIgnoreCase) ? CreatedRun : null);
+
+        public Task<DiscoveryRunPage> ListAsync(DiscoveryRunQuery query, CancellationToken cancellationToken = default)
+            => Task.FromResult(new DiscoveryRunPage
+            {
+                Items = CreatedRun is null ? [] : [CreatedRun],
+                Page = query.Page,
+                PageSize = query.PageSize,
+                TotalCount = CreatedRun is null ? 0 : 1
+            });
 
         public Task<IReadOnlyList<DiscoveryRunCandidate>> ListCandidatesAsync(string runId, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<DiscoveryRunCandidate>>(RestoredCandidate is null ? [] : [RestoredCandidate]);
@@ -168,8 +181,12 @@ public sealed class DiscoveryRunsControllerTests
 
         public Task<DiscoveryRun?> ResumeAsync(string runId, CancellationToken cancellationToken = default) => Task.FromResult(CreatedRun);
         public Task<DiscoveryRun?> StopAsync(string runId, CancellationToken cancellationToken = default) => Task.FromResult(CreatedRun);
-        public Task<DiscoveryRunCandidate?> AcceptCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default) => Task.FromResult<DiscoveryRunCandidate?>(null);
-        public Task<DiscoveryRunCandidate?> DismissCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default) => Task.FromResult<DiscoveryRunCandidate?>(null);
-        public Task<DiscoveryRunCandidate?> RestoreCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default) => Task.FromResult(RestoredCandidate);
+        public Task<DiscoveryRunCandidate?> AcceptCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default) => Task.FromResult<DiscoveryRunCandidate?>(null);
+        public Task<DiscoveryRunCandidate?> DismissCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default) => Task.FromResult<DiscoveryRunCandidate?>(null);
+        public Task<DiscoveryRunCandidate?> RestoreCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default)
+        {
+            LastRestoreExpectedRevision = expectedRevision;
+            return Task.FromResult(RestoredCandidate);
+        }
     }
 }

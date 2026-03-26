@@ -8,11 +8,30 @@ namespace ProductNormaliser.Application.Sources;
 public sealed class DiscoveryRunService(
     IDiscoveryRunStore discoveryRunStore,
     IDiscoveryRunCandidateStore discoveryRunCandidateStore,
+    IDiscoveryRunCandidateDispositionStore discoveryRunCandidateDispositionStore,
     ICategoryMetadataService categoryMetadataService,
     ISourceManagementService sourceManagementService,
     IManagementAuditService managementAuditService,
     ILlmStatusProvider? llmStatusProvider = null) : IDiscoveryRunService
 {
+    public DiscoveryRunService(
+        IDiscoveryRunStore discoveryRunStore,
+        IDiscoveryRunCandidateStore discoveryRunCandidateStore,
+        ICategoryMetadataService categoryMetadataService,
+        ISourceManagementService sourceManagementService,
+        IManagementAuditService managementAuditService,
+        ILlmStatusProvider? llmStatusProvider = null)
+        : this(
+            discoveryRunStore,
+            discoveryRunCandidateStore,
+            NullDiscoveryRunCandidateDispositionStore.Instance,
+            categoryMetadataService,
+            sourceManagementService,
+            managementAuditService,
+            llmStatusProvider)
+    {
+    }
+
     public async Task<DiscoveryRun> CreateAsync(CreateDiscoveryRunRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -74,6 +93,12 @@ public sealed class DiscoveryRunService(
             cancellationToken);
 
         return run;
+    }
+
+    public Task<DiscoveryRunPage> ListAsync(DiscoveryRunQuery query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return discoveryRunStore.ListAsync(query, cancellationToken);
     }
 
     public Task<DiscoveryRun?> GetAsync(string runId, CancellationToken cancellationToken = default)
@@ -156,7 +181,7 @@ public sealed class DiscoveryRunService(
         return run;
     }
 
-    public async Task<DiscoveryRunCandidate?> AcceptCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default)
+    public async Task<DiscoveryRunCandidate?> AcceptCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default)
     {
         var run = await RequireRunAsync(runId, cancellationToken);
         var candidate = await discoveryRunCandidateStore.GetAsync(run.RunId, NormalizeRequired(candidateKey, nameof(candidateKey)), cancellationToken);
@@ -170,34 +195,64 @@ public sealed class DiscoveryRunService(
             throw new InvalidOperationException($"Candidate '{candidate.CandidateKey}' cannot be accepted from state '{candidate.State}'.");
         }
 
+        var claimedCandidate = CloneCandidate(candidate);
+        claimedCandidate.PreviousState = candidate.State;
+        claimedCandidate.State = DiscoveryRunCandidateStates.ManuallyAccepted;
+        claimedCandidate.StateMessage = "Accepted by operator. Publishing source registration.";
+        claimedCandidate.DecisionUtc = DateTime.UtcNow;
+        claimedCandidate.UpdatedUtc = claimedCandidate.DecisionUtc.Value;
+        claimedCandidate.Revision = GetNextRevision(claimedCandidate.Revision, expectedRevision);
+        claimedCandidate.SupersededByCandidateKey = null;
+
+        if (!await discoveryRunCandidateStore.TryUpdateAsync(claimedCandidate, expectedRevision, cancellationToken))
+        {
+            throw CreateConcurrencyException(candidate.CandidateKey);
+        }
+
         var registration = new CrawlSourceRegistration
         {
-            SourceId = candidate.CandidateKey,
-            DisplayName = candidate.DisplayName,
-            BaseUrl = candidate.BaseUrl,
-            AllowedMarkets = candidate.AllowedMarkets.Count == 0 && !string.IsNullOrWhiteSpace(run.Market)
+            SourceId = claimedCandidate.CandidateKey,
+            DisplayName = claimedCandidate.DisplayName,
+            BaseUrl = claimedCandidate.BaseUrl,
+            AllowedMarkets = claimedCandidate.AllowedMarkets.Count == 0 && !string.IsNullOrWhiteSpace(run.Market)
                 ? [run.Market]
-                : candidate.AllowedMarkets,
-            PreferredLocale = candidate.PreferredLocale ?? run.Locale,
+                : claimedCandidate.AllowedMarkets,
+            PreferredLocale = claimedCandidate.PreferredLocale ?? run.Locale,
             AutomationPolicy = new SourceAutomationPolicy { Mode = run.AutomationMode },
-            SupportedCategoryKeys = candidate.MatchedCategoryKeys.Count == 0 ? run.RequestedCategoryKeys : candidate.MatchedCategoryKeys,
+            SupportedCategoryKeys = claimedCandidate.MatchedCategoryKeys.Count == 0 ? run.RequestedCategoryKeys : claimedCandidate.MatchedCategoryKeys,
             IsEnabled = true
         };
 
-        var source = await sourceManagementService.RegisterAsync(registration, cancellationToken);
-        candidate.AcceptedSourceId = source.Id;
-        candidate.PreviousState = candidate.State;
-        candidate.State = DiscoveryRunCandidateStates.ManuallyAccepted;
-        candidate.StateMessage = $"Accepted and registered as source '{source.Id}'.";
-        candidate.DecisionUtc = DateTime.UtcNow;
-        candidate.UpdatedUtc = candidate.DecisionUtc.Value;
-        await discoveryRunCandidateStore.UpsertAsync(candidate, cancellationToken);
-        return candidate;
+        try
+        {
+            var source = await sourceManagementService.RegisterAsync(registration, cancellationToken);
+            claimedCandidate.AcceptedSourceId = source.Id;
+            claimedCandidate.StateMessage = $"Accepted and registered as source '{source.Id}'.";
+            claimedCandidate.UpdatedUtc = DateTime.UtcNow;
+            claimedCandidate.DecisionUtc = claimedCandidate.UpdatedUtc;
+            claimedCandidate.Revision += 1;
+            await discoveryRunCandidateStore.UpsertAsync(claimedCandidate, cancellationToken);
+
+            await SupersedeDuplicateCandidatesAsync(run, claimedCandidate, cancellationToken);
+            await RefreshRunSummaryAsync(run, cancellationToken);
+            return claimedCandidate;
+        }
+        catch
+        {
+            claimedCandidate.State = claimedCandidate.PreviousState ?? DiscoveryRunCandidateStates.Suggested;
+            claimedCandidate.StateMessage = "Acceptance failed before source registration completed. The candidate was returned to review.";
+            claimedCandidate.AcceptedSourceId = null;
+            claimedCandidate.UpdatedUtc = DateTime.UtcNow;
+            claimedCandidate.Revision += 1;
+            await discoveryRunCandidateStore.UpsertAsync(claimedCandidate, cancellationToken);
+            await RefreshRunSummaryAsync(run, cancellationToken);
+            throw;
+        }
     }
 
-    public async Task<DiscoveryRunCandidate?> DismissCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default)
+    public async Task<DiscoveryRunCandidate?> DismissCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default)
     {
-        _ = await RequireRunAsync(runId, cancellationToken);
+        var run = await RequireRunAsync(runId, cancellationToken);
         var candidate = await discoveryRunCandidateStore.GetAsync(NormalizeRequired(runId, nameof(runId)), NormalizeRequired(candidateKey, nameof(candidateKey)), cancellationToken);
         if (candidate is null)
         {
@@ -209,18 +264,30 @@ public sealed class DiscoveryRunService(
             throw new InvalidOperationException($"Candidate '{candidate.CandidateKey}' cannot be dismissed from state '{candidate.State}'.");
         }
 
-        candidate.PreviousState = candidate.State;
-        candidate.State = DiscoveryRunCandidateStates.Dismissed;
-        candidate.StateMessage = "Dismissed by operator.";
-        candidate.DecisionUtc = DateTime.UtcNow;
-        candidate.UpdatedUtc = candidate.DecisionUtc.Value;
-        await discoveryRunCandidateStore.UpsertAsync(candidate, cancellationToken);
-        return candidate;
+        var updatedCandidate = CloneCandidate(candidate);
+        updatedCandidate.PreviousState = candidate.State;
+        updatedCandidate.State = DiscoveryRunCandidateStates.Dismissed;
+        updatedCandidate.StateMessage = "Dismissed by operator.";
+        updatedCandidate.DecisionUtc = DateTime.UtcNow;
+        updatedCandidate.UpdatedUtc = updatedCandidate.DecisionUtc.Value;
+        updatedCandidate.ArchiveReason = null;
+        updatedCandidate.ArchivedUtc = null;
+        updatedCandidate.SuppressionDispositionId = null;
+        updatedCandidate.Revision = GetNextRevision(updatedCandidate.Revision, expectedRevision);
+
+        if (!await discoveryRunCandidateStore.TryUpdateAsync(updatedCandidate, expectedRevision, cancellationToken))
+        {
+            throw CreateConcurrencyException(candidate.CandidateKey);
+        }
+
+        await UpsertDispositionAsync(run, updatedCandidate, DiscoveryRunCandidateStates.Dismissed, supersededByCandidateKey: null, cancellationToken);
+        await RefreshRunSummaryAsync(run, cancellationToken);
+        return updatedCandidate;
     }
 
-    public async Task<DiscoveryRunCandidate?> RestoreCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default)
+    public async Task<DiscoveryRunCandidate?> RestoreCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default)
     {
-        _ = await RequireRunAsync(runId, cancellationToken);
+        var run = await RequireRunAsync(runId, cancellationToken);
         var candidate = await discoveryRunCandidateStore.GetAsync(NormalizeRequired(runId, nameof(runId)), NormalizeRequired(candidateKey, nameof(candidateKey)), cancellationToken);
         if (candidate is null)
         {
@@ -232,13 +299,228 @@ public sealed class DiscoveryRunService(
             throw new InvalidOperationException($"Candidate '{candidate.CandidateKey}' cannot be restored from state '{candidate.State}'.");
         }
 
-        candidate.State = string.IsNullOrWhiteSpace(candidate.PreviousState)
+        var updatedCandidate = CloneCandidate(candidate);
+        updatedCandidate.State = DetermineRestoreState(candidate);
+        updatedCandidate.StateMessage = "Restored to the active candidate queue.";
+        updatedCandidate.SupersededByCandidateKey = null;
+        updatedCandidate.SuppressionDispositionId = null;
+        updatedCandidate.ArchiveReason = null;
+        updatedCandidate.ArchivedUtc = null;
+        updatedCandidate.UpdatedUtc = DateTime.UtcNow;
+        updatedCandidate.Revision = GetNextRevision(updatedCandidate.Revision, expectedRevision);
+
+        if (!await discoveryRunCandidateStore.TryUpdateAsync(updatedCandidate, expectedRevision, cancellationToken))
+        {
+            throw CreateConcurrencyException(candidate.CandidateKey);
+        }
+
+        await DeactivateMatchingDispositionsAsync(run, candidate, cancellationToken);
+        await RefreshRunSummaryAsync(run, cancellationToken);
+        return updatedCandidate;
+    }
+
+    private async Task RefreshRunSummaryAsync(DiscoveryRun run, CancellationToken cancellationToken)
+    {
+        var candidates = await discoveryRunCandidateStore.ListByRunAsync(run.RunId, cancellationToken);
+        run.SuggestedCandidateCount = candidates.Count(candidate => string.Equals(candidate.State, DiscoveryRunCandidateStates.Suggested, StringComparison.OrdinalIgnoreCase));
+        run.AutoAcceptedCandidateCount = Math.Max(
+            run.AutoAcceptedCandidateCount,
+            candidates.Count(candidate => string.Equals(candidate.State, DiscoveryRunCandidateStates.AutoAccepted, StringComparison.OrdinalIgnoreCase)));
+        run.PublishedCandidateCount = candidates.Count(candidate => !string.IsNullOrWhiteSpace(candidate.AcceptedSourceId));
+        var processedCandidates = candidates.Count(candidate => !string.Equals(candidate.State, DiscoveryRunCandidateStates.Pending, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(candidate.State, DiscoveryRunCandidateStates.Probing, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(candidate.State, DiscoveryRunCandidateStates.AwaitingLlm, StringComparison.OrdinalIgnoreCase));
+        var manualReviewCandidates = candidates.Count(candidate => string.Equals(candidate.State, DiscoveryRunCandidateStates.Suggested, StringComparison.OrdinalIgnoreCase));
+        var acceptedCandidates = candidates.Count(candidate => !string.IsNullOrWhiteSpace(candidate.AcceptedSourceId)
+            || string.Equals(candidate.State, DiscoveryRunCandidateStates.AutoAccepted, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(candidate.State, DiscoveryRunCandidateStates.ManuallyAccepted, StringComparison.OrdinalIgnoreCase));
+        if (processedCandidates > 0)
+        {
+            run.AcceptanceRate = decimal.Round(acceptedCandidates / (decimal)processedCandidates, 4, MidpointRounding.AwayFromZero);
+            run.ManualReviewRate = decimal.Round(manualReviewCandidates / (decimal)processedCandidates, 4, MidpointRounding.AwayFromZero);
+        }
+
+        var firstAcceptedUtc = candidates
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate.AcceptedSourceId) && candidate.DecisionUtc is not null)
+            .OrderBy(candidate => candidate.DecisionUtc)
+            .Select(candidate => candidate.DecisionUtc)
+            .FirstOrDefault();
+        run.FirstAcceptedUtc = firstAcceptedUtc;
+        if (run.StartedUtc is not null && firstAcceptedUtc is not null)
+        {
+            run.TimeToFirstAcceptedCandidateMs = Math.Max(0L, (long)(firstAcceptedUtc.Value - run.StartedUtc.Value).TotalMilliseconds);
+        }
+
+        if (run.StartedUtc is not null)
+        {
+            var elapsedMinutes = Math.Max(1d / 60d, Math.Max(0d, (DateTime.UtcNow - run.StartedUtc.Value).TotalMinutes));
+            run.CandidateThroughputPerMinute = decimal.Round((decimal)(run.ProbeCompletedCount / elapsedMinutes), 4, MidpointRounding.AwayFromZero);
+        }
+
+        run.UpdatedUtc = DateTime.UtcNow;
+        await discoveryRunStore.UpsertAsync(run, cancellationToken);
+    }
+
+    private async Task SupersedeDuplicateCandidatesAsync(DiscoveryRun run, DiscoveryRunCandidate acceptedCandidate, CancellationToken cancellationToken)
+    {
+        var candidates = await discoveryRunCandidateStore.ListByRunAsync(run.RunId, cancellationToken);
+        foreach (var candidate in candidates)
+        {
+            if (!DiscoveryRunStateMachine.CanSupersedeCandidate(candidate.State)
+                || !DiscoveryRunCandidateComparer.ArePotentialDuplicates(acceptedCandidate, candidate))
+            {
+                continue;
+            }
+
+            var supersededCandidate = CloneCandidate(candidate);
+            supersededCandidate.PreviousState = candidate.State;
+            supersededCandidate.State = DiscoveryRunCandidateStates.Superseded;
+            supersededCandidate.SupersededByCandidateKey = acceptedCandidate.CandidateKey;
+            supersededCandidate.StateMessage = $"Superseded by accepted candidate '{acceptedCandidate.DisplayName}'.";
+            supersededCandidate.DecisionUtc = DateTime.UtcNow;
+            supersededCandidate.UpdatedUtc = supersededCandidate.DecisionUtc.Value;
+            supersededCandidate.ArchiveReason = null;
+            supersededCandidate.ArchivedUtc = null;
+            supersededCandidate.Revision = candidate.Revision + 1;
+
+            if (await discoveryRunCandidateStore.TryUpdateAsync(supersededCandidate, candidate.Revision, cancellationToken))
+            {
+                await UpsertDispositionAsync(run, supersededCandidate, DiscoveryRunCandidateStates.Superseded, acceptedCandidate.CandidateKey, cancellationToken);
+            }
+        }
+    }
+
+    private async Task UpsertDispositionAsync(DiscoveryRun run, DiscoveryRunCandidate candidate, string state, string? supersededByCandidateKey, CancellationToken cancellationToken)
+    {
+        var disposition = new DiscoveryRunCandidateDisposition
+        {
+            Id = BuildDispositionId(run, candidate, state),
+            State = state,
+            ScopeFingerprint = DiscoveryRunScopePolicy.CreateFingerprint(run),
+            RequestedCategoryKeys = run.RequestedCategoryKeys.ToArray(),
+            Market = run.Market,
+            Locale = run.Locale,
+            NormalizedHost = DiscoveryRunCandidateIdentity.GetNormalizedHost(candidate),
+            NormalizedBaseUrl = DiscoveryRunCandidateIdentity.GetNormalizedBaseUrl(candidate),
+            NormalizedDisplayName = DiscoveryRunCandidateIdentity.GetNormalizedDisplayName(candidate),
+            AllowedMarkets = DiscoveryRunCandidateIdentity.NormalizeMarkets(candidate.AllowedMarkets),
+            SourceRunId = run.RunId,
+            SourceCandidateKey = candidate.CandidateKey,
+            SupersededByCandidateKey = supersededByCandidateKey,
+            IsActive = true,
+            CreatedUtc = candidate.DecisionUtc ?? candidate.UpdatedUtc,
+            UpdatedUtc = candidate.DecisionUtc ?? candidate.UpdatedUtc,
+            RestoredUtc = null
+        };
+
+        await discoveryRunCandidateDispositionStore.UpsertAsync(disposition, cancellationToken);
+    }
+
+    private async Task DeactivateMatchingDispositionsAsync(DiscoveryRun run, DiscoveryRunCandidate candidate, CancellationToken cancellationToken)
+    {
+        var matches = await discoveryRunCandidateDispositionStore.FindActiveMatchesAsync(
+            DiscoveryRunScopePolicy.CreateFingerprint(run),
+            DiscoveryRunCandidateIdentity.GetNormalizedHost(candidate),
+            DiscoveryRunCandidateIdentity.GetNormalizedBaseUrl(candidate),
+            DiscoveryRunCandidateIdentity.GetNormalizedDisplayName(candidate),
+            candidate.AllowedMarkets,
+            cancellationToken);
+
+        var utcNow = DateTime.UtcNow;
+        foreach (var disposition in matches)
+        {
+            disposition.IsActive = false;
+            disposition.RestoredUtc = utcNow;
+            disposition.UpdatedUtc = utcNow;
+            await discoveryRunCandidateDispositionStore.UpsertAsync(disposition, cancellationToken);
+        }
+    }
+
+    private static string DetermineRestoreState(DiscoveryRunCandidate candidate)
+    {
+        if (!string.IsNullOrWhiteSpace(candidate.SuppressionDispositionId)
+            || string.Equals(candidate.PreviousState, DiscoveryRunCandidateStates.Dismissed, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(candidate.PreviousState, DiscoveryRunCandidateStates.Superseded, StringComparison.OrdinalIgnoreCase))
+        {
+            return DiscoveryRunCandidateStates.Suggested;
+        }
+
+        return string.IsNullOrWhiteSpace(candidate.PreviousState)
             ? DiscoveryRunCandidateStates.Suggested
             : candidate.PreviousState;
-        candidate.StateMessage = "Restored to the active candidate queue.";
-        candidate.UpdatedUtc = DateTime.UtcNow;
-        await discoveryRunCandidateStore.UpsertAsync(candidate, cancellationToken);
-        return candidate;
+    }
+
+    private static string BuildDispositionId(DiscoveryRun run, DiscoveryRunCandidate candidate, string state)
+    {
+        return string.Join(
+            "|",
+            DiscoveryRunScopePolicy.CreateFingerprint(run),
+            state,
+            DiscoveryRunCandidateIdentity.GetNormalizedHost(candidate),
+            DiscoveryRunCandidateIdentity.GetNormalizedBaseUrl(candidate),
+            DiscoveryRunCandidateIdentity.GetNormalizedDisplayName(candidate));
+    }
+
+    private static DiscoveryRunCandidate CloneCandidate(DiscoveryRunCandidate candidate)
+    {
+        return new DiscoveryRunCandidate
+        {
+            Id = candidate.Id,
+            RunId = candidate.RunId,
+            CandidateKey = candidate.CandidateKey,
+            Revision = candidate.Revision,
+            State = candidate.State,
+            PreviousState = candidate.PreviousState,
+            SupersededByCandidateKey = candidate.SupersededByCandidateKey,
+            SuppressionDispositionId = candidate.SuppressionDispositionId,
+            AcceptedSourceId = candidate.AcceptedSourceId,
+            StateMessage = candidate.StateMessage,
+            ArchiveReason = candidate.ArchiveReason,
+            DisplayName = candidate.DisplayName,
+            BaseUrl = candidate.BaseUrl,
+            Host = candidate.Host,
+            CandidateType = candidate.CandidateType,
+            AllowedMarkets = candidate.AllowedMarkets.ToArray(),
+            PreferredLocale = candidate.PreferredLocale,
+            MarketEvidence = candidate.MarketEvidence,
+            LocaleEvidence = candidate.LocaleEvidence,
+            ConfidenceScore = candidate.ConfidenceScore,
+            CrawlabilityScore = candidate.CrawlabilityScore,
+            ExtractabilityScore = candidate.ExtractabilityScore,
+            DuplicateRiskScore = candidate.DuplicateRiskScore,
+            RecommendationStatus = candidate.RecommendationStatus,
+            RuntimeExtractionStatus = candidate.RuntimeExtractionStatus,
+            RuntimeExtractionMessage = candidate.RuntimeExtractionMessage,
+            MatchedCategoryKeys = candidate.MatchedCategoryKeys.ToArray(),
+            MatchedBrandHints = candidate.MatchedBrandHints.ToArray(),
+            AlreadyRegistered = candidate.AlreadyRegistered,
+            DuplicateSourceIds = candidate.DuplicateSourceIds.ToArray(),
+            DuplicateSourceDisplayNames = candidate.DuplicateSourceDisplayNames.ToArray(),
+            AllowedByGovernance = candidate.AllowedByGovernance,
+            GovernanceWarning = candidate.GovernanceWarning,
+            Probe = candidate.Probe,
+            AutomationAssessment = candidate.AutomationAssessment,
+            Reasons = candidate.Reasons.ToList(),
+            CreatedUtc = candidate.CreatedUtc,
+            UpdatedUtc = candidate.UpdatedUtc,
+            DecisionUtc = candidate.DecisionUtc,
+            ArchivedUtc = candidate.ArchivedUtc
+        };
+    }
+
+    private static int GetNextRevision(int currentRevision, int expectedRevision)
+    {
+        if (expectedRevision <= 0)
+        {
+            throw new InvalidOperationException("Candidate revision must be provided for optimistic concurrency.");
+        }
+
+        return Math.Max(currentRevision, expectedRevision) + 1;
+    }
+
+    private static InvalidOperationException CreateConcurrencyException(string candidateKey)
+    {
+        return new InvalidOperationException($"Candidate '{candidateKey}' changed while this action was in progress. Refresh the run and retry.");
     }
 
     private async Task<DiscoveryRun> RequireRunAsync(string runId, CancellationToken cancellationToken)

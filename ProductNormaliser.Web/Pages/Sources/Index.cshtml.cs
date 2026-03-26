@@ -15,6 +15,8 @@ public sealed class IndexModel(
     private const string OperatorAssistedMode = "operator_assisted";
     private const string SuggestAcceptMode = "suggest_accept";
     private const string AutoAcceptAndSeedMode = "auto_accept_and_seed";
+    private const int DiscoveryRunHistoryPageSize = 10;
+    private const int ExpandedDiscoveryRunCount = 3;
 
     [BindProperty(SupportsGet = true, Name = "category")]
     public string? CategoryKey { get; set; }
@@ -66,6 +68,12 @@ public sealed class IndexModel(
 
     public IReadOnlyList<SourceDto> Sources { get; private set; } = [];
 
+    public IReadOnlyList<DiscoveryRunDto> ExpandedDiscoveryRuns { get; private set; } = [];
+
+    public IReadOnlyList<DiscoveryRunDto> CollapsedDiscoveryRuns { get; private set; } = [];
+
+    public bool HasCollapsedDiscoveryRuns => CollapsedDiscoveryRuns.Count > 0;
+
     public int TotalSources { get; private set; }
 
     public int ReadySources => Sources.Count(source => string.Equals(source.Readiness.Status, "Ready", StringComparison.OrdinalIgnoreCase));
@@ -81,6 +89,9 @@ public sealed class IndexModel(
     public int RegistryDiscoveryConfiguredSources => AllSources.Count(HasDiscoveryScaffold);
 
     public int RegistryBootReadySources => AllSources.Count(IsBootReady);
+
+    public int ActiveDiscoveryRunCount => ExpandedDiscoveryRuns.Concat(CollapsedDiscoveryRuns)
+        .Count(run => DiscoveryRunPresentation.IsActiveStatus(run.Status));
 
     public PageHeroModel Hero => new()
     {
@@ -535,6 +546,86 @@ public sealed class IndexModel(
             || candidate.Probe.SitemapUrls.Count > 0;
     }
 
+    public string GetDiscoveryRunScopeSummary(DiscoveryRunDto run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+
+        var summary = new List<string>();
+        if (run.RequestedCategoryKeys.Count > 0)
+        {
+            summary.Add(string.Join(", ", run.RequestedCategoryKeys));
+        }
+
+        if (!string.IsNullOrWhiteSpace(run.Market))
+        {
+            summary.Add($"market {run.Market}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(run.Locale))
+        {
+            summary.Add($"locale {run.Locale}");
+        }
+
+        if (run.BrandHints.Count > 0)
+        {
+            summary.Add($"brands {string.Join(", ", run.BrandHints)}");
+        }
+
+        return summary.Count == 0 ? "No explicit scope" : string.Join(" | ", summary);
+    }
+
+    public string GetDiscoveryRunTimingSummary(DiscoveryRunDto run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+
+        var parts = new List<string>();
+        if (run.SearchElapsedMs is not null)
+        {
+            parts.Add($"search {run.SearchElapsedMs.Value} ms");
+        }
+
+        if (run.ProbeAverageElapsedMs is not null)
+        {
+            parts.Add($"probe avg {run.ProbeAverageElapsedMs.Value} ms");
+        }
+
+        if (run.LlmAverageElapsedMs is not null)
+        {
+            parts.Add($"LLM avg {run.LlmAverageElapsedMs.Value} ms");
+        }
+
+        if (run.TimeToFirstAcceptedCandidateMs is not null)
+        {
+            parts.Add($"first accept {run.TimeToFirstAcceptedCandidateMs.Value} ms");
+        }
+
+        return string.Join(" | ", parts);
+    }
+
+    public string GetDiscoveryRunOutcomeSummary(DiscoveryRunDto run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+
+        var parts = new List<string>
+        {
+            $"{run.PublishedCandidateCount} published",
+            $"{run.SuggestedCandidateCount} manual review",
+            $"{run.LlmQueueDepth} queued for LLM"
+        };
+
+        if (run.AcceptanceRate is not null)
+        {
+            parts.Add($"acceptance {run.AcceptanceRate.Value:0.#}%");
+        }
+
+        if (run.CandidateThroughputPerMinute is not null)
+        {
+            parts.Add($"throughput {run.CandidateThroughputPerMinute.Value:0.#}/min");
+        }
+
+        return string.Join(" | ", parts);
+    }
+
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
         try
@@ -542,10 +633,12 @@ public sealed class IndexModel(
             var categoriesTask = adminApiClient.GetCategoriesAsync(cancellationToken);
             var sourcesTask = adminApiClient.GetSourcesAsync(cancellationToken);
             var automationSettingsTask = adminApiClient.GetSourceOnboardingAutomationSettingsAsync(cancellationToken);
-            await Task.WhenAll(categoriesTask, sourcesTask, automationSettingsTask);
+            var discoveryRunsTask = adminApiClient.GetDiscoveryRunsAsync(pageSize: DiscoveryRunHistoryPageSize, cancellationToken: cancellationToken);
+            await Task.WhenAll(categoriesTask, sourcesTask, automationSettingsTask, discoveryRunsTask);
 
             Categories = InteractiveCategoryFilter.Apply(categoriesTask.Result);
             AutomationSettings = automationSettingsTask.Result;
+            ApplyDiscoveryRunHistory(discoveryRunsTask.Result.Items);
             var categoryContext = CategoryContextStateFactory.Resolve(
                 Categories,
                 CategoryKey,
@@ -599,6 +692,8 @@ public sealed class IndexModel(
             Categories = [];
             AllSources = [];
             Sources = [];
+            ExpandedDiscoveryRuns = [];
+            CollapsedDiscoveryRuns = [];
             AutomationSettings = new SourceOnboardingAutomationSettingsDto
             {
                 DefaultMode = OperatorAssistedMode,
@@ -616,6 +711,21 @@ public sealed class IndexModel(
                 MaxAutoAcceptedCandidatesPerRun = 1
             };
         }
+    }
+
+    private void ApplyDiscoveryRunHistory(IReadOnlyList<DiscoveryRunDto> runs)
+    {
+        var orderedRuns = runs
+            .OrderByDescending(run => run.CreatedUtc)
+            .ToArray();
+
+        ExpandedDiscoveryRuns = orderedRuns
+            .Take(ExpandedDiscoveryRunCount)
+            .ToArray();
+
+        CollapsedDiscoveryRuns = orderedRuns
+            .Skip(ExpandedDiscoveryRunCount)
+            .ToArray();
     }
 
     private static List<string> NormalizeValues(IEnumerable<string>? values)

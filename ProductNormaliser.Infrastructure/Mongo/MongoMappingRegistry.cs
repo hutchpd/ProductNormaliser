@@ -24,6 +24,7 @@ public static class MongoMappingRegistry
         RegisterClassMap<CrawlSource>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<DiscoveryRun>(map => map.MapIdMember(model => model.RunId));
         RegisterClassMap<DiscoveryRunCandidate>(map => map.MapIdMember(model => model.Id));
+        RegisterClassMap<DiscoveryRunCandidateDisposition>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<DiscoveryQueueItem>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<DiscoveredUrl>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<SourceProduct>(map => map.MapIdMember(model => model.Id));

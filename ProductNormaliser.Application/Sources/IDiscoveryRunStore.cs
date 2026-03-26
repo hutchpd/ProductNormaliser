@@ -10,5 +10,7 @@ public interface IDiscoveryRunStore
 
     Task<DiscoveryRun?> GetNextQueuedAsync(CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<DiscoveryRun>> ListByStatusesAsync(IReadOnlyCollection<string> statuses, CancellationToken cancellationToken = default);
+
     Task UpsertAsync(DiscoveryRun run, CancellationToken cancellationToken = default);
 }

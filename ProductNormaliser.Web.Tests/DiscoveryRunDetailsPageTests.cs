@@ -18,7 +18,8 @@ public sealed class DiscoveryRunDetailsPageTests
             [
                 CreateCandidate("suggested_1", "suggested"),
                 CreateCandidate("dismissed_1", "dismissed"),
-                CreateCandidate("accepted_1", "manually_accepted")
+                CreateCandidate("accepted_1", "manually_accepted"),
+                CreateCandidate("duplicate_1", "superseded", supersededByCandidateKey: "accepted_1")
             ]
         };
 
@@ -35,7 +36,7 @@ public sealed class DiscoveryRunDetailsPageTests
             Assert.That(model.ShouldAutoRefresh, Is.True);
             Assert.That(model.ProgressPercent, Is.GreaterThan(0));
             Assert.That(model.ActiveCandidates.Select(candidate => candidate.CandidateKey), Is.EqualTo(new[] { "suggested_1", "accepted_1" }));
-            Assert.That(model.ArchivedCandidates.Select(candidate => candidate.CandidateKey), Is.EqualTo(new[] { "dismissed_1" }));
+            Assert.That(model.ArchivedCandidates.Select(candidate => candidate.CandidateKey), Is.EqualTo(new[] { "dismissed_1", "duplicate_1" }));
             Assert.That(model.CanAcceptCandidate(model.ActiveCandidates[0]), Is.True);
             Assert.That(model.CanDismissCandidate(model.ArchivedCandidates[0]), Is.False);
             Assert.That(model.CanRestoreCandidate(model.ArchivedCandidates[0]), Is.True);
@@ -81,7 +82,7 @@ public sealed class DiscoveryRunDetailsPageTests
             RunId = "discovery_run_1"
         };
 
-        var result = await model.OnPostAcceptCandidateAsync("safe_shop", CancellationToken.None);
+        var result = await model.OnPostAcceptCandidateAsync("safe_shop", 1, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
@@ -121,12 +122,91 @@ public sealed class DiscoveryRunDetailsPageTests
         };
     }
 
-    private static DiscoveryRunCandidateDto CreateCandidate(string candidateKey, string state)
+    [Test]
+    public async Task OnPostAcceptCandidateAsync_PassesExpectedRevisionAndRedirects()
+    {
+        var client = new FakeAdminApiClient
+        {
+            DiscoveryRun = CreateRun(status: "running", stage: "decide"),
+            DiscoveryRunCandidates = [CreateCandidate("safe_shop", "suggested", revision: 7)]
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel>.Instance)
+        {
+            RunId = "discovery_run_1"
+        };
+
+        var result = await model.OnPostAcceptCandidateAsync("safe_shop", 7, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
+            Assert.That(client.LastAcceptedDiscoveryRunCandidateRunId, Is.EqualTo("discovery_run_1"));
+            Assert.That(client.LastAcceptedDiscoveryRunCandidateKey, Is.EqualTo("safe_shop"));
+            Assert.That(client.LastAcceptedDiscoveryRunCandidateRevision, Is.EqualTo(7));
+            Assert.That(model.StatusMessage, Is.EqualTo("Accepted candidate 'safe_shop'."));
+        });
+    }
+
+    [Test]
+    public async Task OnPostDismissAndRestoreCandidateAsync_PassesExpectedRevision()
+    {
+        var client = new FakeAdminApiClient
+        {
+            DiscoveryRun = CreateRun(status: "running", stage: "decide"),
+            DiscoveryRunCandidates = [CreateCandidate("safe_shop", "suggested", revision: 3)]
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel>.Instance)
+        {
+            RunId = "discovery_run_1"
+        };
+
+        var dismissResult = await model.OnPostDismissCandidateAsync("safe_shop", 3, CancellationToken.None);
+        var restoreResult = await model.OnPostRestoreCandidateAsync("safe_shop", 4, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(dismissResult, Is.TypeOf<RedirectToPageResult>());
+            Assert.That(restoreResult, Is.TypeOf<RedirectToPageResult>());
+            Assert.That(client.LastDismissedDiscoveryRunCandidateRevision, Is.EqualTo(3));
+            Assert.That(client.LastRestoredDiscoveryRunCandidateRevision, Is.EqualTo(4));
+        });
+    }
+
+    [Test]
+    public async Task OnPostAcceptCandidateAsync_WhenRevisionIsStale_ReloadsRunWithConflictError()
+    {
+        var client = new FakeAdminApiClient
+        {
+            DiscoveryRun = CreateRun(status: "running", stage: "decide"),
+            DiscoveryRunCandidates = [CreateCandidate("safe_shop", "suggested", revision: 2)]
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel>.Instance)
+        {
+            RunId = "discovery_run_1"
+        };
+
+        var result = await model.OnPostAcceptCandidateAsync("safe_shop", 1, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<PageResult>());
+            Assert.That(model.ErrorMessage, Does.Contain("changed while this action was in progress"));
+            Assert.That(model.Run, Is.Not.Null);
+            Assert.That(model.Candidates, Has.Count.EqualTo(1));
+        });
+    }
+
+    private static DiscoveryRunCandidateDto CreateCandidate(string candidateKey, string state, int revision = 1, string? supersededByCandidateKey = null)
     {
         return new DiscoveryRunCandidateDto
         {
             CandidateKey = candidateKey,
+            Revision = revision,
             State = state,
+            SupersededByCandidateKey = supersededByCandidateKey,
             DisplayName = candidateKey,
             BaseUrl = $"https://{candidateKey}.example/",
             Host = $"{candidateKey}.example",
