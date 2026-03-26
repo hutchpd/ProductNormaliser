@@ -264,6 +264,11 @@ public sealed class SourceManagementService(
             throw new ArgumentException("Maximum URLs per run must be greater than zero.", nameof(profile));
         }
 
+        if (profile.SeedReseedIntervalHours <= 0)
+        {
+            throw new ArgumentException("Seed reseed interval must be greater than zero hours.", nameof(profile));
+        }
+
         if (profile.MaxRetryCount < 0)
         {
             throw new ArgumentException("Maximum retry count must be zero or greater.", nameof(profile));
@@ -295,6 +300,7 @@ public sealed class SourceManagementService(
             ListingUrlPatterns = NormaliseOrderedValues(profile.ListingUrlPatterns, static value => value.Trim()),
             MaxDiscoveryDepth = profile.MaxDiscoveryDepth,
             MaxUrlsPerRun = profile.MaxUrlsPerRun,
+            SeedReseedIntervalHours = profile.SeedReseedIntervalHours,
             MaxRetryCount = profile.MaxRetryCount,
             RetryBackoffBaseMs = profile.RetryBackoffBaseMs,
             RetryBackoffMaxMs = profile.RetryBackoffMaxMs

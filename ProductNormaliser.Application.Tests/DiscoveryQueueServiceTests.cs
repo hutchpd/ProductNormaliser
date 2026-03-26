@@ -4,6 +4,8 @@ using ProductNormaliser.Application.Sources;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Infrastructure.Discovery;
 using ProductNormaliser.Infrastructure.Mongo.Repositories;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace ProductNormaliser.Tests;
 
@@ -78,6 +80,204 @@ public sealed class DiscoveryQueueServiceTests
         });
     }
 
+    [Test]
+    public async Task EnqueueAsync_RequeuesCompletedRootSeed_WhenReseedIntervalHasElapsed()
+    {
+        var source = CreateSource(seedReseedIntervalHours: 1);
+        var queueId = CreateDiscoveryQueueId(source.Id, "tv", "https://alpha.example/category/tv", "listing");
+        var queueItem = new DiscoveryQueueItem
+        {
+            Id = queueId,
+            JobId = "job-old",
+            SourceId = source.Id,
+            CategoryKey = "tv",
+            Url = "https://alpha.example/category/tv",
+            NormalizedUrl = "https://alpha.example/category/tv",
+            Classification = "listing",
+            State = "completed",
+            Depth = 0,
+            AttemptCount = 3,
+            EnqueuedUtc = DateTime.UtcNow.AddHours(-3),
+            LastAttemptUtc = DateTime.UtcNow.AddHours(-2),
+            CompletedUtc = DateTime.UtcNow.AddHours(-2)
+        };
+        var discovered = new DiscoveredUrl
+        {
+            Id = "discovered-seed-1",
+            JobId = "job-old",
+            SourceId = source.Id,
+            CategoryKey = "tv",
+            Url = queueItem.Url,
+            NormalizedUrl = queueItem.NormalizedUrl,
+            Classification = queueItem.Classification,
+            State = "processed",
+            Depth = 0,
+            AttemptCount = 3,
+            FirstSeenUtc = DateTime.UtcNow.AddHours(-3),
+            LastSeenUtc = DateTime.UtcNow.AddHours(-2),
+            LastProcessedUtc = DateTime.UtcNow.AddHours(-2)
+        };
+        var queueStore = new FakeDiscoveryQueueStore(queueItem);
+        var discoveredStore = new FakeDiscoveredUrlStore(discovered);
+        var sut = CreateService(source, queueStore, discoveredStore);
+
+        var enqueued = await sut.EnqueueAsync(source, "tv", queueItem.Url, "listing", 0, null, "job-new", CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(enqueued, Is.True);
+            Assert.That(queueStore.Items[queueItem.Id].State, Is.EqualTo("queued"));
+            Assert.That(queueStore.Items[queueItem.Id].JobId, Is.EqualTo("job-new"));
+            Assert.That(queueStore.Items[queueItem.Id].AttemptCount, Is.EqualTo(0));
+            Assert.That(queueStore.Items[queueItem.Id].CompletedUtc, Is.Null);
+            Assert.That(queueStore.Items[queueItem.Id].NextAttemptUtc, Is.Not.Null);
+            Assert.That(discoveredStore.Items[discovered.Id].State, Is.EqualTo("pending"));
+            Assert.That(discoveredStore.Items[discovered.Id].NextAttemptUtc, Is.Not.Null);
+        });
+    }
+
+    [Test]
+    public async Task EnqueueAsync_DoesNotRequeueCompletedRootSeed_BeforeReseedInterval()
+    {
+        var source = CreateSource(seedReseedIntervalHours: 24);
+        var queueId = CreateDiscoveryQueueId(source.Id, "tv", "https://alpha.example/category/tv", "listing");
+        var queueItem = new DiscoveryQueueItem
+        {
+            Id = queueId,
+            SourceId = source.Id,
+            CategoryKey = "tv",
+            Url = "https://alpha.example/category/tv",
+            NormalizedUrl = "https://alpha.example/category/tv",
+            Classification = "listing",
+            State = "completed",
+            Depth = 0,
+            AttemptCount = 1,
+            EnqueuedUtc = DateTime.UtcNow.AddHours(-2),
+            CompletedUtc = DateTime.UtcNow.AddHours(-1)
+        };
+        var discovered = new DiscoveredUrl
+        {
+            Id = "discovered-seed-2",
+            SourceId = source.Id,
+            CategoryKey = "tv",
+            Url = queueItem.Url,
+            NormalizedUrl = queueItem.NormalizedUrl,
+            Classification = queueItem.Classification,
+            State = "processed",
+            Depth = 0,
+            AttemptCount = 1,
+            FirstSeenUtc = DateTime.UtcNow.AddHours(-2),
+            LastSeenUtc = DateTime.UtcNow.AddHours(-1),
+            LastProcessedUtc = DateTime.UtcNow.AddHours(-1)
+        };
+        var queueStore = new FakeDiscoveryQueueStore(queueItem);
+        var discoveredStore = new FakeDiscoveredUrlStore(discovered);
+        var sut = CreateService(source, queueStore, discoveredStore);
+
+        var enqueued = await sut.EnqueueAsync(source, "tv", queueItem.Url, "listing", 0, null, null, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(enqueued, Is.False);
+            Assert.That(queueStore.Items[queueItem.Id].State, Is.EqualTo("completed"));
+            Assert.That(discoveredStore.Items[discovered.Id].State, Is.EqualTo("processed"));
+            Assert.That(discoveredStore.Items[discovered.Id].NextAttemptUtc, Is.Null);
+        });
+    }
+
+    [Test]
+    public async Task EnqueueAsync_DoesNotRequeueCompletedChildLink_EvenAfterReseedInterval()
+    {
+        var source = CreateSource(seedReseedIntervalHours: 1);
+        var queueId = CreateDiscoveryQueueId(source.Id, "tv", "https://alpha.example/category/tv?page=2", "listing");
+        var queueItem = new DiscoveryQueueItem
+        {
+            Id = queueId,
+            SourceId = source.Id,
+            CategoryKey = "tv",
+            Url = "https://alpha.example/category/tv?page=2",
+            NormalizedUrl = "https://alpha.example/category/tv?page=2",
+            Classification = "listing",
+            State = "completed",
+            Depth = 1,
+            ParentUrl = "https://alpha.example/category/tv",
+            EnqueuedUtc = DateTime.UtcNow.AddHours(-5),
+            CompletedUtc = DateTime.UtcNow.AddHours(-4)
+        };
+        var queueStore = new FakeDiscoveryQueueStore(queueItem);
+        var discoveredStore = new FakeDiscoveredUrlStore(new DiscoveredUrl
+        {
+            Id = "discovered-child-1",
+            SourceId = source.Id,
+            CategoryKey = "tv",
+            Url = queueItem.Url,
+            NormalizedUrl = queueItem.NormalizedUrl,
+            Classification = queueItem.Classification,
+            State = "processed",
+            Depth = 1,
+            FirstSeenUtc = DateTime.UtcNow.AddHours(-5),
+            LastSeenUtc = DateTime.UtcNow.AddHours(-4),
+            LastProcessedUtc = DateTime.UtcNow.AddHours(-4)
+        });
+        var sut = CreateService(source, queueStore, discoveredStore);
+
+        var enqueued = await sut.EnqueueAsync(source, "tv", queueItem.Url, "listing", 1, queueItem.ParentUrl, null, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(enqueued, Is.False);
+            Assert.That(queueStore.Items[queueItem.Id].State, Is.EqualTo("completed"));
+            Assert.That(discoveredStore.Items["discovered-child-1"].State, Is.EqualTo("processed"));
+        });
+    }
+
+    [Test]
+    public async Task EnqueueAsync_StillDeduplicatesActiveSeedWork()
+    {
+        var source = CreateSource(seedReseedIntervalHours: 1);
+        var queueId = CreateDiscoveryQueueId(source.Id, "tv", "https://alpha.example/category/tv", "listing");
+        var queueItem = new DiscoveryQueueItem
+        {
+            Id = queueId,
+            JobId = "job-1",
+            SourceId = source.Id,
+            CategoryKey = "tv",
+            Url = "https://alpha.example/category/tv",
+            NormalizedUrl = "https://alpha.example/category/tv",
+            Classification = "listing",
+            State = "processing",
+            Depth = 0,
+            EnqueuedUtc = DateTime.UtcNow.AddMinutes(-10),
+            LastAttemptUtc = DateTime.UtcNow.AddMinutes(-2)
+        };
+        var queueStore = new FakeDiscoveryQueueStore(queueItem);
+        var discoveredStore = new FakeDiscoveredUrlStore(new DiscoveredUrl
+        {
+            Id = "discovered-active-1",
+            JobId = "job-1",
+            SourceId = source.Id,
+            CategoryKey = "tv",
+            Url = queueItem.Url,
+            NormalizedUrl = queueItem.NormalizedUrl,
+            Classification = queueItem.Classification,
+            State = "pending",
+            Depth = 0,
+            FirstSeenUtc = DateTime.UtcNow.AddMinutes(-10),
+            LastSeenUtc = DateTime.UtcNow.AddMinutes(-2)
+        });
+        var sut = CreateService(source, queueStore, discoveredStore);
+
+        var enqueued = await sut.EnqueueAsync(source, "tv", queueItem.Url, "listing", 0, null, "job-2", CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(enqueued, Is.False);
+            Assert.That(queueStore.Items[queueItem.Id].State, Is.EqualTo("processing"));
+            Assert.That(queueStore.Items[queueItem.Id].JobId, Is.EqualTo("job-1"));
+            Assert.That(discoveredStore.Items["discovered-active-1"].State, Is.EqualTo("pending"));
+        });
+    }
+
     private static DiscoveryQueueService CreateService(CrawlSource source, FakeDiscoveryQueueStore queueStore, FakeDiscoveredUrlStore discoveredStore)
     {
         return new DiscoveryQueueService(
@@ -88,7 +288,20 @@ public sealed class DiscoveryQueueServiceTests
             new DiscoveryJobProgressService(new FakeCrawlJobStore()));
     }
 
-    private static CrawlSource CreateSource(int maxUrlsPerRun = 500, int maxRetryCount = 3, int retryBackoffBaseMs = 1000, int retryBackoffMaxMs = 30000)
+    private static string CreateDiscoveryQueueId(string sourceId, string categoryKey, string url, string itemType)
+    {
+        var uri = new Uri(url.Trim(), UriKind.Absolute);
+        var builder = new UriBuilder(uri)
+        {
+            Fragment = string.Empty,
+            Query = string.Empty
+        };
+        var normalized = builder.Uri.ToString().TrimEnd('/');
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
+        return $"discovery:{itemType}:{sourceId}:{categoryKey}:{Convert.ToHexString(bytes)[..16].ToLowerInvariant()}";
+    }
+
+    private static CrawlSource CreateSource(int maxUrlsPerRun = 500, int seedReseedIntervalHours = 24, int maxRetryCount = 3, int retryBackoffBaseMs = 1000, int retryBackoffMaxMs = 30000)
     {
         return new CrawlSource
         {
@@ -99,6 +312,7 @@ public sealed class DiscoveryQueueServiceTests
             DiscoveryProfile = new SourceDiscoveryProfile
             {
                 MaxUrlsPerRun = maxUrlsPerRun,
+                SeedReseedIntervalHours = seedReseedIntervalHours,
                 MaxRetryCount = maxRetryCount,
                 RetryBackoffBaseMs = retryBackoffBaseMs,
                 RetryBackoffMaxMs = retryBackoffMaxMs

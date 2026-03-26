@@ -12,6 +12,8 @@ public sealed class DiscoveryQueueService(
     ProductTargetEnqueuer productTargetEnqueuer,
     DiscoveryJobProgressService discoveryJobProgressService) : IDiscoveryQueueService, IDiscoverySeedWriter
 {
+    private static readonly TimeSpan DefaultSeedReseedInterval = TimeSpan.FromHours(24);
+
     public async Task<DiscoveryQueueLease?> DequeueAsync(CancellationToken cancellationToken)
     {
         var queuedItems = await discoveryQueueStore.ListQueuedAsync(DateTime.UtcNow, cancellationToken);
@@ -33,6 +35,7 @@ public sealed class DiscoveryQueueService(
 
     public async Task<bool> EnqueueAsync(CrawlSource source, string categoryKey, string url, string itemType, int depth, string? parentUrl, string? jobId, CancellationToken cancellationToken)
     {
+        var now = DateTime.UtcNow;
         if (!await HasCapacityAsync(source, categoryKey, jobId, cancellationToken))
         {
             return false;
@@ -41,22 +44,43 @@ public sealed class DiscoveryQueueService(
         var normalizedUrl = DiscoveryIdentity.NormalizeUrl(url);
         var queueId = DiscoveryIdentity.BuildDiscoveryQueueId(source.Id, categoryKey, url, itemType);
         var existingQueueItem = await discoveryQueueStore.GetByIdAsync(queueId, cancellationToken);
-        var shouldCountForJob = !string.IsNullOrWhiteSpace(jobId)
-            && (existingQueueItem is null || string.IsNullOrWhiteSpace(existingQueueItem.JobId));
 
         if (existingQueueItem is not null)
         {
-            if (string.IsNullOrWhiteSpace(existingQueueItem.JobId) && !string.IsNullOrWhiteSpace(jobId))
+            if (ShouldRequeueCompletedSeed(existingQueueItem, source.DiscoveryProfile, now))
+            {
+                existingQueueItem.JobId = jobId;
+                existingQueueItem.Url = url;
+                existingQueueItem.NormalizedUrl = normalizedUrl;
+                existingQueueItem.Classification = itemType;
+                existingQueueItem.State = "queued";
+                existingQueueItem.Depth = depth;
+                existingQueueItem.ParentUrl = parentUrl;
+                existingQueueItem.AttemptCount = 0;
+                existingQueueItem.EnqueuedUtc = now;
+                existingQueueItem.LastAttemptUtc = null;
+                existingQueueItem.NextAttemptUtc = now;
+                existingQueueItem.CompletedUtc = null;
+                existingQueueItem.LastError = null;
+                await discoveryQueueStore.UpsertAsync(existingQueueItem, cancellationToken);
+
+                await RecordDiscoveredUrlAsync(jobId, source.Id, categoryKey, url, normalizedUrl, itemType, "pending", depth, parentUrl, promotedToCrawlUtc: null, nextAttemptUtc: now, lastError: null, countForJob: !string.IsNullOrWhiteSpace(jobId), cancellationToken);
+                return true;
+            }
+
+            var shouldCountForJob = string.IsNullOrWhiteSpace(existingQueueItem.JobId) && !string.IsNullOrWhiteSpace(jobId);
+            if (shouldCountForJob)
             {
                 existingQueueItem.JobId = jobId;
                 await discoveryQueueStore.UpsertAsync(existingQueueItem, cancellationToken);
             }
 
-            await RecordDiscoveredUrlAsync(jobId, source.Id, categoryKey, url, normalizedUrl, itemType, "pending", depth, parentUrl, promotedToCrawlUtc: null, nextAttemptUtc: DateTime.UtcNow, lastError: null, shouldCountForJob, cancellationToken);
+            var discoveredState = MapDiscoveredState(existingQueueItem);
+            DateTime? nextAttemptUtc = existingQueueItem.State == "queued" ? existingQueueItem.NextAttemptUtc ?? now : null;
+            await RecordDiscoveredUrlAsync(jobId, source.Id, categoryKey, url, normalizedUrl, itemType, discoveredState, depth, parentUrl, promotedToCrawlUtc: null, nextAttemptUtc, existingQueueItem.LastError, shouldCountForJob, cancellationToken);
             return false;
         }
 
-        var now = DateTime.UtcNow;
         await discoveryQueueStore.UpsertAsync(new DiscoveryQueueItem
         {
             Id = queueId,
@@ -74,7 +98,7 @@ public sealed class DiscoveryQueueService(
             NextAttemptUtc = now
         }, cancellationToken);
 
-        await RecordDiscoveredUrlAsync(jobId, source.Id, categoryKey, url, normalizedUrl, itemType, "pending", depth, parentUrl, promotedToCrawlUtc: null, nextAttemptUtc: now, lastError: null, shouldCountForJob, cancellationToken);
+        await RecordDiscoveredUrlAsync(jobId, source.Id, categoryKey, url, normalizedUrl, itemType, "pending", depth, parentUrl, promotedToCrawlUtc: null, nextAttemptUtc: now, lastError: null, countForJob: !string.IsNullOrWhiteSpace(jobId), cancellationToken);
         return true;
     }
 
@@ -174,6 +198,29 @@ public sealed class DiscoveryQueueService(
         return queueItem.AttemptCount <= Math.Max(0, profile.MaxRetryCount);
     }
 
+    private static bool ShouldRequeueCompletedSeed(DiscoveryQueueItem queueItem, SourceDiscoveryProfile profile, DateTime utcNow)
+    {
+        if (!string.Equals(queueItem.State, "completed", StringComparison.OrdinalIgnoreCase)
+            || queueItem.Depth != 0
+            || !string.IsNullOrWhiteSpace(queueItem.ParentUrl))
+        {
+            return false;
+        }
+
+        var anchorUtc = queueItem.CompletedUtc ?? queueItem.LastAttemptUtc ?? queueItem.EnqueuedUtc;
+        return anchorUtc.Add(GetSeedReseedInterval(profile)) <= utcNow;
+    }
+
+    private static TimeSpan GetSeedReseedInterval(SourceDiscoveryProfile profile)
+    {
+        if (profile.SeedReseedIntervalHours > 0)
+        {
+            return TimeSpan.FromHours(profile.SeedReseedIntervalHours);
+        }
+
+        return DefaultSeedReseedInterval;
+    }
+
     private static DateTime ComputeNextAttemptUtc(DiscoveryQueueItem queueItem, SourceDiscoveryProfile profile)
     {
         var exponent = Math.Max(0, queueItem.AttemptCount - 1);
@@ -181,6 +228,21 @@ public sealed class DiscoveryQueueService(
         var maxDelay = Math.Max(baseDelay, profile.RetryBackoffMaxMs);
         var computedDelay = Math.Min(maxDelay, (int)Math.Round(baseDelay * Math.Pow(2d, exponent), MidpointRounding.AwayFromZero));
         return DateTime.UtcNow.AddMilliseconds(computedDelay);
+    }
+
+    private static string MapDiscoveredState(DiscoveryQueueItem queueItem)
+    {
+        return queueItem.State switch
+        {
+            "queued" or "processing" => "pending",
+            "completed" => "processed",
+            "failed" => "rejected",
+            "skipped" when queueItem.LastError is not null
+                && (queueItem.LastError.Contains("robots", StringComparison.OrdinalIgnoreCase)
+                    || queueItem.LastError.Contains("blocked", StringComparison.OrdinalIgnoreCase)) => "blocked",
+            "skipped" => "skipped",
+            _ => "pending"
+        };
     }
 
     private async Task RecordDiscoveredUrlAsync(

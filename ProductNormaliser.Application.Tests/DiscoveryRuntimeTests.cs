@@ -1,9 +1,13 @@
 using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
+using ProductNormaliser.Application.Crawls;
+using ProductNormaliser.Application.Discovery;
 using ProductNormaliser.Application.Sources;
 using ProductNormaliser.Infrastructure.Crawling;
 using ProductNormaliser.Infrastructure.Discovery;
+using ProductNormaliser.Infrastructure.Mongo.Repositories;
 using ProductNormaliser.Infrastructure.StructuredData;
+using ProductNormaliser.Worker;
 
 namespace ProductNormaliser.Tests;
 
@@ -313,6 +317,72 @@ public sealed class DiscoveryRuntimeTests
         });
     }
 
+    [Test]
+    public async Task DiscoveryOrchestrator_RequeuedRootSeedCanSurfaceNewProductLinksOverTime()
+    {
+        var source = CreateSource();
+        source.DiscoveryProfile.SeedReseedIntervalHours = 1;
+
+        var queueStore = new FakeDiscoveryQueueStore();
+        var discoveredStore = new FakeDiscoveredUrlStore();
+        var productQueueStore = new FakeProductTargetQueueStore();
+        var queueWriter = new RecordingCrawlJobQueueWriter(productQueueStore);
+        var progressService = new DiscoveryJobProgressService(new FakeCrawlJobStore());
+        var discoveryQueueService = new DiscoveryQueueService(
+            queueStore,
+            discoveredStore,
+            new FakeCrawlSourceStore(source),
+            new ProductTargetEnqueuer(productQueueStore, queueWriter, progressService),
+            progressService);
+        var fetcher = new MutableHttpFetcher(new Dictionary<string, FetchResult>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["https://alpha.example/category/tv"] = new()
+            {
+                Url = "https://alpha.example/category/tv",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "<html><body><div class=\"product-grid\"><a class=\"product-card\" href=\"/product/oled-1\">OLED 1</a></div></body></html>"
+            }
+        });
+        var linkPolicy = new DiscoveryLinkPolicy();
+        var orchestrator = new DiscoveryOrchestrator(
+            new FakeCrawlSourceStore(source),
+            new AllowAllRobotsPolicyService(),
+            fetcher,
+            new SitemapParser(),
+            linkPolicy,
+            new ProductPageClassifier(new SchemaOrgJsonLdExtractor(), linkPolicy),
+            new ListingPageClassifier(new ProductLinkExtractor(linkPolicy), linkPolicy),
+            discoveryQueueService,
+            new TestLogger<DiscoveryOrchestrator>());
+
+        var firstEnqueue = await discoveryQueueService.EnqueueAsync(source, "tv", "https://alpha.example/category/tv", "listing", 0, null, null, CancellationToken.None);
+        var firstLease = await discoveryQueueService.DequeueAsync(CancellationToken.None);
+        var firstResult = await orchestrator.ProcessAsync(firstLease!.Item, CancellationToken.None);
+        await discoveryQueueService.MarkCompletedAsync(firstLease.QueueItemId, CancellationToken.None);
+
+        queueStore.Items[firstLease.QueueItemId].CompletedUtc = DateTime.UtcNow.AddHours(-2);
+        fetcher.SetHtml("https://alpha.example/category/tv", "<html><body><div class=\"product-grid\"><a class=\"product-card\" href=\"/product/oled-1\">OLED 1</a><a class=\"product-card\" href=\"/product/oled-2\">OLED 2</a></div></body></html>");
+
+        var secondEnqueue = await discoveryQueueService.EnqueueAsync(source, "tv", "https://alpha.example/category/tv", "listing", 0, null, null, CancellationToken.None);
+        var secondLease = await discoveryQueueService.DequeueAsync(CancellationToken.None);
+        var secondResult = await orchestrator.ProcessAsync(secondLease!.Item, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(firstEnqueue, Is.True);
+            Assert.That(firstResult.Status, Is.EqualTo("completed"));
+            Assert.That(secondEnqueue, Is.True);
+            Assert.That(secondResult.Status, Is.EqualTo("completed"));
+            Assert.That(queueWriter.Items, Has.Count.EqualTo(2));
+            Assert.That(queueWriter.Items.Select(item => item.SourceUrl), Is.EqualTo(new[]
+            {
+                "https://alpha.example/product/oled-1",
+                "https://alpha.example/product/oled-2"
+            }));
+        });
+    }
+
     private static CrawlSource CreateSource()
     {
         return new CrawlSource
@@ -354,6 +424,35 @@ public sealed class DiscoveryRuntimeTests
                     StatusCode = 404,
                     FailureReason = "Not found"
                 });
+        }
+    }
+
+    private sealed class MutableHttpFetcher(IReadOnlyDictionary<string, FetchResult> initialResponses) : IHttpFetcher
+    {
+        private readonly Dictionary<string, FetchResult> responses = new(initialResponses, StringComparer.OrdinalIgnoreCase);
+
+        public Task<FetchResult> FetchAsync(CrawlTarget target, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(responses.TryGetValue(target.Url, out var response)
+                ? response
+                : new FetchResult
+                {
+                    Url = target.Url,
+                    IsSuccess = false,
+                    StatusCode = 404,
+                    FailureReason = "Not found"
+                });
+        }
+
+        public void SetHtml(string url, string html)
+        {
+            responses[url] = new FetchResult
+            {
+                Url = url,
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = html
+            };
         }
     }
 
@@ -400,6 +499,127 @@ public sealed class DiscoveryRuntimeTests
             => Task.CompletedTask;
 
         public Task MarkFailedAsync(string queueItemId, string reason, CancellationToken cancellationToken)
+            => Task.CompletedTask;
+    }
+
+    private sealed class AllowAllRobotsPolicyService : IRobotsPolicyService
+    {
+        public Task<RobotsPolicyDecision> EvaluateAsync(CrawlTarget target, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new RobotsPolicyDecision
+            {
+                IsAllowed = true,
+                Reason = "allowed"
+            });
+        }
+    }
+
+    private sealed class FakeDiscoveryQueueStore(params DiscoveryQueueItem[] items) : IDiscoveryQueueStore
+    {
+        public Dictionary<string, DiscoveryQueueItem> Items { get; } = items.ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+
+        public Task<DiscoveryQueueItem?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
+            => Task.FromResult(Items.TryGetValue(id, out var item) ? item : null);
+
+        public Task UpsertAsync(DiscoveryQueueItem item, CancellationToken cancellationToken = default)
+        {
+            Items[item.Id] = item;
+            return Task.CompletedTask;
+        }
+
+        public Task<DiscoveryQueueItem?> TryAcquireAsync(string id, DateTime utcNow, CancellationToken cancellationToken = default)
+        {
+            if (!Items.TryGetValue(id, out var item)
+                || item.State != "queued"
+                || (item.NextAttemptUtc is not null && item.NextAttemptUtc > utcNow))
+            {
+                return Task.FromResult<DiscoveryQueueItem?>(null);
+            }
+
+            item.State = "processing";
+            item.AttemptCount += 1;
+            item.LastAttemptUtc = utcNow;
+            item.NextAttemptUtc = null;
+            item.LastError = null;
+            return Task.FromResult<DiscoveryQueueItem?>(item);
+        }
+
+        public Task<long> CountActiveAsync(string sourceId, string categoryKey, CancellationToken cancellationToken = default)
+            => Task.FromResult(Items.Values.LongCount(item => item.SourceId == sourceId && item.CategoryKey == categoryKey && (item.State == "queued" || item.State == "processing")));
+
+        public Task<IReadOnlyList<DiscoveryQueueItem>> ListQueuedAsync(DateTime utcNow, CancellationToken cancellationToken = default)
+        {
+            var due = Items.Values
+                .Where(item => item.State == "queued" && (item.NextAttemptUtc is null || item.NextAttemptUtc <= utcNow))
+                .OrderBy(item => item.NextAttemptUtc)
+                .ThenBy(item => item.EnqueuedUtc)
+                .ToArray();
+            return Task.FromResult<IReadOnlyList<DiscoveryQueueItem>>(due);
+        }
+    }
+
+    private sealed class FakeDiscoveredUrlStore(params DiscoveredUrl[] items) : IDiscoveredUrlStore
+    {
+        public Dictionary<string, DiscoveredUrl> Items { get; } = items.ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+
+        public Task<DiscoveredUrl?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
+            => Task.FromResult(Items.TryGetValue(id, out var item) ? item : null);
+
+        public Task<DiscoveredUrl?> GetByNormalizedUrlAsync(string sourceId, string categoryKey, string normalizedUrl, CancellationToken cancellationToken = default)
+            => Task.FromResult(Items.Values.FirstOrDefault(item => item.SourceId == sourceId && item.CategoryKey == categoryKey && item.NormalizedUrl == normalizedUrl));
+
+        public Task<long> CountByScopeAsync(string sourceId, string categoryKey, string? jobId, CancellationToken cancellationToken = default)
+            => Task.FromResult(Items.Values.LongCount(item => item.SourceId == sourceId && item.CategoryKey == categoryKey && item.JobId == jobId));
+
+        public Task UpsertAsync(DiscoveredUrl item, CancellationToken cancellationToken = default)
+        {
+            Items[item.Id] = item;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeProductTargetQueueStore : IProductTargetQueueStore
+    {
+        private readonly Dictionary<string, CrawlQueueItem> items = new(StringComparer.OrdinalIgnoreCase);
+
+        public Task<CrawlQueueItem?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
+        {
+            items.TryGetValue(id, out var item);
+            return Task.FromResult(item);
+        }
+
+        public void Store(CrawlQueueItem item)
+        {
+            items[item.Id] = item;
+        }
+    }
+
+    private sealed class RecordingCrawlJobQueueWriter(FakeProductTargetQueueStore queueStore) : ICrawlJobQueueWriter
+    {
+        public List<CrawlQueueItem> Items { get; } = [];
+
+        public Task UpsertAsync(CrawlQueueItem item, CancellationToken cancellationToken = default)
+        {
+            Items.Add(item);
+            queueStore.Store(item);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<CrawlQueueItem>> CancelQueuedItemsAsync(string jobId, string reason, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<CrawlQueueItem>>([]);
+        }
+    }
+
+    private sealed class FakeCrawlJobStore : ICrawlJobStore
+    {
+        public Task<CrawlJobPage> ListAsync(CrawlJobQuery query, CancellationToken cancellationToken = default)
+            => Task.FromResult(new CrawlJobPage());
+
+        public Task<CrawlJob?> GetAsync(string jobId, CancellationToken cancellationToken = default)
+            => Task.FromResult<CrawlJob?>(null);
+
+        public Task UpsertAsync(CrawlJob job, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
     }
 }

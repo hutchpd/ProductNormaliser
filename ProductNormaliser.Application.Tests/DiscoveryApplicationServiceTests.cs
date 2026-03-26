@@ -37,6 +37,29 @@ public sealed class DiscoveryApplicationServiceTests
     }
 
     [Test]
+    public async Task SourceDiscoveryService_OffersSameSeedsOnSubsequentRuns()
+    {
+        var sourceStore = new FakeCrawlSourceStore(CreateSource("alpha", isEnabled: true, supportedCategories: ["tv"]));
+        var sitemapLocator = new FakeSitemapLocator(new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["alpha"] = ["https://alpha.example/sitemap.xml"]
+        });
+        var seedWriter = new RecordingDiscoverySeedWriter();
+        var sut = new SourceDiscoveryService(sourceStore, sitemapLocator, seedWriter);
+
+        var first = await sut.EnsureSeededAsync(CancellationToken.None);
+        var second = await sut.EnsureSeededAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(first.SeedCount, Is.EqualTo(2));
+            Assert.That(second.SeedCount, Is.EqualTo(2));
+            Assert.That(seedWriter.Calls, Has.Count.EqualTo(4));
+            Assert.That(seedWriter.Calls.Take(2).Select(call => (call.CategoryKey, call.Url, call.Classification)), Is.EqualTo(seedWriter.Calls.Skip(2).Select(call => (call.CategoryKey, call.Url, call.Classification))));
+        });
+    }
+
+    [Test]
     public async Task DiscoveryJobProgressService_TracksDiscoveryCountersPerCategory()
     {
         var jobStore = new FakeCrawlJobStore(new CrawlJob

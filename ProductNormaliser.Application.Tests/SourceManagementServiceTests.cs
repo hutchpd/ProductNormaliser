@@ -39,6 +39,7 @@ public sealed class SourceManagementServiceTests
                 ListingUrlPatterns = ["/category/", " /department/ "],
                 MaxDiscoveryDepth = 4,
                 MaxUrlsPerRun = 750,
+                SeedReseedIntervalHours = 12,
                 MaxRetryCount = 2,
                 RetryBackoffBaseMs = 1500,
                 RetryBackoffMaxMs = 12000
@@ -64,6 +65,7 @@ public sealed class SourceManagementServiceTests
             Assert.That(result.DiscoveryProfile.ListingUrlPatterns, Is.EqualTo(new[] { "/category/", "/department/" }));
             Assert.That(result.DiscoveryProfile.MaxDiscoveryDepth, Is.EqualTo(4));
             Assert.That(result.DiscoveryProfile.MaxUrlsPerRun, Is.EqualTo(750));
+            Assert.That(result.DiscoveryProfile.SeedReseedIntervalHours, Is.EqualTo(12));
             Assert.That(result.DiscoveryProfile.MaxRetryCount, Is.EqualTo(2));
             Assert.That(result.DiscoveryProfile.RetryBackoffBaseMs, Is.EqualTo(1500));
             Assert.That(result.DiscoveryProfile.RetryBackoffMaxMs, Is.EqualTo(12000));
@@ -148,7 +150,28 @@ public sealed class SourceManagementServiceTests
             Assert.That(result.DiscoveryProfile.CategoryEntryPages["laptop"], Does.Contain("https://www.northwind.example/laptops"));
             Assert.That(result.DiscoveryProfile.ProductUrlPatterns, Does.Contain("/product/"));
             Assert.That(result.DiscoveryProfile.ExcludedPathPrefixes, Does.Contain("/support"));
+            Assert.That(result.DiscoveryProfile.SeedReseedIntervalHours, Is.EqualTo(24));
         });
+    }
+
+    [Test]
+    public void RegisterAsync_RejectsNonPositiveSeedReseedInterval()
+    {
+        var service = CreateService(new FakeCrawlSourceStore(), new FakeCategoryMetadataService(CreateCategory("tv")));
+
+        var action = async () => await service.RegisterAsync(new CrawlSourceRegistration
+        {
+            SourceId = "alpha",
+            DisplayName = "Alpha",
+            BaseUrl = "https://alpha.example",
+            SupportedCategoryKeys = ["tv"],
+            DiscoveryProfile = new SourceDiscoveryProfile
+            {
+                SeedReseedIntervalHours = 0
+            }
+        });
+
+        Assert.That(action, Throws.ArgumentException.With.Message.Contain("Seed reseed interval must be greater than zero hours."));
     }
 
     [Test]
