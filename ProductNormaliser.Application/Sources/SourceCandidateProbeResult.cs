@@ -8,6 +8,7 @@ public sealed class SourceCandidateProbeResult
     public IReadOnlyList<string> SitemapUrls { get; init; } = [];
     public decimal CrawlabilityScore { get; init; }
     public decimal CategoryRelevanceScore { get; init; }
+    public decimal HeuristicExtractabilityScore { get; init; }
     public decimal ExtractabilityScore { get; init; }
     public decimal CatalogLikelihoodScore { get; init; }
     public string? RepresentativeCategoryPageUrl { get; init; }

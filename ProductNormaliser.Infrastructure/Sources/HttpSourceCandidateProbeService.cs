@@ -56,8 +56,9 @@ public sealed partial class HttpSourceCandidateProbeService(
         var catalogLikelihoodScore = ScoreCatalogLikelihood(homePageHtml, representativeCategoryPageHtml, representativeProductPageUrl);
         var categoryRelevanceScore = ScoreCategoryRelevance(categoryKeys, homePageHtml, representativeCategoryPageHtml, categoryPageHints);
         var crawlabilityScore = ScoreCrawlability(homePageHtml, robotsText, sitemapUrls.Count > 0, representativeCategoryPageHtml, representativeProductPageHtml);
+        var heuristicExtractabilityScore = ScoreExtractability(structuredProductEvidenceDetected, technicalAttributeEvidenceDetected, representativeProductPageHtml);
         var extractabilityScore = AdjustExtractabilityScoreForLlm(
-            ScoreExtractability(structuredProductEvidenceDetected, technicalAttributeEvidenceDetected, representativeProductPageHtml),
+            heuristicExtractabilityScore,
             llmAcceptedRepresentativeProductPage,
             llmRejectedRepresentativeProductPage,
             heuristicProductEvidenceDetected);
@@ -70,6 +71,7 @@ public sealed partial class HttpSourceCandidateProbeService(
             SitemapUrls = sitemapUrls,
             CrawlabilityScore = crawlabilityScore,
             CategoryRelevanceScore = categoryRelevanceScore,
+            HeuristicExtractabilityScore = heuristicExtractabilityScore,
             ExtractabilityScore = extractabilityScore,
             CatalogLikelihoodScore = catalogLikelihoodScore,
             RepresentativeCategoryPageUrl = representativeCategoryPageUrl,

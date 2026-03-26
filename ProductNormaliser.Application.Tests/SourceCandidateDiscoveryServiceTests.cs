@@ -580,6 +580,111 @@ public sealed class SourceCandidateDiscoveryServiceTests
     }
 
     [Test]
+    public async Task DiscoverAsync_UsesLlmSignalInFinalScore()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "llm_weighted",
+                    DisplayName = "LLM Weighted",
+                    BaseUrl = "https://llm-weighted.example/",
+                    Host = "llm-weighted.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new FakeSourceCandidateProbeService(
+                new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["llm-weighted.example"] = new SourceCandidateProbeResult
+                    {
+                        HomePageReachable = true,
+                        RobotsTxtReachable = true,
+                        SitemapDetected = true,
+                        CrawlabilityScore = 80m,
+                        CategoryRelevanceScore = 70m,
+                        HeuristicExtractabilityScore = 60m,
+                        ExtractabilityScore = 70m,
+                        CatalogLikelihoodScore = 60m,
+                        RepresentativeCategoryPageReachable = true,
+                        RepresentativeProductPageReachable = true,
+                        StructuredProductEvidenceDetected = true,
+                        TechnicalAttributeEvidenceDetected = true,
+                        LlmAcceptedRepresentativeProductPage = true,
+                        LlmConfidenceScore = 90m
+                    }
+                }),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"]
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Candidates[0].ConfidenceScore, Is.EqualTo(77.1m));
+            Assert.That(result.Candidates[0].RecommendationStatus, Is.EqualTo(SourceCandidateResult.RecommendationRecommended));
+        });
+    }
+
+    [Test]
+    public async Task DiscoverAsync_LlmRejectOverridesWeakHeuristics()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "weak_and_rejected",
+                    DisplayName = "Weak And Rejected",
+                    BaseUrl = "https://weak-and-rejected.example/",
+                    Host = "weak-and-rejected.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new FakeSourceCandidateProbeService(
+                new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["weak-and-rejected.example"] = new SourceCandidateProbeResult
+                    {
+                        HomePageReachable = true,
+                        RobotsTxtReachable = true,
+                        SitemapDetected = false,
+                        CrawlabilityScore = 30m,
+                        CategoryRelevanceScore = 25m,
+                        HeuristicExtractabilityScore = 20m,
+                        ExtractabilityScore = 0m,
+                        CatalogLikelihoodScore = 20m,
+                        RepresentativeCategoryPageReachable = false,
+                        RepresentativeProductPageReachable = true,
+                        StructuredProductEvidenceDetected = false,
+                        TechnicalAttributeEvidenceDetected = false,
+                        LlmRejectedRepresentativeProductPage = true,
+                        LlmConfidenceScore = 20m
+                    }
+                }),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"]
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Candidates[0].ConfidenceScore, Is.EqualTo(22.55m));
+            Assert.That(result.Candidates[0].RecommendationStatus, Is.EqualTo(SourceCandidateResult.RecommendationDoNotAccept));
+            Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("llm_rejected_product_page"));
+        });
+    }
+
+    [Test]
     public async Task DiscoverAsync_CapsConfidenceWhenGovernanceRejectsCandidate()
     {
         var service = CreateService(

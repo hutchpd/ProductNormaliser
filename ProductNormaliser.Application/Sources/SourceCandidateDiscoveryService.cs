@@ -71,8 +71,10 @@ public sealed class SourceCandidateDiscoveryService(
 
             var reasons = BuildReasons(searchResult, probe, duplicateSources, governanceWarning);
             var duplicateRiskScore = CalculateDuplicateRiskScore(duplicateSources);
-            var recommendationStatus = DetermineRecommendationStatus(probe, duplicateRiskScore, allowedByGovernance);
-            var confidenceScore = CalculateConfidenceScore(probe, duplicateRiskScore, allowedByGovernance, searchResult, normalizedRequest);
+            var heuristicScore = CalculateHeuristicScore(probe, duplicateRiskScore, allowedByGovernance, searchResult, normalizedRequest);
+            var llmScore = CalculateLlmScore(probe);
+            var confidenceScore = CalculateConfidenceScore(heuristicScore, llmScore, probe);
+            var recommendationStatus = DetermineRecommendationStatus(probe, duplicateRiskScore, allowedByGovernance, heuristicScore, llmScore);
             var automationAssessment = BuildAutomationAssessment(searchResult, normalizedRequest, probe, duplicateRiskScore, allowedByGovernance, confidenceScore);
             candidates.Add(new SourceCandidateResult
             {
@@ -506,11 +508,11 @@ public sealed class SourceCandidateDiscoveryService(
         };
     }
 
-    private static decimal CalculateConfidenceScore(SourceCandidateProbeResult probe, decimal duplicateRiskScore, bool allowedByGovernance, SourceCandidateSearchResult searchResult, DiscoverSourceCandidatesRequest request)
+    private static decimal CalculateHeuristicScore(SourceCandidateProbeResult probe, decimal duplicateRiskScore, bool allowedByGovernance, SourceCandidateSearchResult searchResult, DiscoverSourceCandidatesRequest request)
     {
         var score = probe.CrawlabilityScore * 0.30m
             + probe.CategoryRelevanceScore * 0.25m
-            + probe.ExtractabilityScore * 0.35m
+            + GetHeuristicExtractabilityScore(probe) * 0.35m
             + probe.CatalogLikelihoodScore * 0.10m
             - (duplicateRiskScore * 0.35m);
 
@@ -519,6 +521,35 @@ public sealed class SourceCandidateDiscoveryService(
         if (!allowedByGovernance)
         {
             score = Math.Min(score, 10m);
+        }
+
+        return Math.Clamp(decimal.Round(score, 2, MidpointRounding.AwayFromZero), 0m, 100m);
+    }
+
+    private static decimal CalculateLlmScore(SourceCandidateProbeResult probe)
+    {
+        if (probe.LlmAcceptedRepresentativeProductPage)
+        {
+            return probe.LlmConfidenceScore ?? 80m;
+        }
+
+        if (probe.LlmRejectedRepresentativeProductPage)
+        {
+            return probe.LlmConfidenceScore ?? 20m;
+        }
+
+        return -1m;
+    }
+
+    private static decimal CalculateConfidenceScore(decimal heuristicScore, decimal llmScore, SourceCandidateProbeResult probe)
+    {
+        var score = llmScore < 0m
+            ? heuristicScore
+            : (heuristicScore * 0.6m) + (llmScore * 0.4m);
+
+        if (probe.LlmDisagreedWithHeuristics)
+        {
+            score = Math.Min(score, 69.99m);
         }
 
         return Math.Clamp(decimal.Round(score, 2, MidpointRounding.AwayFromZero), 0m, 100m);
@@ -571,11 +602,32 @@ public sealed class SourceCandidateDiscoveryService(
         return Math.Clamp(decimal.Round(score, 2, MidpointRounding.AwayFromZero), 0m, 100m);
     }
 
-    private static string DetermineRecommendationStatus(SourceCandidateProbeResult probe, decimal duplicateRiskScore, bool allowedByGovernance)
+    private static string DetermineRecommendationStatus(SourceCandidateProbeResult probe, decimal duplicateRiskScore, bool allowedByGovernance, decimal heuristicScore, decimal llmScore)
     {
         if (!allowedByGovernance)
         {
             return SourceCandidateResult.RecommendationDoNotAccept;
+        }
+
+        var heuristicsStrong = heuristicScore >= 70m;
+        var heuristicsWeak = heuristicScore < 45m;
+        var llmAccepted = probe.LlmAcceptedRepresentativeProductPage;
+        var llmRejected = probe.LlmRejectedRepresentativeProductPage;
+        var hasLlmSignal = llmScore >= 0m;
+
+        if (hasLlmSignal)
+        {
+            if (heuristicsStrong && llmAccepted)
+            {
+                return duplicateRiskScore < 50m
+                    ? SourceCandidateResult.RecommendationRecommended
+                    : SourceCandidateResult.RecommendationManualReview;
+            }
+
+            if (heuristicsWeak && llmRejected)
+            {
+                return SourceCandidateResult.RecommendationDoNotAccept;
+            }
         }
 
         if (probe.LlmDisagreedWithHeuristics)
@@ -610,6 +662,13 @@ public sealed class SourceCandidateDiscoveryService(
         }
 
         return SourceCandidateResult.RecommendationManualReview;
+    }
+
+    private static decimal GetHeuristicExtractabilityScore(SourceCandidateProbeResult probe)
+    {
+        return probe.HeuristicExtractabilityScore > 0m || probe.ExtractabilityScore == 0m
+            ? probe.HeuristicExtractabilityScore
+            : probe.ExtractabilityScore;
     }
 
     private static bool IsPotentialDuplicate(Core.Models.CrawlSource source, SourceCandidateSearchResult candidate)
