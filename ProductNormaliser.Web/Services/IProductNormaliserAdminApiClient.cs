@@ -28,6 +28,8 @@ public interface IProductNormaliserAdminApiClient
 
     Task<CategoryDetailDto?> GetCategoryDetailAsync(string categoryKey, CancellationToken cancellationToken = default);
 
+    Task<CategorySchemaDto> UpdateCategorySchemaAsync(string categoryKey, UpdateCategorySchemaRequest request, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<SourceDto>> GetSourcesAsync(CancellationToken cancellationToken = default);
 
     Task<SourceOnboardingAutomationSettingsDto> GetSourceOnboardingAutomationSettingsAsync(CancellationToken cancellationToken = default);

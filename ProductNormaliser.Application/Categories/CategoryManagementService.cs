@@ -74,6 +74,54 @@ public sealed class CategoryManagementService(
         return categoryMetadataService.UpsertAsync(categoryMetadata, cancellationToken);
     }
 
+    public async Task<CategorySchema?> UpdateSchemaAsync(string categoryKey, IReadOnlyList<CanonicalAttributeDefinition> attributes, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(categoryKey);
+        ArgumentNullException.ThrowIfNull(attributes);
+
+        var metadata = await categoryMetadataService.GetAsync(categoryKey, cancellationToken);
+        if (metadata is null)
+        {
+            return null;
+        }
+
+        metadata.ManagedSchemaAttributes = attributes
+            .Select(NormaliseAttribute)
+            .ToList();
+
+        await categoryMetadataService.UpsertAsync(metadata, cancellationToken);
+        return categorySchemaRegistry.GetSchema(metadata.CategoryKey);
+    }
+
+    private static CanonicalAttributeDefinition NormaliseAttribute(CanonicalAttributeDefinition attribute)
+    {
+        ArgumentNullException.ThrowIfNull(attribute);
+        ArgumentException.ThrowIfNullOrWhiteSpace(attribute.Key);
+        ArgumentException.ThrowIfNullOrWhiteSpace(attribute.DisplayName);
+
+        return new CanonicalAttributeDefinition
+        {
+            Key = NormaliseKey(attribute.Key),
+            DisplayName = attribute.DisplayName.Trim(),
+            ValueType = string.IsNullOrWhiteSpace(attribute.ValueType) ? "string" : attribute.ValueType.Trim().ToLowerInvariant(),
+            Unit = string.IsNullOrWhiteSpace(attribute.Unit) ? null : attribute.Unit.Trim(),
+            IsRequired = attribute.IsRequired,
+            ConflictSensitivity = attribute.ConflictSensitivity,
+            Description = string.IsNullOrWhiteSpace(attribute.Description)
+                ? $"{attribute.DisplayName.Trim()} captured during discovery."
+                : attribute.Description.Trim()
+        };
+    }
+
+    private static string NormaliseKey(string value)
+    {
+        return value
+            .Trim()
+            .Replace("-", "_", StringComparison.Ordinal)
+            .Replace(" ", "_", StringComparison.Ordinal)
+            .ToLowerInvariant();
+    }
+
     private static bool IsCrawlable(CategoryMetadata category)
     {
         return category.IsEnabled

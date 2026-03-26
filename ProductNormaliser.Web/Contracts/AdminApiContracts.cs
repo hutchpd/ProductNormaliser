@@ -142,6 +142,11 @@ public sealed class CategoryDetailDto
     public CategorySchemaDto Schema { get; init; } = new();
 }
 
+public sealed class UpdateCategorySchemaRequest
+{
+    public IReadOnlyList<CategorySchemaAttributeDto> Attributes { get; init; } = [];
+}
+
 public sealed class CategorySchemaDto
 {
     public string CategoryKey { get; init; } = string.Empty;

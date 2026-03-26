@@ -11,4 +11,5 @@ public interface ICategoryManagementService
     Task<CategoryDetail?> GetDetailAsync(string categoryKey, CancellationToken cancellationToken = default);
     Task<CategorySchema?> GetSchemaAsync(string categoryKey, CancellationToken cancellationToken = default);
     Task<CategoryMetadata> UpsertAsync(CategoryMetadata categoryMetadata, CancellationToken cancellationToken = default);
+    Task<CategorySchema?> UpdateSchemaAsync(string categoryKey, IReadOnlyList<CanonicalAttributeDefinition> attributes, CancellationToken cancellationToken = default);
 }

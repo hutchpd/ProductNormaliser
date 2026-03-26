@@ -12,6 +12,7 @@ using ProductNormaliser.Infrastructure.Crawling;
 using ProductNormaliser.Infrastructure.Discovery;
 using ProductNormaliser.Infrastructure.Intelligence;
 using ProductNormaliser.Infrastructure.Mongo.Repositories;
+using ProductNormaliser.Infrastructure.Schemas;
 using ProductNormaliser.Infrastructure.StructuredData;
 using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Normalisation;
@@ -97,7 +98,8 @@ public static class MongoServiceCollectionExtensions
         {
             services.AddSingleton(typeof(ICategorySchemaProvider), schemaProvider);
         }
-        services.AddSingleton<ICategorySchemaRegistry, CategorySchemaRegistry>();
+        services.AddSingleton<CategorySchemaRegistry>();
+        services.AddSingleton<ICategorySchemaRegistry, ManagedCategorySchemaRegistry>();
         foreach (var normaliser in DefaultCategoryRegistries.CreateAttributeNormalisers())
         {
             services.AddSingleton(typeof(ICategoryAttributeNormaliser), normaliser);

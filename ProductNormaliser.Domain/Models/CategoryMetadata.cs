@@ -10,4 +10,5 @@ public sealed class CategoryMetadata
     public CrawlSupportStatus CrawlSupportStatus { get; set; }
     public decimal SchemaCompletenessScore { get; set; }
     public bool IsEnabled { get; set; }
+    public List<CanonicalAttributeDefinition> ManagedSchemaAttributes { get; set; } = [];
 }

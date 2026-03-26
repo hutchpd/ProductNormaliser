@@ -25,6 +25,9 @@ public sealed class IndexModel(
     [BindProperty]
     public QuickCrawlInput QuickCrawl { get; set; } = new();
 
+    [BindProperty]
+    public ManageCategorySchemaInput CategorySchema { get; set; } = new();
+
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -406,6 +409,65 @@ public sealed class IndexModel(
         return Page();
     }
 
+    public async Task<IActionResult> OnPostSaveCategorySchemaAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(CategorySchema.CategoryKey))
+        {
+            ModelState.AddModelError(nameof(CategorySchema.CategoryKey), "Select a category before updating its attribute profile.");
+            await LoadDashboardAsync(cancellationToken);
+            return Page();
+        }
+
+        PrepareCategorySchemaDraft();
+        ValidateCategorySchemaDraft();
+        if (!ModelState.IsValid)
+        {
+            await LoadDashboardAsync(cancellationToken);
+            return Page();
+        }
+
+        try
+        {
+            var updatedSchema = await adminApiClient.UpdateCategorySchemaAsync(
+                CategorySchema.CategoryKey,
+                new UpdateCategorySchemaRequest
+                {
+                    Attributes = CategorySchema.Attributes.Select(attribute => new CategorySchemaAttributeDto
+                    {
+                        Key = attribute.Key,
+                        DisplayName = attribute.DisplayName,
+                        ValueType = attribute.ValueType,
+                        Unit = attribute.Unit,
+                        IsRequired = attribute.IsRequired,
+                        ConflictSensitivity = attribute.ConflictSensitivity,
+                        Description = attribute.Description
+                    }).ToArray()
+                },
+                cancellationToken);
+
+            StatusMessage = $"Updated the quality summary attribute profile for {updatedSchema.DisplayName}.";
+            return RedirectToPage("/Index", BuildCurrentRouteValues(CategorySchema.CategoryKey));
+        }
+        catch (AdminApiValidationException exception)
+        {
+            foreach (var entry in exception.Errors)
+            {
+                foreach (var message in entry.Value)
+                {
+                    ModelState.AddModelError(string.IsNullOrWhiteSpace(entry.Key) ? string.Empty : entry.Key, message);
+                }
+            }
+        }
+        catch (AdminApiException exception)
+        {
+            logger.LogWarning(exception, "Failed to update category schema for the dashboard.");
+            ErrorMessage = exception.Message;
+        }
+
+        await LoadDashboardAsync(cancellationToken);
+        return Page();
+    }
+
     public bool HasDiscoveryScaffold(SourceDto source)
     {
         return source.DiscoveryProfile.CategoryEntryPages.Count > 0
@@ -457,6 +519,8 @@ public sealed class IndexModel(
                 QuickCrawl.CategoryKey = SelectedCategoryKey;
             }
 
+            PopulateCategorySchemaEditor();
+
             LandingState = Categories.Count == 0 ? OperatorLandingState.Empty : OperatorLandingState.Ready;
         }
         catch (AdminApiException exception)
@@ -473,10 +537,192 @@ public sealed class IndexModel(
         }
     }
 
+    private void PopulateCategorySchemaEditor()
+    {
+        if (SelectedCategory is null)
+        {
+            if (string.IsNullOrWhiteSpace(CategorySchema.CategoryKey))
+            {
+                CategorySchema = new ManageCategorySchemaInput();
+            }
+
+            return;
+        }
+
+        if (string.Equals(CategorySchema.CategoryKey, SelectedCategory.Metadata.CategoryKey, StringComparison.OrdinalIgnoreCase)
+            && CategorySchema.Attributes.Count > 0)
+        {
+            return;
+        }
+
+        CategorySchema = new ManageCategorySchemaInput
+        {
+            CategoryKey = SelectedCategory.Metadata.CategoryKey,
+            Attributes = SelectedCategory.Schema.Attributes
+                .Select(attribute => new ManageCategorySchemaAttributeInput
+                {
+                    Key = attribute.Key,
+                    DisplayName = attribute.DisplayName,
+                    ValueType = attribute.ValueType,
+                    Unit = attribute.Unit,
+                    IsRequired = attribute.IsRequired,
+                    ConflictSensitivity = attribute.ConflictSensitivity,
+                    Description = attribute.Description
+                })
+                .ToList()
+        };
+    }
+
+    private void PrepareCategorySchemaDraft()
+    {
+        CategorySchema.CategoryKey = NormaliseKey(CategorySchema.CategoryKey);
+
+        if (HasMeaningfulNewAttribute(CategorySchema.NewAttribute))
+        {
+            var newAttribute = new ManageCategorySchemaAttributeInput
+            {
+                Key = CategorySchema.NewAttribute.Key,
+                DisplayName = CategorySchema.NewAttribute.DisplayName,
+                ValueType = CategorySchema.NewAttribute.ValueType,
+                Unit = CategorySchema.NewAttribute.Unit,
+                IsRequired = CategorySchema.NewAttribute.IsRequired,
+                ConflictSensitivity = CategorySchema.NewAttribute.ConflictSensitivity,
+                Description = CategorySchema.NewAttribute.Description
+            };
+            NormaliseAttribute(newAttribute);
+            CategorySchema.Attributes.Add(newAttribute);
+        }
+
+        foreach (var attribute in CategorySchema.Attributes)
+        {
+            NormaliseAttribute(attribute);
+        }
+
+        CategorySchema.NewAttribute = new NewCategorySchemaAttributeInput();
+    }
+
+    private void ValidateCategorySchemaDraft()
+    {
+        if (CategorySchema.Attributes.Count == 0)
+        {
+            ModelState.AddModelError(nameof(CategorySchema.Attributes), "Track at least one attribute in the quality summary.");
+            return;
+        }
+
+        var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < CategorySchema.Attributes.Count; index++)
+        {
+            var attribute = CategorySchema.Attributes[index];
+            if (string.IsNullOrWhiteSpace(attribute.Key))
+            {
+                ModelState.AddModelError($"{nameof(CategorySchema)}.{nameof(CategorySchema.Attributes)}[{index}].{nameof(ManageCategorySchemaAttributeInput.Key)}", "Attribute key is required.");
+            }
+
+            if (string.IsNullOrWhiteSpace(attribute.DisplayName))
+            {
+                ModelState.AddModelError($"{nameof(CategorySchema)}.{nameof(CategorySchema.Attributes)}[{index}].{nameof(ManageCategorySchemaAttributeInput.DisplayName)}", "Display name is required.");
+            }
+
+            if (!seenKeys.Add(attribute.Key))
+            {
+                ModelState.AddModelError($"{nameof(CategorySchema)}.{nameof(CategorySchema.Attributes)}[{index}].{nameof(ManageCategorySchemaAttributeInput.Key)}", $"Attribute key '{attribute.Key}' is duplicated.");
+            }
+        }
+    }
+
+    private static bool HasMeaningfulNewAttribute(NewCategorySchemaAttributeInput attribute)
+    {
+        return !string.IsNullOrWhiteSpace(attribute.Key)
+            || !string.IsNullOrWhiteSpace(attribute.DisplayName)
+            || !string.IsNullOrWhiteSpace(attribute.Description)
+            || !string.IsNullOrWhiteSpace(attribute.Unit);
+    }
+
+    private static void NormaliseAttribute(ManageCategorySchemaAttributeInput attribute)
+    {
+        attribute.Key = string.IsNullOrWhiteSpace(attribute.Key)
+            ? NormaliseKey(attribute.DisplayName)
+            : NormaliseKey(attribute.Key);
+        attribute.DisplayName = string.IsNullOrWhiteSpace(attribute.DisplayName)
+            ? ToDisplayName(attribute.Key)
+            : attribute.DisplayName.Trim();
+        attribute.ValueType = string.IsNullOrWhiteSpace(attribute.ValueType)
+            ? "string"
+            : attribute.ValueType.Trim().ToLowerInvariant();
+        attribute.Unit = string.IsNullOrWhiteSpace(attribute.Unit) ? null : attribute.Unit.Trim();
+        attribute.ConflictSensitivity = string.IsNullOrWhiteSpace(attribute.ConflictSensitivity)
+            ? "Medium"
+            : attribute.ConflictSensitivity.Trim();
+        attribute.Description = string.IsNullOrWhiteSpace(attribute.Description)
+            ? $"{attribute.DisplayName} captured during discovery."
+            : attribute.Description.Trim();
+    }
+
+    private static string NormaliseKey(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        return value
+            .Trim()
+            .Replace("-", "_", StringComparison.Ordinal)
+            .Replace(" ", "_", StringComparison.Ordinal)
+            .ToLowerInvariant();
+    }
+
+    private static string ToDisplayName(string key)
+    {
+        return string.Join(' ', key
+            .Split(['_', '-'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(segment => char.ToUpperInvariant(segment[0]) + segment[1..].ToLowerInvariant()));
+    }
+
+    private Dictionary<string, object?> BuildCurrentRouteValues(string categoryKey)
+    {
+        var selectedCategoryKeys = Request.Query["selectedCategory"]
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (!selectedCategoryKeys.Contains(categoryKey, StringComparer.OrdinalIgnoreCase))
+        {
+            selectedCategoryKeys.Add(categoryKey);
+        }
+
+        return new Dictionary<string, object?>
+        {
+            ["category"] = categoryKey,
+            ["selectedCategory"] = selectedCategoryKeys.ToArray()
+        };
+    }
+
     public sealed class QuickCrawlInput
     {
         [Required]
         public string CategoryKey { get; set; } = string.Empty;
+    }
+
+    public sealed class ManageCategorySchemaInput
+    {
+        public string CategoryKey { get; set; } = string.Empty;
+        public List<ManageCategorySchemaAttributeInput> Attributes { get; set; } = [];
+        public NewCategorySchemaAttributeInput NewAttribute { get; set; } = new();
+    }
+
+    public class ManageCategorySchemaAttributeInput
+    {
+        public string Key { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string ValueType { get; set; } = "string";
+        public string? Unit { get; set; }
+        public bool IsRequired { get; set; }
+        public string ConflictSensitivity { get; set; } = "Medium";
+        public string Description { get; set; } = string.Empty;
+    }
+
+    public sealed class NewCategorySchemaAttributeInput : ManageCategorySchemaAttributeInput
+    {
     }
 
     private string BuildUrl(string basePath, bool includePrimaryCategory = true)

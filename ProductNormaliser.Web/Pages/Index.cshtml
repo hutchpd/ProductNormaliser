@@ -406,32 +406,105 @@
                 }
                 else
                 {
-                    <div class="table-wrap mt-3">
-                        <table class="table dashboard-table align-middle mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Attribute</th>
-                                    <th>Type</th>
-                                    <th>Unit</th>
-                                    <th>Required</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                            @foreach (var schemaField in Model.SelectedCategory.Schema.Attributes.Take(6))
-                            {
-                                <tr>
-                                    <td>
-                                        <strong>@schemaField.DisplayName</strong>
-                                        <div class="subtle-copy mono">@schemaField.Key</div>
-                                    </td>
-                                    <td>@schemaField.ValueType</td>
-                                    <td>@(schemaField.Unit ?? "-")</td>
-                                    <td>@(schemaField.IsRequired ? "Required" : "Optional")</td>
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
-                    </div>
+                    <form method="post" asp-page-handler="SaveCategorySchema" class="mt-3">
+                        <input asp-for="CategorySchema.CategoryKey" type="hidden" />
+
+                        <div class="table-wrap">
+                            <table class="table dashboard-table align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Attribute</th>
+                                        <th>Type</th>
+                                        <th>Unit</th>
+                                        <th>Required</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                @for (var index = 0; index < Model.CategorySchema.Attributes.Count; index++)
+                                {
+                                    <tr>
+                                        <td>
+                                            <strong>@Model.CategorySchema.Attributes[index].DisplayName</strong>
+                                            <div class="subtle-copy mono">@Model.CategorySchema.Attributes[index].Key</div>
+                                            <div class="subtle-copy">@Model.CategorySchema.Attributes[index].Description</div>
+                                            <input asp-for="CategorySchema.Attributes[index].Key" type="hidden" />
+                                            <input asp-for="CategorySchema.Attributes[index].DisplayName" type="hidden" />
+                                            <input asp-for="CategorySchema.Attributes[index].ValueType" type="hidden" />
+                                            <input asp-for="CategorySchema.Attributes[index].Unit" type="hidden" />
+                                            <input asp-for="CategorySchema.Attributes[index].ConflictSensitivity" type="hidden" />
+                                            <input asp-for="CategorySchema.Attributes[index].Description" type="hidden" />
+                                        </td>
+                                        <td>@Model.CategorySchema.Attributes[index].ValueType</td>
+                                        <td>@(string.IsNullOrWhiteSpace(Model.CategorySchema.Attributes[index].Unit) ? "-" : Model.CategorySchema.Attributes[index].Unit)</td>
+                                        <td>
+                                            <label class="d-inline-flex align-items-center gap-2">
+                                                <input asp-for="CategorySchema.Attributes[index].IsRequired" />
+                                                <span>@(Model.CategorySchema.Attributes[index].IsRequired ? "Required" : "Optional")</span>
+                                            </label>
+                                        </td>
+                                    </tr>
+                                }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="panel panel-muted mt-3">
+                            <div class="panel-heading">
+                                <div>
+                                    <p class="eyebrow">Add Attribute</p>
+                                    <h2>Track another field during discovery</h2>
+                                    <p class="subtle-copy">Add a canonical attribute key such as screen_size_inch or display_port_count. New fields start contributing to future discovery and quality evaluation as fresh crawl data arrives.</p>
+                                </div>
+                            </div>
+
+                            <div class="form-grid">
+                                <div>
+                                    <label asp-for="CategorySchema.NewAttribute.DisplayName" class="form-label">Display name</label>
+                                    <input asp-for="CategorySchema.NewAttribute.DisplayName" class="form-control" placeholder="Display Port Count" />
+                                </div>
+                                <div>
+                                    <label asp-for="CategorySchema.NewAttribute.Key" class="form-label">Canonical key</label>
+                                    <input asp-for="CategorySchema.NewAttribute.Key" class="form-control mono" placeholder="display_port_count" />
+                                </div>
+                                <div>
+                                    <label asp-for="CategorySchema.NewAttribute.ValueType" class="form-label">Value type</label>
+                                    <select asp-for="CategorySchema.NewAttribute.ValueType" class="form-control">
+                                        <option value="string">String</option>
+                                        <option value="integer">Integer</option>
+                                        <option value="decimal">Decimal</option>
+                                        <option value="boolean">Boolean</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label asp-for="CategorySchema.NewAttribute.Unit" class="form-label">Unit</label>
+                                    <input asp-for="CategorySchema.NewAttribute.Unit" class="form-control" placeholder="Optional" />
+                                </div>
+                                <div>
+                                    <label asp-for="CategorySchema.NewAttribute.ConflictSensitivity" class="form-label">Conflict sensitivity</label>
+                                    <select asp-for="CategorySchema.NewAttribute.ConflictSensitivity" class="form-control">
+                                        <option value="Low">Low</option>
+                                        <option value="Medium">Medium</option>
+                                        <option value="High">High</option>
+                                        <option value="Critical">Critical</option>
+                                    </select>
+                                </div>
+                                <div class="d-flex align-items-end">
+                                    <label class="d-inline-flex align-items-center gap-2 mb-0">
+                                        <input asp-for="CategorySchema.NewAttribute.IsRequired" />
+                                        <span>Mark as required</span>
+                                    </label>
+                                </div>
+                                <div class="wide">
+                                    <label asp-for="CategorySchema.NewAttribute.Description" class="form-label">Description</label>
+                                    <textarea asp-for="CategorySchema.NewAttribute.Description" rows="2" class="form-control" placeholder="Optional note for operators and quality review."></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="actions-bar mt-3">
+                            <button type="submit" class="btn btn-dark">Save attribute lens</button>
+                        </div>
+                    </form>
                 }
             </section>
 

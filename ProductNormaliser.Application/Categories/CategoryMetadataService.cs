@@ -93,7 +93,31 @@ public sealed class CategoryMetadataService(ICategoryMetadataStore categoryMetad
             IconKey = NormaliseKey(category.IconKey),
             CrawlSupportStatus = category.CrawlSupportStatus,
             SchemaCompletenessScore = decimal.Clamp(category.SchemaCompletenessScore, 0m, 1m),
-            IsEnabled = category.IsEnabled
+            IsEnabled = category.IsEnabled,
+            ManagedSchemaAttributes = category.ManagedSchemaAttributes
+                .Select(NormaliseAttribute)
+                .ToList()
+        };
+    }
+
+    private static CanonicalAttributeDefinition NormaliseAttribute(CanonicalAttributeDefinition attribute)
+    {
+        ArgumentNullException.ThrowIfNull(attribute);
+        ArgumentException.ThrowIfNullOrWhiteSpace(attribute.Key);
+        ArgumentException.ThrowIfNullOrWhiteSpace(attribute.DisplayName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(attribute.ValueType);
+
+        return new CanonicalAttributeDefinition
+        {
+            Key = NormaliseKey(attribute.Key),
+            DisplayName = attribute.DisplayName.Trim(),
+            ValueType = attribute.ValueType.Trim().ToLowerInvariant(),
+            Unit = string.IsNullOrWhiteSpace(attribute.Unit) ? null : attribute.Unit.Trim(),
+            IsRequired = attribute.IsRequired,
+            ConflictSensitivity = attribute.ConflictSensitivity,
+            Description = string.IsNullOrWhiteSpace(attribute.Description)
+                ? $"{attribute.DisplayName.Trim()} captured during discovery."
+                : attribute.Description.Trim()
         };
     }
 

@@ -57,9 +57,19 @@ public sealed class CategoryMetadataServiceTests
     {
         private readonly Dictionary<string, CategoryMetadata> categories = new(StringComparer.OrdinalIgnoreCase);
 
+        public CategoryMetadata? Get(string categoryKey)
+        {
+            return categories.TryGetValue(categoryKey, out var category) ? Clone(category) : null;
+        }
+
         public Task<CategoryMetadata?> GetAsync(string categoryKey, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(categories.TryGetValue(categoryKey, out var category) ? Clone(category) : null);
+        }
+
+        public IReadOnlyList<CategoryMetadata> List()
+        {
+            return categories.Values.Select(Clone).ToArray();
         }
 
         public Task<IReadOnlyList<CategoryMetadata>> ListAsync(CancellationToken cancellationToken = default)
@@ -84,7 +94,19 @@ public sealed class CategoryMetadataServiceTests
                 IconKey = category.IconKey,
                 CrawlSupportStatus = category.CrawlSupportStatus,
                 SchemaCompletenessScore = category.SchemaCompletenessScore,
-                IsEnabled = category.IsEnabled
+                IsEnabled = category.IsEnabled,
+                ManagedSchemaAttributes = category.ManagedSchemaAttributes
+                    .Select(attribute => new CanonicalAttributeDefinition
+                    {
+                        Key = attribute.Key,
+                        DisplayName = attribute.DisplayName,
+                        ValueType = attribute.ValueType,
+                        Unit = attribute.Unit,
+                        IsRequired = attribute.IsRequired,
+                        ConflictSensitivity = attribute.ConflictSensitivity,
+                        Description = attribute.Description
+                    })
+                    .ToList()
             };
         }
     }

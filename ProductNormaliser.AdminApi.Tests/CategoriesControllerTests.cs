@@ -252,6 +252,69 @@ public sealed class CategoriesControllerTests
         });
     }
 
+    [Test]
+    public async Task UpdateCategorySchema_ReplacesTrackedAttributes()
+    {
+        var service = new FakeCategoryManagementService(
+            [CreateCategory("tv", "TVs", "display", "Display", CrawlSupportStatus.Supported, true)],
+            new Dictionary<string, CategorySchema>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["tv"] = new()
+                {
+                    CategoryKey = "tv",
+                    DisplayName = "Televisions",
+                    Attributes =
+                    [
+                        new CanonicalAttributeDefinition
+                        {
+                            Key = "screen_size_inch",
+                            DisplayName = "Screen Size",
+                            ValueType = "decimal",
+                            Unit = "inch",
+                            Description = "Nominal display size."
+                        }
+                    ]
+                }
+            });
+        var controller = new CategoriesController(service);
+
+        var result = await controller.UpdateCategorySchema("tv", new UpdateCategorySchemaRequest
+        {
+            Attributes =
+            [
+                new CategorySchemaAttributeDto
+                {
+                    Key = "screen_size_inch",
+                    DisplayName = "Screen Size",
+                    ValueType = "decimal",
+                    Unit = "inch",
+                    IsRequired = true,
+                    ConflictSensitivity = "High",
+                    Description = "Nominal display size."
+                },
+                new CategorySchemaAttributeDto
+                {
+                    Key = "display_port_count",
+                    DisplayName = "Display Port Count",
+                    ValueType = "integer",
+                    IsRequired = true,
+                    ConflictSensitivity = "Medium",
+                    Description = "Number of DisplayPort inputs."
+                }
+            ]
+        });
+
+        var ok = result as OkObjectResult;
+        Assert.That(ok, Is.Not.Null);
+        var payload = ok!.Value as CategorySchemaDto;
+        Assert.That(payload, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(payload!.Attributes.Select(attribute => attribute.Key), Does.Contain("display_port_count"));
+            Assert.That(payload.Attributes.Single(attribute => attribute.Key == "screen_size_inch").IsRequired, Is.True);
+        });
+    }
+
     private static CategoryMetadata CreateCategory(string categoryKey, string displayName, string familyKey, string familyDisplayName, CrawlSupportStatus crawlSupportStatus, bool isEnabled)
     {
         return new CategoryMetadata
@@ -331,6 +394,28 @@ public sealed class CategoriesControllerTests
         {
             schemasByKey.TryGetValue(categoryKey, out var schema);
             return Task.FromResult(schema);
+        }
+
+        public Task<CategorySchema?> UpdateSchemaAsync(string categoryKey, IReadOnlyList<CanonicalAttributeDefinition> attributes, CancellationToken cancellationToken = default)
+        {
+            if (!items.Any(category => string.Equals(category.CategoryKey, categoryKey, StringComparison.OrdinalIgnoreCase)))
+            {
+                return Task.FromResult<CategorySchema?>(null);
+            }
+
+            var existingDisplayName = schemasByKey.TryGetValue(categoryKey, out var existing)
+                ? existing.DisplayName
+                : categoryKey;
+
+            var updated = new CategorySchema
+            {
+                CategoryKey = categoryKey,
+                DisplayName = existingDisplayName,
+                Attributes = attributes.ToList()
+            };
+
+            schemasByKey[categoryKey] = updated;
+            return Task.FromResult<CategorySchema?>(updated);
         }
 
         public Task<CategoryMetadata> UpsertAsync(CategoryMetadata categoryMetadata, CancellationToken cancellationToken = default)

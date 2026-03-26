@@ -147,6 +147,11 @@ internal static class AdminApiContractValidator
         ValidateCategorySchema(payload.Schema, "categoryDetail.schema");
     }
 
+    public static void ValidateCategorySchema(CategorySchemaDto payload)
+    {
+        ValidateCategorySchema(payload, "categorySchema");
+    }
+
     public static void ValidateSources(IReadOnlyList<SourceDto> payload)
     {
         ValidateItems(payload, "sources", ValidateSource);

@@ -7,10 +7,21 @@ namespace ProductNormaliser.Infrastructure.Mongo.Repositories;
 public sealed class CategoryMetadataRepository(MongoDbContext mongoDbContext)
     : MongoRepositoryBase<CategoryMetadata>(mongoDbContext.Categories), ICategoryMetadataStore
 {
+    public CategoryMetadata? Get(string categoryKey)
+    {
+        return Collection.Find(category => category.CategoryKey == categoryKey)
+            .FirstOrDefault();
+    }
+
     public async Task<CategoryMetadata?> GetAsync(string categoryKey, CancellationToken cancellationToken = default)
     {
         return await Collection.Find(category => category.CategoryKey == categoryKey)
             .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public IReadOnlyList<CategoryMetadata> List()
+    {
+        return Collection.Find(Builders<CategoryMetadata>.Filter.Empty).ToList();
     }
 
     public async Task<IReadOnlyList<CategoryMetadata>> ListAsync(CancellationToken cancellationToken = default)

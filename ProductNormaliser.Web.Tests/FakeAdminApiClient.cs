@@ -17,6 +17,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public IReadOnlyList<CategoryFamilyDto> CategoryFamilies { get; set; } = [];
     public IReadOnlyList<CategoryMetadataDto> EnabledCategories { get; set; } = [];
     public CategoryDetailDto? CategoryDetail { get; set; }
+    public CategorySchemaDto? UpdatedCategorySchema { get; set; }
     public IReadOnlyList<SourceDto> Sources { get; set; } = [];
     public SourceDto? Source { get; set; }
     public SourceOnboardingAutomationSettingsDto AutomationSettings { get; set; } = new()
@@ -80,6 +81,8 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public IReadOnlyList<AttributeStabilityDto> AttributeStability { get; set; } = [];
     public IReadOnlyList<SourceAttributeDisagreementDto> SourceDisagreements { get; set; } = [];
     public string? LastCoverageCategoryKey { get; private set; }
+    public string? LastUpdatedCategorySchemaCategoryKey { get; private set; }
+    public UpdateCategorySchemaRequest? LastUpdatedCategorySchemaRequest { get; private set; }
     public string? LastUnmappedCategoryKey { get; private set; }
     public string? LastSourceQualityCategoryKey { get; private set; }
     public string? LastMergeInsightsCategoryKey { get; private set; }
@@ -222,6 +225,30 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             : EnabledCategories);
     public Task<CategoryDetailDto?> GetCategoryDetailAsync(string categoryKey, CancellationToken cancellationToken = default)
         => CategoryDetailException is null ? Task.FromResult(CategoryDetail) : Task.FromException<CategoryDetailDto?>(CategoryDetailException);
+    public Task<CategorySchemaDto> UpdateCategorySchemaAsync(string categoryKey, UpdateCategorySchemaRequest request, CancellationToken cancellationToken = default)
+    {
+        LastUpdatedCategorySchemaCategoryKey = categoryKey;
+        LastUpdatedCategorySchemaRequest = request;
+
+        var schema = UpdatedCategorySchema ?? new CategorySchemaDto
+        {
+            CategoryKey = categoryKey,
+            DisplayName = CategoryDetail?.Schema.DisplayName ?? categoryKey,
+            Attributes = request.Attributes.ToArray()
+        };
+
+        if (CategoryDetail is not null && string.Equals(CategoryDetail.Metadata.CategoryKey, categoryKey, StringComparison.OrdinalIgnoreCase))
+        {
+            CategoryDetail = new CategoryDetailDto
+            {
+                Metadata = CategoryDetail.Metadata,
+                Schema = schema
+            };
+        }
+
+        UpdatedCategorySchema = schema;
+        return Task.FromResult(schema);
+    }
 
     public Task<IReadOnlyList<SourceDto>> GetSourcesAsync(CancellationToken cancellationToken = default)
         => SourcesException is null ? Task.FromResult(Sources) : Task.FromException<IReadOnlyList<SourceDto>>(SourcesException);

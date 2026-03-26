@@ -1,4 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.RazorPages;
 using ProductNormaliser.Web.Contracts;
 using ProductNormaliser.Web.Pages;
 using ProductNormaliser.Web.Services;
@@ -36,6 +39,8 @@ public sealed class OperatorLandingPageTests
             Assert.That(html, Does.Contain("Active Crawl Jobs"));
             Assert.That(html, Does.Contain("Product Counts"));
             Assert.That(html, Does.Contain("Quality Summary"));
+            Assert.That(html, Does.Contain("Save attribute lens"));
+            Assert.That(html, Does.Contain("Track another field during discovery"));
             Assert.That(html, Does.Contain("Source Health Summary"));
             Assert.That(html, Does.Contain("Queue depth"));
             Assert.That(html, Does.Contain("Retry backlog"));
@@ -59,6 +64,65 @@ public sealed class OperatorLandingPageTests
             Assert.That(html, Does.Contain("Healthy"));
             Assert.That(html, Does.Contain("Last crawl succeeded"));
             Assert.That(html, Does.Contain("Last crawl failed"));
+        });
+    }
+
+    [Test]
+    public async Task OperatorLanding_OnPostSaveCategorySchemaAsync_SubmitsRequiredTogglesAndNewAttribute()
+    {
+        var fakeAdminApiClient = CreateLandingClient();
+        var model = new IndexModel(fakeAdminApiClient, NullLogger<IndexModel>.Instance)
+        {
+            CategorySchema = new IndexModel.ManageCategorySchemaInput
+            {
+                CategoryKey = "tv",
+                Attributes =
+                [
+                    new IndexModel.ManageCategorySchemaAttributeInput
+                    {
+                        Key = "brand",
+                        DisplayName = "Brand",
+                        ValueType = "string",
+                        IsRequired = true,
+                        ConflictSensitivity = "Critical",
+                        Description = "Manufacturer brand name."
+                    },
+                    new IndexModel.ManageCategorySchemaAttributeInput
+                    {
+                        Key = "screen_size_inch",
+                        DisplayName = "Screen Size",
+                        ValueType = "decimal",
+                        Unit = "inch",
+                        IsRequired = true,
+                        ConflictSensitivity = "High",
+                        Description = "Nominal display size in inches."
+                    }
+                ],
+                NewAttribute = new IndexModel.NewCategorySchemaAttributeInput
+                {
+                    DisplayName = "Display Port Count",
+                    ValueType = "integer",
+                    IsRequired = true,
+                    ConflictSensitivity = "Medium",
+                    Description = "Number of DisplayPort inputs."
+                }
+            },
+            PageContext = new PageContext
+            {
+                HttpContext = new DefaultHttpContext()
+            }
+        };
+        model.PageContext.HttpContext.Request.QueryString = new QueryString("?category=tv&selectedCategory=tv");
+
+        var result = await model.OnPostSaveCategorySchemaAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
+            Assert.That(fakeAdminApiClient.LastUpdatedCategorySchemaCategoryKey, Is.EqualTo("tv"));
+            Assert.That(fakeAdminApiClient.LastUpdatedCategorySchemaRequest, Is.Not.Null);
+            Assert.That(fakeAdminApiClient.LastUpdatedCategorySchemaRequest!.Attributes.Select(attribute => attribute.Key), Does.Contain("display_port_count"));
+            Assert.That(fakeAdminApiClient.LastUpdatedCategorySchemaRequest.Attributes.Single(attribute => attribute.Key == "screen_size_inch").IsRequired, Is.True);
         });
     }
 

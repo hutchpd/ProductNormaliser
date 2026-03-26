@@ -64,9 +64,32 @@ public sealed class CategoriesController(ICategoryManagementService categoryMana
             : Ok(Map(schema));
     }
 
+    [HttpPut("{categoryKey}/schema")]
+    public async Task<IActionResult> UpdateCategorySchema(string categoryKey, [FromBody] UpdateCategorySchemaRequest request, CancellationToken cancellationToken = default)
+    {
+        var schema = await categoryManagementService.UpdateSchemaAsync(
+            categoryKey,
+            request.Attributes.Select(attribute => new CanonicalAttributeDefinition
+            {
+                Key = attribute.Key,
+                DisplayName = attribute.DisplayName,
+                ValueType = attribute.ValueType,
+                Unit = attribute.Unit,
+                IsRequired = attribute.IsRequired,
+                ConflictSensitivity = ParseConflictSensitivity(attribute.ConflictSensitivity),
+                Description = attribute.Description
+            }).ToArray(),
+            cancellationToken);
+
+        return schema is null
+            ? NotFound()
+            : Ok(Map(schema));
+    }
+
     [HttpPut("{categoryKey}")]
     public async Task<IActionResult> UpsertCategory(string categoryKey, [FromBody] UpsertCategoryMetadataRequest request, CancellationToken cancellationToken = default)
     {
+        var existing = await categoryManagementService.GetAsync(categoryKey, cancellationToken);
         var category = await categoryManagementService.UpsertAsync(new CategoryMetadata
         {
             CategoryKey = categoryKey,
@@ -76,7 +99,8 @@ public sealed class CategoriesController(ICategoryManagementService categoryMana
             IconKey = request.IconKey,
             CrawlSupportStatus = ParseSupportStatus(request.CrawlSupportStatus),
             SchemaCompletenessScore = request.SchemaCompletenessScore,
-            IsEnabled = request.IsEnabled
+            IsEnabled = request.IsEnabled,
+            ManagedSchemaAttributes = existing?.ManagedSchemaAttributes ?? []
         }, cancellationToken);
 
         return Ok(Map(category));
@@ -87,6 +111,13 @@ public sealed class CategoriesController(ICategoryManagementService categoryMana
         return Enum.TryParse<CrawlSupportStatus>(value, ignoreCase: true, out var supportStatus)
             ? supportStatus
             : throw new ArgumentException($"Unsupported crawl support status '{value}'.", nameof(value));
+    }
+
+    private static ConflictSensitivity ParseConflictSensitivity(string value)
+    {
+        return Enum.TryParse<ConflictSensitivity>(value, ignoreCase: true, out var conflictSensitivity)
+            ? conflictSensitivity
+            : ConflictSensitivity.Medium;
     }
 
     private static CategoryMetadataDto Map(CategoryMetadata category)

@@ -92,6 +92,11 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
         return GetOptionalAsync<CategoryDetailDto>($"api/categories/{Uri.EscapeDataString(categoryKey)}/detail", AdminApiContractValidator.ValidateCategoryDetail, cancellationToken);
     }
 
+    public Task<CategorySchemaDto> UpdateCategorySchemaAsync(string categoryKey, UpdateCategorySchemaRequest request, CancellationToken cancellationToken = default)
+    {
+        return SendAsync<CategorySchemaDto>(HttpMethod.Put, $"api/categories/{Uri.EscapeDataString(categoryKey)}/schema", request, AdminApiContractValidator.ValidateCategorySchema, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<SourceDto>> GetSourcesAsync(CancellationToken cancellationToken = default)
     {
         return await GetRequiredAsync<SourceDto[]>("api/sources", AdminApiContractValidator.ValidateSources, cancellationToken);
