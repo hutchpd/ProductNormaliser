@@ -1,6 +1,6 @@
 # ProductNormaliser.Infrastructure
 
-ProductNormaliser.Infrastructure contains the concrete adapters and services that make the Domain model operational. It is where MongoDB persistence, crawl and discovery queue handling, robots and HTTP access, deterministic discovery, structured data extraction, delta detection, and long-term intelligence services are implemented.
+ProductNormaliser.Infrastructure contains the concrete adapters and services that make the Domain model operational. It is where MongoDB persistence, crawl and discovery queue handling, robots and HTTP access, deterministic discovery, structured data extraction, source-candidate probing, the optional local classification layer, delta detection, and long-term intelligence services are implemented.
 
 If Domain defines what the system means, Infrastructure defines how those concepts are executed against real storage and external inputs.
 
@@ -12,6 +12,7 @@ If Domain defines what the system means, Infrastructure defines how those concep
 - provide HTTP fetching and robots policy handling
 - implement deterministic sitemap and listing discovery under bounded policy rules
 - extract structured product data from source pages
+- probe representative pages and distinguish likely product sources from noise using heuristics plus an optional local classification layer
 - compute delta, trust, stability, disagreement, and adaptive scheduling signals
 
 ## Main areas
@@ -51,6 +52,18 @@ Contains the deterministic discovery stack:
 - `ListingPageClassifier`
 - `DiscoveryLinkPolicy`
 - `RelatedLinkExpansionService`
+
+Source-candidate probing also lives nearby and combines representative-page fetching, structural heuristics, and the optional local classification layer before source candidates are recommended or rejected.
+
+### `AI`
+
+Contains the optional local classification and evaluation components:
+
+- `LlamaPageClassificationService`
+- `LlmOptions`
+- `PageClassificationEvaluator`
+
+This layer is intentionally conservative. It provides an extra page-level and source-probe signal, but the rest of the platform still relies on the existing heuristic and policy pipeline. The evaluator exists so the effect of this layer can be measured on a golden dataset before it is enabled more broadly.
 
 These services are responsible for bounded traversal from source entry points and sitemap hints into candidate product URLs while enforcing source-level allowlists, deny rules, URL patterns, robots compliance, and max-depth or max-budget limits.
 
@@ -105,6 +118,15 @@ Crawl behavior is supplied through a `Crawl` section with:
 - `TransientRetryCount`
 - `WorkerIdleDelayMilliseconds`
 - host-specific delay overrides
+
+Optional classification behavior is supplied through an `Llm` section with:
+
+- `Enabled`
+- `EvaluationMode`
+- `ModelPath`
+- `MaxContentLength`
+- `ConfidenceThreshold`
+- `TimeoutMs`
 
 Those settings are typically provided by the Worker host and reused by any other host that calls the service-registration extension.
 

@@ -51,6 +51,8 @@ Current default settings include:
 - transient retry count: 2
 - idle delay when the queue is empty: 1500 ms
 
+The optional local classification-layer settings currently matter more to source discovery and source-probe workflows than to the steady-state crawl loop. They are still shared through the same infrastructure registration so the runtime can evaluate them consistently where needed.
+
 ## How to run
 
 From the repository root:

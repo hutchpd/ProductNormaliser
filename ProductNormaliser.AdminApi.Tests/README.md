@@ -10,6 +10,7 @@ It is intended to hold tests for:
 - read-model projection behavior close to the API boundary
 - management authorization over category, source, and crawl-job endpoints
 - discovery-aware source and crawl-job contract projections
+- source automation and source-candidate discovery contract projections used by the operator UI
 
 ## Build
 

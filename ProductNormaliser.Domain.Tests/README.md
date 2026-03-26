@@ -9,6 +9,7 @@ It is intended to hold tests for:
 - merge weighting
 - identity rules
 - conflict semantics
+- shared source-policy and discovery-oriented domain models
 - domain-only utility behavior
 
 ## Build

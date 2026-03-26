@@ -80,7 +80,7 @@ The solution now contains ten projects:
 2. Each source carries a discovery profile with category entry pages, sitemap hints, allow or deny path rules, URL patterns, depth limits, and per-run budgets.
 3. A category crawl job now seeds deterministic discovery from eligible managed sources instead of relying only on pre-known targets.
 4. The discovery worker fetches sitemaps and listing pages while respecting robots rules, source throttling, depth limits, and URL budgets.
-5. Discovered URLs are classified, persisted, and promoted into crawl targets only when they look like valid product candidates.
+5. Discovered URLs and candidate source pages are screened by heuristics and an optional local classification layer before promotion or operator recommendation.
 6. The crawl worker fetches confirmed product pages and extracts structured product evidence.
 7. A source product is built from extracted data and normalised into the canonical schema.
 8. Identity resolution decides whether the source product matches an existing canonical product.
@@ -99,6 +99,10 @@ The solution currently includes:
 - structured data extraction from HTML and JSON-LD
 - MongoDB persistence for source and canonical records
 - MongoDB persistence for managed crawl sources and per-source throttling policy
+- conservative source-candidate discovery with market and locale inference, representative-page probing, and explainable recommendation reasons
+- source onboarding automation modes with explicit operator controls, guarded thresholds, and visible candidate-level explanations
+- an optional local page-classification layer that helps distinguish likely product pages and source candidates from noisy or non-catalog content without replacing the existing heuristic pipeline
+- evaluation and golden-dataset test coverage for the classification layer so it can be measured before it is relied on operationally
 - source discovery profiles with category entry pages, sitemap hints, allow or deny rules, URL patterns, depth limits, and run budgets
 - MongoDB persistence for discovered URLs and the discovery queue
 - deterministic discovery infrastructure for sitemap parsing, listing traversal, product-page confirmation, and discovery link policy evaluation
@@ -161,8 +165,15 @@ Key settings:
 - `Crawl:TransientRetryCount`
 - `Crawl:WorkerIdleDelayMilliseconds`
 - `Crawl:HostDelayMilliseconds`
+- `Llm:Enabled`
+- `Llm:EvaluationMode`
+- `Llm:MaxContentLength`
+- `Llm:ConfidenceThreshold`
+- `Llm:TimeoutMs`
 
 Admin API configuration lives in [ProductNormaliser.AdminApi/appsettings.json](ProductNormaliser.AdminApi/appsettings.json).
+
+The optional classification layer is intentionally conservative. It is treated as one more signal in source evaluation and product-page validation, not as an autonomous decision-maker. If it is disabled, times out, or cannot load its local model, the platform continues with heuristics only.
 
 ## Running the worker
 

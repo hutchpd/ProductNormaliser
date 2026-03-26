@@ -12,6 +12,7 @@ This project is important because ProductNormaliser is not just a CRUD system. I
 - validate merge, conflict, and identity decisions
 - validate worker orchestration behavior
 - validate deterministic discovery and crawl seeding behavior
+- validate the optional page-classification layer, its kill switch and timeout behavior, and the golden-dataset evaluation harness
 - validate admin API read models and observability responses
 - validate temporal intelligence, adaptive backoff, and disagreement tracking
 
@@ -26,6 +27,7 @@ Representative test areas include:
 - JSON-LD and HTML extraction
 - source-product building
 - source discovery profile defaults, discovery promotion, and discovery-progress accounting
+- source candidate probing, representative-page classification, heuristic-versus-classification scoring, and source recommendation behavior
 - Mongo repository integration, including the managed crawl-source registry
 - identity and merge scenarios
 - delta processing and semantic change detection
@@ -34,6 +36,7 @@ Representative test areas include:
 - temporal intelligence
 - adaptive backoff behavior
 - source disagreement analytics
+- golden-dataset accuracy, precision, recall, confidence calibration, and false-positive or false-negative tracking for the classification layer
 
 ## Tooling
 

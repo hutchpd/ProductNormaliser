@@ -12,6 +12,7 @@ This is an internal-facing service designed to help operators, analysts, and dev
 - expose quality and source-intelligence analytics
 - expose category catalog and schema metadata for dashboard discovery
 - expose managed crawl-source administration for the web UI
+- expose source-candidate discovery and guarded onboarding settings for the web UI
 - translate persisted domain records into API DTOs suitable for inspection or dashboarding
 
 ## Runtime composition
@@ -25,7 +26,10 @@ At startup the API registers:
 - `IDataIntelligenceService` for quality and historical intelligence read models
 - `ICategoryManagementService` for category catalog and combined detail lookups
 - `ISourceManagementService` for source registration, validation, and policy updates
+- `ISourceCandidateDiscoveryService` for explainable source-candidate evaluation
 - `ISourceOperationalInsightsProvider` for source readiness, health, and recent-activity summaries
+
+The API composition also registers an optional local page-classification service used by source probing. It is treated as a supporting signal behind the existing heuristic pipeline, not as a separate decision system.
 
 The API composition now supports full source discovery profiles end to end, including category entry pages, sitemap hints, allow or deny rules, URL patterns, max depth, and per-run budgets.
 
@@ -98,6 +102,7 @@ These endpoints exist so the dashboard can discover supported electrical-goods c
 ### Sources
 
 - `GET /api/sources`
+- `GET /api/sources/automation-settings`
 - `GET /api/sources/{sourceId}`
 - `POST /api/sources`
 - `PUT /api/sources/{sourceId}`
@@ -108,9 +113,15 @@ These endpoints exist so the dashboard can discover supported electrical-goods c
 
 These endpoints manage the dedicated crawl-source registry used by the web UI. They include OpenAPI response annotations and concrete example payloads in the generated document so dashboard and client developers can inspect the expected shapes directly.
 
-The source payloads now include readiness, health, recent activity, discovery queue depth, confirmed product counts, and the full source discovery profile so the operator UI can surface crawl posture without separately stitching together telemetry.
+The source payloads now include readiness, health, recent activity, discovery queue depth, confirmed product counts, automation policy, and the full source discovery profile so the operator UI can surface crawl posture without separately stitching together telemetry.
 
 `POST /api/sources` and `PUT /api/sources/{sourceId}` now support source discovery profile data directly. If a profile is omitted during registration, the application layer applies conservative startup defaults so a newly added source can participate in the boot-and-populate flow immediately.
+
+### Source candidate discovery
+
+- `POST /api/sources/candidates/discover`
+
+This endpoint returns candidate sources with market and locale evidence, probe signals, recommendation reasons, and the output of the optional classification layer where available. The API also exposes conservative automation settings so the web UI can keep onboarding controls visible and operator-led.
 
 ### Quality and intelligence
 
@@ -165,6 +176,8 @@ Configuration is read from [appsettings.json](appsettings.json) and the environm
 The default configuration currently includes logging levels and `AllowedHosts`.
 
 Because the API reads from MongoDB through shared infrastructure registration, it also needs the same `Mongo` settings used by the worker when running outside the existing local defaults.
+
+If the optional classification layer is enabled, the API host also reads `Llm` settings such as enablement, timeout, confidence threshold, evaluation mode, and local model path. These settings are deliberately optional; the API continues to function with heuristics only when the classification layer is disabled or unavailable.
 
 ## How to run
 

@@ -15,6 +15,7 @@ The web host currently delivers:
 - product detail pages with source comparison, evidence, conflicts, and history
 - a quality dashboard for schema coverage, unmapped attributes, stability, and disagreements
 - source registry and source detail pages with readiness, health, last-activity, source registration, discovery profile editing, enable or disable, category assignment, and throttling controls
+- source candidate discovery with candidate reasons, evidence strength, automation posture, and classification-informed recommendation cues presented alongside the existing probe heuristics
 
 ## Architectural role
 
@@ -29,6 +30,7 @@ The web host calls the Admin API for:
 - product list, product detail, and product history
 - quality dashboards and analytics
 - source registry, source detail, and source management actions
+- source candidate discovery and onboarding automation settings
 - high-level stats and operational summary used by the operator landing page
 
 The web experience is now intentionally optimized for a simple startup path:
@@ -38,6 +40,8 @@ The web experience is now intentionally optimized for a simple startup path:
 3. choose category context
 4. launch a seeded category crawl
 5. watch discovery queue depth, confirmed product targets, and downstream product progress update from the same console
+
+The web UI keeps the source-onboarding experience deliberately explicit. The classification layer is surfaced only as part of the candidate explanation and recommendation trail so operators can see when a candidate looks product-like and when it still needs manual review.
 
 ## Observability surface
 

@@ -1,12 +1,13 @@
 # ProductNormaliser.Domain
 
-ProductNormaliser.Domain contains the domain model and decision logic for the solution. If you want to understand what a product is, how attributes are represented, how source records become canonical records, and which extension points the rest of the system depends on, this is the project to read first.
+ProductNormaliser.Domain contains the domain model and decision logic for the solution. If you want to understand what a product is, how attributes are represented, how source records become canonical records, which source policies exist, and which extension points the rest of the system depends on, this is the project to read first.
 
 This project does not talk to MongoDB, HTTP, or ASP.NET directly. It defines the rules and contracts that the infrastructure and runtime hosts implement.
 
 ## Responsibilities
 
 - define core product, evidence, offer, crawl, discovery, conflict, history, and quality models
+- define source onboarding and automation policy vocabulary shared across the hosts
 - define category schema, metadata, and canonical attribute definitions for electrical-goods families
 - define interfaces for extraction, normalisation, identity resolution, merge, trust, stability, disagreement, and backoff services
 - implement merge logic and conflict detection
@@ -28,7 +29,7 @@ Important model groups include:
 - canonical state: `CanonicalProduct`, `CanonicalAttributeValue`, `AttributeEvidence`
 - identity and merge: `ProductFingerprint`, `ProductIdentityMatchResult`, `MergeConflict`
 - quality and time: `SourceQualitySnapshot`, `AttributeStabilityScore`, `ProductChangeEvent`, `SourceAttributeDisagreement`
-- crawl and discovery intelligence: `CrawlQueueItem`, `DiscoveryQueueItem`, `DiscoveredUrl`, `SourceDiscoveryProfile`, `CrawlContext`, `AdaptiveCrawlPolicy`, `PageVolatilityProfile`
+- crawl and discovery intelligence: `CrawlQueueItem`, `DiscoveryQueueItem`, `DiscoveredUrl`, `SourceDiscoveryProfile`, `SourceAutomationPolicy`, `CrawlContext`, `AdaptiveCrawlPolicy`, `PageVolatilityProfile`
 
 `SourceDiscoveryProfile` is the core source-level policy object for deterministic discovery. It defines category entry pages, sitemap hints, host and path allowlists, deny prefixes, product and listing URL patterns, maximum discovery depth, and per-run retry or URL budgets.
 
