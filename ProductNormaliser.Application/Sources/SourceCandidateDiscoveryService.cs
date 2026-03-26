@@ -256,6 +256,36 @@ public sealed class SourceCandidateDiscoveryService(
             });
         }
 
+        if (probe.LlmAcceptedRepresentativeProductPage)
+        {
+            reasons.Add(new SourceCandidateReason
+            {
+                Code = "llm_validated_product_page",
+                Message = "The LLM agreed that the representative product page looks like a real product page with specifications.",
+                Weight = 16m
+            });
+        }
+
+        if (probe.LlmRejectedRepresentativeProductPage)
+        {
+            reasons.Add(new SourceCandidateReason
+            {
+                Code = "llm_rejected_product_page",
+                Message = "LLM rejected the representative product page as a reliable product/specification page.",
+                Weight = -35m
+            });
+        }
+
+        if (probe.LlmDisagreedWithHeuristics)
+        {
+            reasons.Add(new SourceCandidateReason
+            {
+                Code = "llm_disagreement",
+                Message = "Heuristic extraction signals and the LLM classification disagree, so this candidate needs manual review.",
+                Weight = -18m
+            });
+        }
+
         if (probe.NonCatalogContentHeavy)
         {
             reasons.Add(new SourceCandidateReason
@@ -544,6 +574,16 @@ public sealed class SourceCandidateDiscoveryService(
     private static string DetermineRecommendationStatus(SourceCandidateProbeResult probe, decimal duplicateRiskScore, bool allowedByGovernance)
     {
         if (!allowedByGovernance)
+        {
+            return SourceCandidateResult.RecommendationDoNotAccept;
+        }
+
+        if (probe.LlmDisagreedWithHeuristics)
+        {
+            return SourceCandidateResult.RecommendationManualReview;
+        }
+
+        if (probe.LlmRejectedRepresentativeProductPage)
         {
             return SourceCandidateResult.RecommendationDoNotAccept;
         }

@@ -16,6 +16,12 @@ public sealed class SourceCandidateProbeResult
     public bool RepresentativeProductPageReachable { get; init; }
     public bool StructuredProductEvidenceDetected { get; init; }
     public bool TechnicalAttributeEvidenceDetected { get; init; }
+    public bool LlmAcceptedRepresentativeProductPage { get; init; }
+    public bool LlmRejectedRepresentativeProductPage { get; init; }
+    public bool LlmDisagreedWithHeuristics { get; init; }
+    public bool LlmDetectedSpecifications { get; init; }
+    public string? LlmDetectedCategory { get; init; }
+    public decimal? LlmConfidenceScore { get; init; }
     public bool NonCatalogContentHeavy { get; init; }
     public IReadOnlyList<string> CategoryPageHints { get; init; } = [];
     public IReadOnlyList<string> LikelyListingUrlPatterns { get; init; } = [];
