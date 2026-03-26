@@ -24,6 +24,8 @@ public sealed class MongoDbContext
         Categories = Database.GetCollection<CategoryMetadata>(MongoCollectionNames.Categories);
         CrawlJobs = Database.GetCollection<CrawlJob>(MongoCollectionNames.CrawlJobs);
         CrawlSources = Database.GetCollection<CrawlSource>(MongoCollectionNames.CrawlSources);
+        DiscoveryRuns = Database.GetCollection<DiscoveryRun>(MongoCollectionNames.DiscoveryRuns);
+        DiscoveryRunCandidates = Database.GetCollection<DiscoveryRunCandidate>(MongoCollectionNames.DiscoveryRunCandidates);
         DiscoveryQueueItems = Database.GetCollection<DiscoveryQueueItem>(MongoCollectionNames.DiscoveryQueue);
         DiscoveredUrls = Database.GetCollection<DiscoveredUrl>(MongoCollectionNames.DiscoveredUrls);
         RawPages = Database.GetCollection<RawPage>(MongoCollectionNames.RawPages);
@@ -54,6 +56,10 @@ public sealed class MongoDbContext
     public IMongoCollection<CrawlJob> CrawlJobs { get; }
 
     public IMongoCollection<CrawlSource> CrawlSources { get; }
+
+    public IMongoCollection<DiscoveryRun> DiscoveryRuns { get; }
+
+    public IMongoCollection<DiscoveryRunCandidate> DiscoveryRunCandidates { get; }
 
     public IMongoCollection<DiscoveryQueueItem> DiscoveryQueueItems { get; }
 
@@ -126,6 +132,33 @@ public sealed class MongoDbContext
             new CreateIndexModel<CrawlSource>(Builders<CrawlSource>.IndexKeys
                 .Ascending(source => source.Host)
                 .Ascending(source => source.IsEnabled)),
+            cancellationToken: cancellationToken);
+
+        await DiscoveryRuns.Indexes.CreateManyAsync(
+            [
+                new CreateIndexModel<DiscoveryRun>(Builders<DiscoveryRun>.IndexKeys
+                    .Ascending(run => run.Status)
+                    .Descending(run => run.UpdatedUtc)),
+                new CreateIndexModel<DiscoveryRun>(Builders<DiscoveryRun>.IndexKeys
+                    .Descending(run => run.CreatedUtc),
+                    new CreateIndexOptions { Unique = false })
+            ],
+            cancellationToken: cancellationToken);
+
+        await DiscoveryRunCandidates.Indexes.CreateManyAsync(
+            [
+                new CreateIndexModel<DiscoveryRunCandidate>(Builders<DiscoveryRunCandidate>.IndexKeys
+                    .Ascending(candidate => candidate.RunId)
+                    .Ascending(candidate => candidate.CandidateKey),
+                    new CreateIndexOptions { Unique = true }),
+                new CreateIndexModel<DiscoveryRunCandidate>(Builders<DiscoveryRunCandidate>.IndexKeys
+                    .Ascending(candidate => candidate.RunId)
+                    .Ascending(candidate => candidate.State)
+                    .Descending(candidate => candidate.UpdatedUtc)),
+                new CreateIndexModel<DiscoveryRunCandidate>(Builders<DiscoveryRunCandidate>.IndexKeys
+                    .Ascending(candidate => candidate.RunId)
+                    .Descending(candidate => candidate.ConfidenceScore))
+            ],
             cancellationToken: cancellationToken);
 
         await DiscoveryQueueItems.Indexes.CreateManyAsync(

@@ -1,5 +1,6 @@
 using MongoDB.Driver;
 using ProductNormaliser.Application.Crawls;
+using ProductNormaliser.Application.Sources;
 using ProductNormaliser.Core.Models;
 using ProductNormaliser.Infrastructure.Mongo;
 using ProductNormaliser.Infrastructure.Mongo.Repositories;
@@ -19,6 +20,8 @@ public sealed class MongoRepositoryTests
     private CrawlQueueRepository crawlQueueRepository = default!;
     private DiscoveryQueueRepository discoveryQueueRepository = default!;
     private DiscoveredUrlRepository discoveredUrlRepository = default!;
+    private DiscoveryRunRepository discoveryRunRepository = default!;
+    private DiscoveryRunCandidateRepository discoveryRunCandidateRepository = default!;
 
     [SetUp]
     public async Task SetUpAsync()
@@ -34,6 +37,8 @@ public sealed class MongoRepositoryTests
         await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.CrawlQueue);
         await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.DiscoveryQueue);
         await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.DiscoveredUrls);
+        await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.DiscoveryRuns);
+        await context.Database.DropCollectionIfExistsAsync(MongoCollectionNames.DiscoveryRunCandidates);
         await context.EnsureIndexesAsync();
 
         crawlJobRepository = new CrawlJobRepository(context);
@@ -46,6 +51,8 @@ public sealed class MongoRepositoryTests
         crawlQueueRepository = new CrawlQueueRepository(context);
         discoveryQueueRepository = new DiscoveryQueueRepository(context);
         discoveredUrlRepository = new DiscoveredUrlRepository(context);
+        discoveryRunRepository = new DiscoveryRunRepository(context);
+        discoveryRunCandidateRepository = new DiscoveryRunCandidateRepository(context);
     }
 
     [Test]
@@ -82,6 +89,116 @@ public sealed class MongoRepositoryTests
             Assert.That(stored, Is.Not.Null);
             Assert.That(stored!.Status, Is.EqualTo(CrawlJobStatuses.Running));
             Assert.That(listed.Items.Select(job => job.JobId), Is.EqualTo(new[] { "job-2", "job-1" }));
+        });
+    }
+
+    [Test]
+    public async Task DiscoveryRunRepositories_UpsertListAndRoundTripCandidates()
+    {
+        await discoveryRunRepository.UpsertAsync(new DiscoveryRun
+        {
+            RunId = "run-1",
+            RequestedCategoryKeys = ["tv"],
+            AutomationMode = SourceAutomationModes.SuggestAccept,
+            Status = DiscoveryRunStatuses.Completed,
+            CurrentStage = DiscoveryRunStageNames.Publish,
+            LlmStatus = "disabled",
+            LlmStatusMessage = "Disabled.",
+            CreatedUtc = new DateTime(2026, 03, 20, 10, 00, 00, DateTimeKind.Utc),
+            UpdatedUtc = new DateTime(2026, 03, 20, 10, 30, 00, DateTimeKind.Utc)
+        });
+        await discoveryRunRepository.UpsertAsync(new DiscoveryRun
+        {
+            RunId = "run-2",
+            RequestedCategoryKeys = ["monitor"],
+            AutomationMode = SourceAutomationModes.OperatorAssisted,
+            Status = DiscoveryRunStatuses.Queued,
+            CurrentStage = DiscoveryRunStageNames.Search,
+            LlmStatus = "active",
+            LlmStatusMessage = "Loaded.",
+            CreatedUtc = new DateTime(2026, 03, 20, 11, 00, 00, DateTimeKind.Utc),
+            UpdatedUtc = new DateTime(2026, 03, 20, 11, 05, 00, DateTimeKind.Utc)
+        });
+
+        await discoveryRunCandidateRepository.UpsertAsync(new DiscoveryRunCandidate
+        {
+            Id = "run-2:safe_shop",
+            RunId = "run-2",
+            CandidateKey = "safe_shop",
+            State = DiscoveryRunCandidateStates.Suggested,
+            DisplayName = "Safe Shop",
+            BaseUrl = "https://safe.example/",
+            Host = "safe.example",
+            CandidateType = "retailer",
+            ConfidenceScore = 91m,
+            CreatedUtc = new DateTime(2026, 03, 20, 11, 01, 00, DateTimeKind.Utc),
+            UpdatedUtc = new DateTime(2026, 03, 20, 11, 02, 00, DateTimeKind.Utc)
+        });
+
+        var storedRun = await discoveryRunRepository.GetAsync("run-2");
+        var listedRuns = await discoveryRunRepository.ListAsync(new DiscoveryRunQuery());
+        var storedCandidate = await discoveryRunCandidateRepository.GetAsync("run-2", "safe_shop");
+        var listedCandidates = await discoveryRunCandidateRepository.ListByRunAsync("run-2");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(storedRun, Is.Not.Null);
+            Assert.That(storedRun!.Status, Is.EqualTo(DiscoveryRunStatuses.Queued));
+            Assert.That(listedRuns.Items.Select(run => run.RunId), Is.EqualTo(new[] { "run-2", "run-1" }));
+            Assert.That(storedCandidate, Is.Not.Null);
+            Assert.That(storedCandidate!.DisplayName, Is.EqualTo("Safe Shop"));
+            Assert.That(listedCandidates.Select(candidate => candidate.CandidateKey), Is.EqualTo(new[] { "safe_shop" }));
+        });
+    }
+
+    [Test]
+    public async Task DiscoveryRunCollections_CreateExpectedIndexesAndEnforceCandidateUniqueness()
+    {
+        var context = MongoIntegrationTestFixture.Context;
+
+        var runIndexNames = (await context.DiscoveryRuns.Indexes.ListAsync()).ToList()
+            .Select(index => index["name"].AsString)
+            .ToArray();
+        var candidateIndexNames = (await context.DiscoveryRunCandidates.Indexes.ListAsync()).ToList()
+            .Select(index => index["name"].AsString)
+            .ToArray();
+
+        await context.DiscoveryRunCandidates.InsertOneAsync(new DiscoveryRunCandidate
+        {
+            Id = "run-1:safe_shop:1",
+            RunId = "run-1",
+            CandidateKey = "safe_shop",
+            State = DiscoveryRunCandidateStates.Pending,
+            DisplayName = "Safe Shop",
+            BaseUrl = "https://safe.example/",
+            Host = "safe.example",
+            CandidateType = "retailer",
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow
+        });
+
+        var duplicateInsert = async () => await context.DiscoveryRunCandidates.InsertOneAsync(new DiscoveryRunCandidate
+        {
+            Id = "run-1:safe_shop:2",
+            RunId = "run-1",
+            CandidateKey = "safe_shop",
+            State = DiscoveryRunCandidateStates.Suggested,
+            DisplayName = "Safe Shop Duplicate",
+            BaseUrl = "https://safe.example/",
+            Host = "safe.example",
+            CandidateType = "retailer",
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(runIndexNames, Does.Contain("Status_1_UpdatedUtc_-1"));
+            Assert.That(runIndexNames, Does.Contain("CreatedUtc_-1"));
+            Assert.That(candidateIndexNames, Does.Contain("RunId_1_CandidateKey_1"));
+            Assert.That(candidateIndexNames, Does.Contain("RunId_1_State_1_UpdatedUtc_-1"));
+            Assert.That(candidateIndexNames, Does.Contain("RunId_1_ConfidenceScore_-1"));
+            Assert.That(duplicateInsert, Throws.TypeOf<MongoWriteException>());
         });
     }
 

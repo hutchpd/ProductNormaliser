@@ -1,0 +1,263 @@
+using Microsoft.AspNetCore.Mvc;
+using ProductNormaliser.Application.Sources;
+using ProductNormaliser.Core.Models;
+
+namespace ProductNormaliser.AdminApi.Controllers;
+
+[ApiController]
+[Produces("application/json")]
+[Route("api/sources/discovery-runs")]
+public sealed class DiscoveryRunsController(IDiscoveryRunService discoveryRunService) : ControllerBase
+{
+    [HttpPost]
+    [ProducesResponseType(typeof(Contracts.DiscoveryRunDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Create([FromBody] Contracts.CreateDiscoveryRunRequest request, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var run = await discoveryRunService.CreateAsync(new CreateDiscoveryRunRequest
+            {
+                CategoryKeys = request.CategoryKeys,
+                Locale = request.Locale,
+                Market = request.Market,
+                AutomationMode = request.AutomationMode,
+                BrandHints = request.BrandHints,
+                MaxCandidates = request.MaxCandidates
+            }, cancellationToken);
+
+            return CreatedAtAction(nameof(Get), new { runId = run.RunId }, Map(run));
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(CreateProblem(exception));
+        }
+    }
+
+    [HttpGet("{runId}")]
+    [ProducesResponseType(typeof(Contracts.DiscoveryRunDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Get(string runId, CancellationToken cancellationToken = default)
+    {
+        var run = await discoveryRunService.GetAsync(runId, cancellationToken);
+        return run is null ? NotFound() : Ok(Map(run));
+    }
+
+    [HttpGet("{runId}/candidates")]
+    [ProducesResponseType(typeof(Contracts.DiscoveryRunCandidateDto[]), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetCandidates(string runId, CancellationToken cancellationToken = default)
+    {
+        var run = await discoveryRunService.GetAsync(runId, cancellationToken);
+        if (run is null)
+        {
+            return NotFound();
+        }
+
+        var candidates = await discoveryRunService.ListCandidatesAsync(runId, cancellationToken);
+        return Ok(candidates.Select(Map).ToArray());
+    }
+
+    [HttpPost("{runId}/pause")]
+    [ProducesResponseType(typeof(Contracts.DiscoveryRunDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status409Conflict)]
+    public Task<IActionResult> Pause(string runId, CancellationToken cancellationToken = default)
+        => MutateRunAsync(() => discoveryRunService.PauseAsync(runId, cancellationToken));
+
+    [HttpPost("{runId}/resume")]
+    [ProducesResponseType(typeof(Contracts.DiscoveryRunDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status409Conflict)]
+    public Task<IActionResult> Resume(string runId, CancellationToken cancellationToken = default)
+        => MutateRunAsync(() => discoveryRunService.ResumeAsync(runId, cancellationToken));
+
+    [HttpPost("{runId}/stop")]
+    [ProducesResponseType(typeof(Contracts.DiscoveryRunDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status409Conflict)]
+    public Task<IActionResult> Stop(string runId, CancellationToken cancellationToken = default)
+        => MutateRunAsync(() => discoveryRunService.StopAsync(runId, cancellationToken));
+
+    [HttpPost("{runId}/candidates/{candidateKey}/accept")]
+    [ProducesResponseType(typeof(Contracts.DiscoveryRunCandidateDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status409Conflict)]
+    public Task<IActionResult> AcceptCandidate(string runId, string candidateKey, CancellationToken cancellationToken = default)
+        => MutateCandidateAsync(() => discoveryRunService.AcceptCandidateAsync(runId, candidateKey, cancellationToken));
+
+    [HttpPost("{runId}/candidates/{candidateKey}/dismiss")]
+    [ProducesResponseType(typeof(Contracts.DiscoveryRunCandidateDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status409Conflict)]
+    public Task<IActionResult> DismissCandidate(string runId, string candidateKey, CancellationToken cancellationToken = default)
+        => MutateCandidateAsync(() => discoveryRunService.DismissCandidateAsync(runId, candidateKey, cancellationToken));
+
+    [HttpPost("{runId}/candidates/{candidateKey}/restore")]
+    [ProducesResponseType(typeof(Contracts.DiscoveryRunCandidateDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status409Conflict)]
+    public Task<IActionResult> RestoreCandidate(string runId, string candidateKey, CancellationToken cancellationToken = default)
+        => MutateCandidateAsync(() => discoveryRunService.RestoreCandidateAsync(runId, candidateKey, cancellationToken));
+
+    private async Task<IActionResult> MutateRunAsync(Func<Task<DiscoveryRun?>> action)
+    {
+        try
+        {
+            var run = await action();
+            return run is null ? NotFound() : Ok(Map(run));
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(CreateProblem(exception));
+        }
+    }
+
+    private async Task<IActionResult> MutateCandidateAsync(Func<Task<DiscoveryRunCandidate?>> action)
+    {
+        try
+        {
+            var candidate = await action();
+            return candidate is null ? NotFound() : Ok(Map(candidate));
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(CreateProblem(exception));
+        }
+    }
+
+    private static ValidationProblemDetails CreateProblem(Exception exception)
+    {
+        return new ValidationProblemDetails(new Dictionary<string, string[]>
+        {
+            ["request"] = [exception.Message]
+        });
+    }
+
+    private static Contracts.DiscoveryRunDto Map(DiscoveryRun run)
+    {
+        return new Contracts.DiscoveryRunDto
+        {
+            RunId = run.RunId,
+            RequestedCategoryKeys = run.RequestedCategoryKeys,
+            Locale = run.Locale,
+            Market = run.Market,
+            AutomationMode = run.AutomationMode,
+            BrandHints = run.BrandHints,
+            MaxCandidates = run.MaxCandidates,
+            Status = run.Status,
+            CurrentStage = run.CurrentStage,
+            StatusMessage = run.StatusMessage,
+            FailureMessage = run.FailureMessage,
+            LlmStatus = run.LlmStatus,
+            LlmStatusMessage = run.LlmStatusMessage,
+            SearchResultCount = run.SearchResultCount,
+            CollapsedCandidateCount = run.CollapsedCandidateCount,
+            ProbeCompletedCount = run.ProbeCompletedCount,
+            LlmQueueDepth = run.LlmQueueDepth,
+            LlmCompletedCount = run.LlmCompletedCount,
+            LlmTotalElapsedMs = run.LlmTotalElapsedMs,
+            LlmAverageElapsedMs = run.LlmAverageElapsedMs,
+            SuggestedCandidateCount = run.SuggestedCandidateCount,
+            AutoAcceptedCandidateCount = run.AutoAcceptedCandidateCount,
+            PublishedCandidateCount = run.PublishedCandidateCount,
+            CreatedUtc = run.CreatedUtc,
+            UpdatedUtc = run.UpdatedUtc,
+            StartedUtc = run.StartedUtc,
+            CompletedUtc = run.CompletedUtc,
+            CancelRequestedUtc = run.CancelRequestedUtc,
+            Diagnostics = run.Diagnostics.Select(diagnostic => new Contracts.SourceCandidateDiscoveryDiagnosticDto
+            {
+                Code = diagnostic.Code,
+                Severity = diagnostic.Severity,
+                Title = diagnostic.Title,
+                Message = diagnostic.Message
+            }).ToArray()
+        };
+    }
+
+    private static Contracts.DiscoveryRunCandidateDto Map(DiscoveryRunCandidate candidate)
+    {
+        return new Contracts.DiscoveryRunCandidateDto
+        {
+            CandidateKey = candidate.CandidateKey,
+            State = candidate.State,
+            PreviousState = candidate.PreviousState,
+            AcceptedSourceId = candidate.AcceptedSourceId,
+            StateMessage = candidate.StateMessage,
+            DisplayName = candidate.DisplayName,
+            BaseUrl = candidate.BaseUrl,
+            Host = candidate.Host,
+            CandidateType = candidate.CandidateType,
+            AllowedMarkets = candidate.AllowedMarkets,
+            PreferredLocale = candidate.PreferredLocale,
+            MarketEvidence = candidate.MarketEvidence,
+            LocaleEvidence = candidate.LocaleEvidence,
+            ConfidenceScore = candidate.ConfidenceScore,
+            CrawlabilityScore = candidate.CrawlabilityScore,
+            ExtractabilityScore = candidate.ExtractabilityScore,
+            DuplicateRiskScore = candidate.DuplicateRiskScore,
+            RecommendationStatus = candidate.RecommendationStatus,
+            RuntimeExtractionStatus = candidate.RuntimeExtractionStatus,
+            RuntimeExtractionMessage = candidate.RuntimeExtractionMessage,
+            MatchedCategoryKeys = candidate.MatchedCategoryKeys,
+            MatchedBrandHints = candidate.MatchedBrandHints,
+            AlreadyRegistered = candidate.AlreadyRegistered,
+            DuplicateSourceIds = candidate.DuplicateSourceIds,
+            DuplicateSourceDisplayNames = candidate.DuplicateSourceDisplayNames,
+            AllowedByGovernance = candidate.AllowedByGovernance,
+            GovernanceWarning = candidate.GovernanceWarning,
+            Probe = new Contracts.SourceCandidateProbeDto
+            {
+                HomePageReachable = candidate.Probe.HomePageReachable,
+                RobotsTxtReachable = candidate.Probe.RobotsTxtReachable,
+                SitemapDetected = candidate.Probe.SitemapDetected,
+                SitemapUrls = candidate.Probe.SitemapUrls,
+                CrawlabilityScore = candidate.Probe.CrawlabilityScore,
+                CategoryRelevanceScore = candidate.Probe.CategoryRelevanceScore,
+                ExtractabilityScore = candidate.Probe.ExtractabilityScore,
+                CatalogLikelihoodScore = candidate.Probe.CatalogLikelihoodScore,
+                RepresentativeCategoryPageUrl = candidate.Probe.RepresentativeCategoryPageUrl,
+                RepresentativeCategoryPageReachable = candidate.Probe.RepresentativeCategoryPageReachable,
+                RepresentativeProductPageUrl = candidate.Probe.RepresentativeProductPageUrl,
+                RepresentativeProductPageReachable = candidate.Probe.RepresentativeProductPageReachable,
+                RuntimeExtractionCompatible = candidate.Probe.RuntimeExtractionCompatible,
+                RepresentativeRuntimeProductCount = candidate.Probe.RepresentativeRuntimeProductCount,
+                ProbeAttemptCount = candidate.Probe.ProbeAttemptCount,
+                ProbeElapsedMs = candidate.Probe.ProbeElapsedMs,
+                LlmElapsedMs = candidate.Probe.LlmElapsedMs,
+                StructuredProductEvidenceDetected = candidate.Probe.StructuredProductEvidenceDetected,
+                TechnicalAttributeEvidenceDetected = candidate.Probe.TechnicalAttributeEvidenceDetected,
+                NonCatalogContentHeavy = candidate.Probe.NonCatalogContentHeavy,
+                CategoryPageHints = candidate.Probe.CategoryPageHints,
+                LikelyListingUrlPatterns = candidate.Probe.LikelyListingUrlPatterns,
+                LikelyProductUrlPatterns = candidate.Probe.LikelyProductUrlPatterns
+            },
+            AutomationAssessment = new Contracts.SourceCandidateAutomationAssessmentDto
+            {
+                RequestedMode = candidate.AutomationAssessment.RequestedMode,
+                Decision = candidate.AutomationAssessment.Decision,
+                MarketMatchApproved = candidate.AutomationAssessment.MarketMatchApproved,
+                MarketEvidenceStrongEnough = candidate.AutomationAssessment.MarketEvidenceStrongEnough,
+                GovernancePassed = candidate.AutomationAssessment.GovernancePassed,
+                DuplicateRiskAccepted = candidate.AutomationAssessment.DuplicateRiskAccepted,
+                RepresentativeValidationPassed = candidate.AutomationAssessment.RepresentativeValidationPassed,
+                ExtractabilityConfidencePassed = candidate.AutomationAssessment.ExtractabilityConfidencePassed,
+                YieldConfidencePassed = candidate.AutomationAssessment.YieldConfidencePassed,
+                EligibleForSuggestion = candidate.AutomationAssessment.EligibleForSuggestion,
+                EligibleForAutoAccept = candidate.AutomationAssessment.EligibleForAutoAccept,
+                EligibleForAutoSeed = candidate.AutomationAssessment.EligibleForAutoSeed,
+                MarketEvidence = candidate.AutomationAssessment.MarketEvidence,
+                LocaleEvidence = candidate.AutomationAssessment.LocaleEvidence,
+                SupportingReasons = candidate.AutomationAssessment.SupportingReasons,
+                BlockingReasons = candidate.AutomationAssessment.BlockingReasons
+            },
+            Reasons = candidate.Reasons.Select(reason => new Contracts.SourceCandidateReasonDto
+            {
+                Code = reason.Code,
+                Message = reason.Message,
+                Weight = reason.Weight
+            }).ToArray()
+        };
+    }
+}

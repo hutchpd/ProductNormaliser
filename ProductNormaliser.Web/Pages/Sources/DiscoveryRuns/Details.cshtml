@@ -1,0 +1,236 @@
+@page
+@model ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel
+@{
+    ViewData["Title"] = "Discovery Run Details";
+}
+
+<section class="dashboard-shell">
+    <partial name="_PageHero" model="Model.Hero" />
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="notice success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="notice error">@Model.ErrorMessage</div>
+    }
+
+    @if (Model.Run is null)
+    {
+        <section class="panel">
+            <div class="empty-panel">
+                <p class="empty-state">No discovery run details are available yet.</p>
+                <div class="actions-bar inline-actions">
+                    <a href="/Sources/Index" class="btn btn-outline-dark">Back to sources</a>
+                </div>
+            </div>
+        </section>
+    }
+    else
+    {
+        @if (Model.ShouldAutoRefresh)
+        {
+            <div class="notice success">This discovery run is active. The page refreshes every 5 seconds while worker progress changes.</div>
+        }
+
+        <div class="split-layout">
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Overall Status</p>
+                        <h2>@Model.Run.RunId</h2>
+                    </div>
+                    <partial name="_StatusBadge" model="Model.StatusBadge" />
+                </div>
+
+                <div class="progress-shell">
+                    <div class="progress-bar-shell">
+                        <div class="progress-bar-fill" style="width: @Model.ProgressPercent%"></div>
+                    </div>
+                    <div class="subtle-copy">@ProductNormaliser.Web.Models.DiscoveryRunPresentation.GetStageLabel(Model.Run.CurrentStage) stage, @Model.Run.ProbeCompletedCount of @Math.Max(Model.Run.CollapsedCandidateCount, Model.Run.MaxCandidates) candidate slots processed</div>
+                </div>
+
+                <div class="chip-row mt-3">
+                    <span class="chip">Stage: @ProductNormaliser.Web.Models.DiscoveryRunPresentation.GetStageLabel(Model.Run.CurrentStage)</span>
+                    <span class="chip">LLM queue depth: @Model.Run.LlmQueueDepth</span>
+                    <span class="chip">LLM completed: @Model.Run.LlmCompletedCount</span>
+                    @if (Model.Run.LlmAverageElapsedMs is > 0)
+                    {
+                        <span class="chip">LLM avg: @Model.Run.LlmAverageElapsedMs.Value ms</span>
+                    }
+                </div>
+
+                <dl class="detail-grid mt-3">
+                    <div><dt>Requested categories</dt><dd>@string.Join(", ", Model.Run.RequestedCategoryKeys)</dd></div>
+                    <div><dt>Market / locale</dt><dd>@(string.IsNullOrWhiteSpace(Model.Run.Market) ? "Any market" : Model.Run.Market) / @(string.IsNullOrWhiteSpace(Model.Run.Locale) ? "Any locale" : Model.Run.Locale)</dd></div>
+                    <div><dt>Automation mode</dt><dd>@Model.Run.AutomationMode</dd></div>
+                    <div><dt>Search results</dt><dd>@Model.Run.SearchResultCount</dd></div>
+                    <div><dt>Collapsed candidates</dt><dd>@Model.Run.CollapsedCandidateCount</dd></div>
+                    <div><dt>Suggested</dt><dd>@Model.Run.SuggestedCandidateCount</dd></div>
+                    <div><dt>Auto-accepted</dt><dd>@Model.Run.AutoAcceptedCandidateCount</dd></div>
+                    <div><dt>Published</dt><dd>@Model.Run.PublishedCandidateCount</dd></div>
+                    <div><dt>LLM status</dt><dd>@Model.Run.LlmStatus</dd></div>
+                    <div><dt>Created</dt><dd>@Model.Run.CreatedUtc.ToString("u")</dd></div>
+                    <div><dt>Started</dt><dd>@(Model.Run.StartedUtc?.ToString("u") ?? "Not started")</dd></div>
+                    <div><dt>Last updated</dt><dd>@Model.Run.UpdatedUtc.ToString("u")</dd></div>
+                </dl>
+
+                @if (!string.IsNullOrWhiteSpace(Model.Run.StatusMessage))
+                {
+                    <div class="notice info mt-3">@Model.Run.StatusMessage</div>
+                }
+
+                @foreach (var diagnostic in Model.Run.Diagnostics)
+                {
+                    <div class="@Model.GetDiscoveryDiagnosticNoticeClass(diagnostic)">
+                        <strong>@diagnostic.Title</strong>
+                        <div>@diagnostic.Message</div>
+                    </div>
+                }
+
+                <div class="actions-bar inline-actions">
+                    <a href="/Sources/Index" class="btn btn-outline-dark">Back to sources</a>
+                    @if (ProductNormaliser.Web.Models.DiscoveryRunPresentation.CanPause(Model.Run.Status))
+                    {
+                        <form method="post" asp-page-handler="Pause" class="inline-form">
+                            <input type="hidden" asp-for="RunId" />
+                            <button type="submit" class="btn btn-outline-dark">Pause run</button>
+                        </form>
+                    }
+                    @if (ProductNormaliser.Web.Models.DiscoveryRunPresentation.CanResume(Model.Run.Status))
+                    {
+                        <form method="post" asp-page-handler="Resume" class="inline-form">
+                            <input type="hidden" asp-for="RunId" />
+                            <button type="submit" class="btn btn-outline-dark">Resume run</button>
+                        </form>
+                    }
+                    @if (ProductNormaliser.Web.Models.DiscoveryRunPresentation.CanStop(Model.Run.Status))
+                    {
+                        <form method="post" asp-page-handler="Stop" class="inline-form">
+                            <input type="hidden" asp-for="RunId" />
+                            <button type="submit" class="btn btn-outline-danger">Stop run</button>
+                        </form>
+                    }
+                </div>
+            </section>
+
+            <aside class="panel panel-muted">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">LLM Throughput</p>
+                        <h2>Serial verification lane</h2>
+                    </div>
+                </div>
+
+                <div class="detail-grid">
+                    <div><dt>Queue depth</dt><dd>@Model.Run.LlmQueueDepth</dd></div>
+                    <div><dt>Completed</dt><dd>@Model.Run.LlmCompletedCount</dd></div>
+                    <div><dt>Total elapsed</dt><dd>@Model.Run.LlmTotalElapsedMs ms</dd></div>
+                    <div><dt>Average elapsed</dt><dd>@(Model.Run.LlmAverageElapsedMs?.ToString() ?? "n/a")</dd></div>
+                </div>
+
+                <p class="empty-state mt-3">LLM verification intentionally runs serially or at very low concurrency so local inference stays predictable while the operator watches progress.</p>
+            </aside>
+        </div>
+
+        <section class="panel">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Candidates</p>
+                    <h2>Suggested and published hosts</h2>
+                </div>
+            </div>
+
+            @if (Model.ActiveCandidates.Count == 0)
+            {
+                <div class="empty-panel">
+                    <p class="empty-state">No active candidates are available for this run yet.</p>
+                </div>
+            }
+            else
+            {
+                <div class="job-breakdown-grid">
+                @foreach (var candidate in Model.ActiveCandidates)
+                {
+                    <article>
+                        <div class="panel-heading">
+                            <div>
+                                <strong>@candidate.DisplayName</strong>
+                                <div class="subtle-copy">@candidate.Host</div>
+                            </div>
+                            <span class="badge @Model.GetCandidateStatusTone(candidate)">@candidate.State</span>
+                        </div>
+                        <div class="subtle-copy">Confidence @candidate.ConfidenceScore.ToString("0.#"), crawlability @candidate.CrawlabilityScore.ToString("0.#"), extractability @candidate.ExtractabilityScore.ToString("0.#")</div>
+                        <div class="subtle-copy">@candidate.RuntimeExtractionMessage</div>
+                        @if (!string.IsNullOrWhiteSpace(candidate.StateMessage))
+                        {
+                            <div class="subtle-copy">@candidate.StateMessage</div>
+                        }
+                        <div class="actions-bar inline-actions mt-2">
+                            @if (Model.CanAcceptCandidate(candidate))
+                            {
+                                <form method="post" asp-page-handler="AcceptCandidate" class="inline-form">
+                                    <input type="hidden" asp-for="RunId" />
+                                    <input type="hidden" name="candidateKey" value="@candidate.CandidateKey" />
+                                    <button type="submit" class="btn btn-dark">Accept candidate</button>
+                                </form>
+                            }
+                            @if (Model.CanDismissCandidate(candidate))
+                            {
+                                <form method="post" asp-page-handler="DismissCandidate" class="inline-form">
+                                    <input type="hidden" asp-for="RunId" />
+                                    <input type="hidden" name="candidateKey" value="@candidate.CandidateKey" />
+                                    <button type="submit" class="btn btn-outline-dark">Dismiss</button>
+                                </form>
+                            }
+                        </div>
+                    </article>
+                }
+                </div>
+            }
+        </section>
+
+        @if (Model.ArchivedCandidates.Count > 0)
+        {
+            <section class="panel panel-muted">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Archived</p>
+                        <h2>Dismissed candidates</h2>
+                    </div>
+                </div>
+
+                <div class="job-breakdown-grid">
+                @foreach (var candidate in Model.ArchivedCandidates)
+                {
+                    <article>
+                        <strong>@candidate.DisplayName</strong>
+                        <div class="subtle-copy">@candidate.StateMessage</div>
+                        @if (Model.CanRestoreCandidate(candidate))
+                        {
+                            <form method="post" asp-page-handler="RestoreCandidate" class="inline-form mt-2">
+                                <input type="hidden" asp-for="RunId" />
+                                <input type="hidden" name="candidateKey" value="@candidate.CandidateKey" />
+                                <button type="submit" class="btn btn-outline-dark">Restore candidate</button>
+                            </form>
+                        }
+                    </article>
+                }
+                </div>
+            </section>
+        }
+    }
+</section>
+
+@section Scripts {
+    @if (Model.ShouldAutoRefresh)
+    {
+        <script>
+            window.setTimeout(function () {
+                window.location.reload();
+            }, 5000);
+        </script>
+    }
+}

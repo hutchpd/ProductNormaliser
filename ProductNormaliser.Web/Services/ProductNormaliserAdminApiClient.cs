@@ -147,6 +147,51 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
         return SendAsync<SourceCandidateDiscoveryResponseDto>(HttpMethod.Post, "api/sources/candidates/discover", request, AdminApiContractValidator.ValidateSourceCandidateDiscoveryResponse, cancellationToken);
     }
 
+    public Task<DiscoveryRunDto> CreateDiscoveryRunAsync(CreateDiscoveryRunRequest request, CancellationToken cancellationToken = default)
+    {
+        return SendAsync<DiscoveryRunDto>(HttpMethod.Post, "api/sources/discovery-runs", request, AdminApiContractValidator.ValidateDiscoveryRun, cancellationToken);
+    }
+
+    public Task<DiscoveryRunDto?> GetDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default)
+    {
+        return GetOptionalAsync<DiscoveryRunDto>($"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}", AdminApiContractValidator.ValidateDiscoveryRun, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<DiscoveryRunCandidateDto>> GetDiscoveryRunCandidatesAsync(string runId, CancellationToken cancellationToken = default)
+    {
+        return await GetRequiredAsync<DiscoveryRunCandidateDto[]>($"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}/candidates", AdminApiContractValidator.ValidateDiscoveryRunCandidates, cancellationToken);
+    }
+
+    public Task<DiscoveryRunDto> PauseDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default)
+    {
+        return SendAsync<DiscoveryRunDto>(HttpMethod.Post, $"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}/pause", body: null, AdminApiContractValidator.ValidateDiscoveryRun, cancellationToken);
+    }
+
+    public Task<DiscoveryRunDto> ResumeDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default)
+    {
+        return SendAsync<DiscoveryRunDto>(HttpMethod.Post, $"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}/resume", body: null, AdminApiContractValidator.ValidateDiscoveryRun, cancellationToken);
+    }
+
+    public Task<DiscoveryRunDto> StopDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default)
+    {
+        return SendAsync<DiscoveryRunDto>(HttpMethod.Post, $"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}/stop", body: null, AdminApiContractValidator.ValidateDiscoveryRun, cancellationToken);
+    }
+
+    public Task<DiscoveryRunCandidateDto> AcceptDiscoveryRunCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default)
+    {
+        return SendAsync<DiscoveryRunCandidateDto>(HttpMethod.Post, $"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}/candidates/{Uri.EscapeDataString(candidateKey)}/accept", body: null, payload => AdminApiContractValidator.ValidateDiscoveryRunCandidates([payload]), cancellationToken);
+    }
+
+    public Task<DiscoveryRunCandidateDto> DismissDiscoveryRunCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default)
+    {
+        return SendAsync<DiscoveryRunCandidateDto>(HttpMethod.Post, $"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}/candidates/{Uri.EscapeDataString(candidateKey)}/dismiss", body: null, payload => AdminApiContractValidator.ValidateDiscoveryRunCandidates([payload]), cancellationToken);
+    }
+
+    public Task<DiscoveryRunCandidateDto> RestoreDiscoveryRunCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default)
+    {
+        return SendAsync<DiscoveryRunCandidateDto>(HttpMethod.Post, $"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}/candidates/{Uri.EscapeDataString(candidateKey)}/restore", body: null, payload => AdminApiContractValidator.ValidateDiscoveryRunCandidates([payload]), cancellationToken);
+    }
+
     public Task<CrawlJobListResponseDto> GetCrawlJobsAsync(CrawlJobQueryDto? query = null, CancellationToken cancellationToken = default)
     {
         var relativeUri = BuildRelativeUri("api/crawl/jobs", new Dictionary<string, string?>

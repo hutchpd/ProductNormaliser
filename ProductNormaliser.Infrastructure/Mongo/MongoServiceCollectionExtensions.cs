@@ -59,6 +59,8 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<ManagementAuditRepository>();
         services.AddSingleton<CrawlJobRepository>();
         services.AddSingleton<CrawlSourceRepository>();
+        services.AddSingleton<DiscoveryRunRepository>();
+        services.AddSingleton<DiscoveryRunCandidateRepository>();
         services.AddSingleton<DiscoveryQueueRepository>();
         services.AddSingleton<DiscoveredUrlRepository>();
         services.AddSingleton<CategoryMetadataRepository>();
@@ -69,6 +71,8 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<ICategoryMetadataStore>(serviceProvider => serviceProvider.GetRequiredService<CategoryMetadataRepository>());
         services.AddSingleton<ICrawlJobStore>(serviceProvider => serviceProvider.GetRequiredService<CrawlJobRepository>());
         services.AddSingleton<IKnownCrawlTargetStore>(serviceProvider => serviceProvider.GetRequiredService<KnownCrawlTargetRepository>());
+        services.AddSingleton<IDiscoveryRunStore>(serviceProvider => serviceProvider.GetRequiredService<DiscoveryRunRepository>());
+        services.AddSingleton<IDiscoveryRunCandidateStore>(serviceProvider => serviceProvider.GetRequiredService<DiscoveryRunCandidateRepository>());
         services.AddSingleton<IDiscoveryQueueStore>(serviceProvider => serviceProvider.GetRequiredService<DiscoveryQueueRepository>());
         services.AddSingleton<IDiscoveredUrlStore>(serviceProvider => serviceProvider.GetRequiredService<DiscoveredUrlRepository>());
         services.AddSingleton<ISourceProductStore>(serviceProvider => serviceProvider.GetRequiredService<SourceProductRepository>());

@@ -10,6 +10,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public Exception? CategoryDetailException { get; set; }
     public Exception? SourcesException { get; set; }
     public Exception? SourceCandidateDiscoveryException { get; set; }
+    public Exception? DiscoveryRunException { get; set; }
     public Exception? SourceRegistrationException { get; set; }
     public Exception? CrawlJobsException { get; set; }
     public StatsDto Stats { get; set; } = new();
@@ -36,8 +37,12 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         MinYieldConfidenceScore = 70m
     };
     public SourceCandidateDiscoveryResponseDto SourceCandidateDiscoveryResponse { get; set; } = new();
+    public DiscoveryRunDto? DiscoveryRun { get; set; }
+    public DiscoveryRunDto? CreatedDiscoveryRun { get; set; }
+    public IReadOnlyList<DiscoveryRunCandidateDto> DiscoveryRunCandidates { get; set; } = [];
     public RegisterSourceRequest? LastRegisteredSourceRequest { get; private set; }
     public DiscoverSourceCandidatesRequest? LastSourceCandidateDiscoveryRequest { get; private set; }
+    public CreateDiscoveryRunRequest? LastCreateDiscoveryRunRequest { get; private set; }
     public UpdateSourceRequest? LastUpdatedSourceRequest { get; private set; }
     public string? LastUpdatedSourceId { get; private set; }
     public string? LastEnabledSourceId { get; private set; }
@@ -56,6 +61,16 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public CreateCrawlJobRequest? LastCreatedJobRequest { get; private set; }
     public string? LastCancelledJobId { get; private set; }
     public string? LastRequestedCrawlJobId { get; private set; }
+    public string? LastRequestedDiscoveryRunId { get; private set; }
+    public string? LastPausedDiscoveryRunId { get; private set; }
+    public string? LastResumedDiscoveryRunId { get; private set; }
+    public string? LastStoppedDiscoveryRunId { get; private set; }
+    public string? LastAcceptedDiscoveryRunCandidateRunId { get; private set; }
+    public string? LastAcceptedDiscoveryRunCandidateKey { get; private set; }
+    public string? LastDismissedDiscoveryRunCandidateRunId { get; private set; }
+    public string? LastDismissedDiscoveryRunCandidateKey { get; private set; }
+    public string? LastRestoredDiscoveryRunCandidateRunId { get; private set; }
+    public string? LastRestoredDiscoveryRunCandidateKey { get; private set; }
     public ProductListResponseDto ProductPage { get; set; } = new();
     public ProductDetailDto? Product { get; set; }
     public IReadOnlyList<ProductChangeEventDto> ProductHistory { get; set; } = [];
@@ -385,6 +400,98 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             ? Task.FromResult(SourceCandidateDiscoveryResponse)
             : Task.FromException<SourceCandidateDiscoveryResponseDto>(SourceCandidateDiscoveryException);
     }
+    public Task<DiscoveryRunDto> CreateDiscoveryRunAsync(CreateDiscoveryRunRequest request, CancellationToken cancellationToken = default)
+    {
+        LastCreateDiscoveryRunRequest = request;
+        if (DiscoveryRunException is not null)
+        {
+            return Task.FromException<DiscoveryRunDto>(DiscoveryRunException);
+        }
+
+        var run = CreatedDiscoveryRun ?? DiscoveryRun ?? new DiscoveryRunDto
+        {
+            RunId = "discovery_run_default",
+            RequestedCategoryKeys = request.CategoryKeys.ToArray(),
+            Locale = request.Locale,
+            Market = request.Market,
+            AutomationMode = request.AutomationMode ?? "operator_assisted",
+            BrandHints = request.BrandHints.ToArray(),
+            MaxCandidates = request.MaxCandidates,
+            Status = "queued",
+            CurrentStage = "search",
+            StatusMessage = "Discovery run is queued and waiting for worker capacity.",
+            LlmStatus = "disabled",
+            LlmStatusMessage = "LLM validation is disabled.",
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow
+        };
+
+        DiscoveryRun = run;
+        return Task.FromResult(run);
+    }
+
+    public Task<DiscoveryRunDto?> GetDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default)
+    {
+        LastRequestedDiscoveryRunId = runId;
+        if (DiscoveryRunException is not null)
+        {
+            return Task.FromException<DiscoveryRunDto?>(DiscoveryRunException);
+        }
+
+        return Task.FromResult(DiscoveryRun is not null && string.Equals(DiscoveryRun.RunId, runId, StringComparison.OrdinalIgnoreCase)
+            ? DiscoveryRun
+            : null);
+    }
+
+    public Task<IReadOnlyList<DiscoveryRunCandidateDto>> GetDiscoveryRunCandidatesAsync(string runId, CancellationToken cancellationToken = default)
+    {
+        LastRequestedDiscoveryRunId = runId;
+        if (DiscoveryRunException is not null)
+        {
+            return Task.FromException<IReadOnlyList<DiscoveryRunCandidateDto>>(DiscoveryRunException);
+        }
+
+        return Task.FromResult(DiscoveryRunCandidates);
+    }
+
+    public Task<DiscoveryRunDto> PauseDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default)
+    {
+        LastPausedDiscoveryRunId = runId;
+        return MutateRunAsync(runId, "paused", "Discovery run is paused. Resume to continue background execution.");
+    }
+
+    public Task<DiscoveryRunDto> ResumeDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default)
+    {
+        LastResumedDiscoveryRunId = runId;
+        return MutateRunAsync(runId, "queued", "Discovery run was resumed and re-queued for worker execution.");
+    }
+
+    public Task<DiscoveryRunDto> StopDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default)
+    {
+        LastStoppedDiscoveryRunId = runId;
+        return MutateRunAsync(runId, "cancelled", "Discovery run was cancelled before more background work started.");
+    }
+
+    public Task<DiscoveryRunCandidateDto> AcceptDiscoveryRunCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default)
+    {
+        LastAcceptedDiscoveryRunCandidateRunId = runId;
+        LastAcceptedDiscoveryRunCandidateKey = candidateKey;
+        return MutateCandidateAsync(candidateKey, "manually_accepted", "Accepted by operator.", acceptedSourceId: candidateKey);
+    }
+
+    public Task<DiscoveryRunCandidateDto> DismissDiscoveryRunCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default)
+    {
+        LastDismissedDiscoveryRunCandidateRunId = runId;
+        LastDismissedDiscoveryRunCandidateKey = candidateKey;
+        return MutateCandidateAsync(candidateKey, "dismissed", "Dismissed by operator.");
+    }
+
+    public Task<DiscoveryRunCandidateDto> RestoreDiscoveryRunCandidateAsync(string runId, string candidateKey, CancellationToken cancellationToken = default)
+    {
+        LastRestoredDiscoveryRunCandidateRunId = runId;
+        LastRestoredDiscoveryRunCandidateKey = candidateKey;
+        return MutateCandidateAsync(candidateKey, "suggested", "Restored to the active candidate queue.");
+    }
     public Task<CrawlJobListResponseDto> GetCrawlJobsAsync(CrawlJobQueryDto? query = null, CancellationToken cancellationToken = default)
         => CrawlJobsException is null ? Task.FromResult(CrawlJobsPage) : Task.FromException<CrawlJobListResponseDto>(CrawlJobsException);
     public Task<CrawlJobDto?> GetCrawlJobAsync(string jobId, CancellationToken cancellationToken = default)
@@ -512,6 +619,103 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         return Source
             ?? Sources.FirstOrDefault(item => string.Equals(item.SourceId, sourceId, StringComparison.OrdinalIgnoreCase))
             ?? throw new KeyNotFoundException(sourceId);
+    }
+
+    private Task<DiscoveryRunDto> MutateRunAsync(string runId, string status, string statusMessage)
+    {
+        if (DiscoveryRunException is not null)
+        {
+            return Task.FromException<DiscoveryRunDto>(DiscoveryRunException);
+        }
+
+        var run = DiscoveryRun is not null && string.Equals(DiscoveryRun.RunId, runId, StringComparison.OrdinalIgnoreCase)
+            ? DiscoveryRun
+            : throw new KeyNotFoundException(runId);
+
+        DiscoveryRun = new DiscoveryRunDto
+        {
+            RunId = run.RunId,
+            RequestedCategoryKeys = run.RequestedCategoryKeys,
+            Locale = run.Locale,
+            Market = run.Market,
+            AutomationMode = run.AutomationMode,
+            BrandHints = run.BrandHints,
+            MaxCandidates = run.MaxCandidates,
+            Status = status,
+            CurrentStage = run.CurrentStage,
+            StatusMessage = statusMessage,
+            FailureMessage = run.FailureMessage,
+            LlmStatus = run.LlmStatus,
+            LlmStatusMessage = run.LlmStatusMessage,
+            SearchResultCount = run.SearchResultCount,
+            CollapsedCandidateCount = run.CollapsedCandidateCount,
+            ProbeCompletedCount = run.ProbeCompletedCount,
+            LlmQueueDepth = run.LlmQueueDepth,
+            LlmCompletedCount = run.LlmCompletedCount,
+            LlmTotalElapsedMs = run.LlmTotalElapsedMs,
+            LlmAverageElapsedMs = run.LlmAverageElapsedMs,
+            SuggestedCandidateCount = run.SuggestedCandidateCount,
+            AutoAcceptedCandidateCount = run.AutoAcceptedCandidateCount,
+            PublishedCandidateCount = run.PublishedCandidateCount,
+            CreatedUtc = run.CreatedUtc,
+            UpdatedUtc = DateTime.UtcNow,
+            StartedUtc = run.StartedUtc,
+            CompletedUtc = status == "cancelled" ? DateTime.UtcNow : run.CompletedUtc,
+            CancelRequestedUtc = run.CancelRequestedUtc,
+            Diagnostics = run.Diagnostics
+        };
+
+        return Task.FromResult(DiscoveryRun);
+    }
+
+    private Task<DiscoveryRunCandidateDto> MutateCandidateAsync(string candidateKey, string state, string stateMessage, string? acceptedSourceId = null)
+    {
+        if (DiscoveryRunException is not null)
+        {
+            return Task.FromException<DiscoveryRunCandidateDto>(DiscoveryRunException);
+        }
+
+        var candidate = DiscoveryRunCandidates.FirstOrDefault(item => string.Equals(item.CandidateKey, candidateKey, StringComparison.OrdinalIgnoreCase))
+            ?? throw new KeyNotFoundException(candidateKey);
+
+        var updated = new DiscoveryRunCandidateDto
+        {
+            CandidateKey = candidate.CandidateKey,
+            State = state,
+            PreviousState = candidate.State,
+            AcceptedSourceId = acceptedSourceId,
+            StateMessage = stateMessage,
+            DisplayName = candidate.DisplayName,
+            BaseUrl = candidate.BaseUrl,
+            Host = candidate.Host,
+            CandidateType = candidate.CandidateType,
+            AllowedMarkets = candidate.AllowedMarkets,
+            PreferredLocale = candidate.PreferredLocale,
+            MarketEvidence = candidate.MarketEvidence,
+            LocaleEvidence = candidate.LocaleEvidence,
+            ConfidenceScore = candidate.ConfidenceScore,
+            CrawlabilityScore = candidate.CrawlabilityScore,
+            ExtractabilityScore = candidate.ExtractabilityScore,
+            DuplicateRiskScore = candidate.DuplicateRiskScore,
+            RecommendationStatus = candidate.RecommendationStatus,
+            RuntimeExtractionStatus = candidate.RuntimeExtractionStatus,
+            RuntimeExtractionMessage = candidate.RuntimeExtractionMessage,
+            MatchedCategoryKeys = candidate.MatchedCategoryKeys,
+            MatchedBrandHints = candidate.MatchedBrandHints,
+            AlreadyRegistered = candidate.AlreadyRegistered,
+            DuplicateSourceIds = candidate.DuplicateSourceIds,
+            DuplicateSourceDisplayNames = candidate.DuplicateSourceDisplayNames,
+            AllowedByGovernance = candidate.AllowedByGovernance,
+            GovernanceWarning = candidate.GovernanceWarning,
+            Probe = candidate.Probe,
+            AutomationAssessment = candidate.AutomationAssessment,
+            Reasons = candidate.Reasons
+        };
+
+        DiscoveryRunCandidates = DiscoveryRunCandidates
+            .Select(item => string.Equals(item.CandidateKey, candidateKey, StringComparison.OrdinalIgnoreCase) ? updated : item)
+            .ToArray();
+        return Task.FromResult(updated);
     }
 
     private void UpsertSource(SourceDto source)

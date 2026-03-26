@@ -114,12 +114,56 @@ public sealed class IndexModel(
 
     public async Task<IActionResult> OnPostDiscoverCandidatesAsync(CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
         await LoadAsync(cancellationToken);
 
-        await DiscoverCandidatesAsync(addValidationErrorWhenEmpty: true, cancellationToken);
-        await ApplyGuardedAutomationAsync(cancellationToken);
+        var categoryKeys = CandidateDiscovery.CategoryKeys;
+        if (categoryKeys.Count == 0 && !string.IsNullOrWhiteSpace(CategoryKey))
+        {
+            categoryKeys = [CategoryKey.Trim()];
+            CandidateDiscovery.CategoryKeys = categoryKeys;
+        }
 
-        return Page();
+        try
+        {
+            var run = await adminApiClient.CreateDiscoveryRunAsync(new CreateDiscoveryRunRequest
+            {
+                CategoryKeys = categoryKeys,
+                Locale = string.IsNullOrWhiteSpace(CandidateDiscovery.Locale) ? null : CandidateDiscovery.Locale.Trim(),
+                Market = string.IsNullOrWhiteSpace(CandidateDiscovery.Market) ? null : CandidateDiscovery.Market.Trim(),
+                AutomationMode = CandidateDiscovery.AutomationMode,
+                BrandHints = ParseDelimitedValues(CandidateDiscovery.BrandHints),
+                MaxCandidates = CandidateDiscovery.MaxCandidates
+            }, cancellationToken);
+
+            StatusMessage = $"Started discovery run '{run.RunId}'. The details page will keep polling while background work progresses.";
+            return RedirectToPage("/Sources/DiscoveryRuns/Details", new { runId = run.RunId });
+        }
+        catch (AdminApiValidationException exception)
+        {
+            foreach (var entry in exception.Errors)
+            {
+                foreach (var message in entry.Value)
+                {
+                    ModelState.AddModelError(string.Empty, message);
+                }
+            }
+
+            return Page();
+        }
+        catch (AdminApiException exception)
+        {
+            logger.LogWarning(exception, "Failed to create discovery run from sources index.");
+            CandidateDiscoveryErrorMessage = IsCandidateDiscoveryTimeout(exception)
+                ? "Candidate discovery took too long to complete. Try fewer categories or use operator-assisted mode, then retry. Manual source registration remains available."
+                : exception.Message;
+            return Page();
+        }
     }
 
     public async Task<IActionResult> OnPostUseCandidateAsync(CancellationToken cancellationToken)

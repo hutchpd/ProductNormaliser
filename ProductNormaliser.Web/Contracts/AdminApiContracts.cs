@@ -322,6 +322,83 @@ public sealed class DiscoverSourceCandidatesRequest
     public int MaxCandidates { get; init; } = 10;
 }
 
+public sealed class CreateDiscoveryRunRequest
+{
+    public IReadOnlyList<string> CategoryKeys { get; init; } = [];
+    public string? Locale { get; init; }
+    public string? Market { get; init; }
+    public string? AutomationMode { get; init; }
+    public IReadOnlyList<string> BrandHints { get; init; } = [];
+    public int MaxCandidates { get; init; } = 10;
+}
+
+public sealed class DiscoveryRunDto
+{
+    public string RunId { get; init; } = string.Empty;
+    public IReadOnlyList<string> RequestedCategoryKeys { get; init; } = [];
+    public string? Locale { get; init; }
+    public string? Market { get; init; }
+    public string AutomationMode { get; init; } = string.Empty;
+    public IReadOnlyList<string> BrandHints { get; init; } = [];
+    public int MaxCandidates { get; init; }
+    public string Status { get; init; } = string.Empty;
+    public string CurrentStage { get; init; } = string.Empty;
+    public string? StatusMessage { get; init; }
+    public string? FailureMessage { get; init; }
+    public string LlmStatus { get; init; } = string.Empty;
+    public string LlmStatusMessage { get; init; } = string.Empty;
+    public int SearchResultCount { get; init; }
+    public int CollapsedCandidateCount { get; init; }
+    public int ProbeCompletedCount { get; init; }
+    public int LlmQueueDepth { get; init; }
+    public int LlmCompletedCount { get; init; }
+    public long LlmTotalElapsedMs { get; init; }
+    public long? LlmAverageElapsedMs { get; init; }
+    public int SuggestedCandidateCount { get; init; }
+    public int AutoAcceptedCandidateCount { get; init; }
+    public int PublishedCandidateCount { get; init; }
+    public DateTime CreatedUtc { get; init; }
+    public DateTime UpdatedUtc { get; init; }
+    public DateTime? StartedUtc { get; init; }
+    public DateTime? CompletedUtc { get; init; }
+    public DateTime? CancelRequestedUtc { get; init; }
+    public IReadOnlyList<SourceCandidateDiscoveryDiagnosticDto> Diagnostics { get; init; } = [];
+}
+
+public sealed class DiscoveryRunCandidateDto
+{
+    public string CandidateKey { get; init; } = string.Empty;
+    public string State { get; init; } = string.Empty;
+    public string? PreviousState { get; init; }
+    public string? AcceptedSourceId { get; init; }
+    public string? StateMessage { get; init; }
+    public string DisplayName { get; init; } = string.Empty;
+    public string BaseUrl { get; init; } = string.Empty;
+    public string Host { get; init; } = string.Empty;
+    public string CandidateType { get; init; } = string.Empty;
+    public IReadOnlyList<string> AllowedMarkets { get; init; } = [];
+    public string? PreferredLocale { get; init; }
+    public string MarketEvidence { get; init; } = string.Empty;
+    public string LocaleEvidence { get; init; } = string.Empty;
+    public decimal ConfidenceScore { get; init; }
+    public decimal CrawlabilityScore { get; init; }
+    public decimal ExtractabilityScore { get; init; }
+    public decimal DuplicateRiskScore { get; init; }
+    public string RecommendationStatus { get; init; } = string.Empty;
+    public string RuntimeExtractionStatus { get; init; } = string.Empty;
+    public string RuntimeExtractionMessage { get; init; } = string.Empty;
+    public IReadOnlyList<string> MatchedCategoryKeys { get; init; } = [];
+    public IReadOnlyList<string> MatchedBrandHints { get; init; } = [];
+    public bool AlreadyRegistered { get; init; }
+    public IReadOnlyList<string> DuplicateSourceIds { get; init; } = [];
+    public IReadOnlyList<string> DuplicateSourceDisplayNames { get; init; } = [];
+    public bool AllowedByGovernance { get; init; }
+    public string? GovernanceWarning { get; init; }
+    public SourceCandidateProbeDto Probe { get; init; } = new();
+    public SourceCandidateAutomationAssessmentDto AutomationAssessment { get; init; } = new();
+    public IReadOnlyList<SourceCandidateReasonDto> Reasons { get; init; } = [];
+}
+
 public sealed class SourceCandidateDiscoveryResponseDto
 {
     public IReadOnlyList<string> RequestedCategoryKeys { get; init; } = [];

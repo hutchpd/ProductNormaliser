@@ -70,6 +70,7 @@ builder.Services.AddSingleton<IPageClassificationService>(serviceProvider => ser
 builder.Services.AddSingleton<ILlmStatusProvider>(serviceProvider => serviceProvider.GetRequiredService<LlamaPageClassificationService>());
 builder.Services.AddSingleton<ISourceCandidateProbeService, HttpSourceCandidateProbeService>();
 builder.Services.AddSingleton<ISourceCandidateDiscoveryService, SourceCandidateDiscoveryService>();
+builder.Services.AddSingleton<IDiscoveryRunService, DiscoveryRunService>();
 builder.Services.AddSingleton<ISourceManagementService, SourceManagementService>();
 builder.Services.AddSingleton<ISourceOperationalInsightsProvider, SourceOperationalInsightsProvider>();
 builder.Services.AddSingleton<IAdminQueryService, AdminQueryService>();

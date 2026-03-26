@@ -169,7 +169,7 @@
         </div>
 
         <div class="empty-panel mt-3">
-            <p class="empty-state">Discover likely retailer or manufacturer hosts for the selected categories, review their probe signals, then move promising candidates into the registration form.</p>
+                <p class="empty-state">Start a persisted discovery run for the selected categories, then review live stage progress and candidate decisions from the dedicated run details page.</p>
             <p class="subtle-copy">Automation stays opt-in. Operator-assisted remains the default, suggestion mode only labels safe candidates, and guarded auto-accept plus seeding only runs when the visible thresholds and guardrails pass.</p>
         </div>
 
@@ -275,13 +275,13 @@
             </div>
 
             <div class="actions-bar">
-                <button type="submit" class="btn btn-dark" data-discovery-submit>Discover candidates</button>
+                <button type="submit" class="btn btn-dark" data-discovery-submit>Start discovery run</button>
             </div>
 
             <div class="notice info discovery-submit-feedback" data-discovery-submit-status hidden aria-live="polite">
                 <div class="discovery-submit-feedback-body">
-                    <strong data-discovery-submit-title>Preparing discovery run</strong>
-                    <div data-discovery-submit-message>Discovery will search, probe, and locally verify candidate hosts.</div>
+                    <strong data-discovery-submit-title>Creating discovery run</strong>
+                    <div data-discovery-submit-message>The worker will search, probe, and locally verify candidate hosts in the background.</div>
                     <div class="subtle-copy" data-discovery-submit-elapsed></div>
                     <div class="discovery-submit-stages">
                         <span data-discovery-stage="search">Search hosts</span>

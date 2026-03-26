@@ -107,6 +107,42 @@ internal static class AdminApiContractValidator
         "failed"
     };
 
+    private static readonly HashSet<string> DiscoveryRunStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "queued",
+        "running",
+        "paused",
+        "cancel_requested",
+        "cancelled",
+        "completed",
+        "failed"
+    };
+
+    private static readonly HashSet<string> DiscoveryRunStages = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "search",
+        "collapse_and_dedupe",
+        "probe",
+        "llm_verify",
+        "score",
+        "decide",
+        "publish"
+    };
+
+    private static readonly HashSet<string> DiscoveryRunCandidateStates = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "pending",
+        "probing",
+        "awaiting_llm",
+        "suggested",
+        "auto_accepted",
+        "manually_accepted",
+        "dismissed",
+        "archived",
+        "superseded",
+        "failed"
+    };
+
     private static readonly HashSet<string> CompletenessStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
         "complete",
@@ -179,6 +215,22 @@ internal static class AdminApiContractValidator
         ValidateStringItems(payload.BrandHints, "sourceCandidateDiscovery.brandHints");
         ValidateItems(payload.Diagnostics, "sourceCandidateDiscovery.diagnostics", ValidateSourceCandidateDiscoveryDiagnostic);
         ValidateItems(payload.Candidates, "sourceCandidateDiscovery.candidates", ValidateSourceCandidate);
+    }
+
+    public static void ValidateDiscoveryRun(DiscoveryRunDto payload)
+    {
+        ValidateRequiredString(payload.RunId, "discoveryRun.runId");
+        ValidateStringItems(payload.RequestedCategoryKeys, "discoveryRun.requestedCategoryKeys");
+        ValidateEnumValue(payload.AutomationMode, SourceAutomationModes, "discoveryRun.automationMode", value => value);
+        ValidateEnumValue(payload.Status, DiscoveryRunStatuses, "discoveryRun.status", NormalizeLowerUnderscore);
+        ValidateEnumValue(payload.CurrentStage, DiscoveryRunStages, "discoveryRun.currentStage", NormalizeLowerUnderscore);
+        ValidateEnumValue(payload.LlmStatus, LlmStatuses, "discoveryRun.llmStatus", value => value);
+        ValidateItems(payload.Diagnostics, "discoveryRun.diagnostics", ValidateSourceCandidateDiscoveryDiagnostic);
+    }
+
+    public static void ValidateDiscoveryRunCandidates(IReadOnlyList<DiscoveryRunCandidateDto> payload)
+    {
+        ValidateItems(payload, "discoveryRun.candidates", ValidateDiscoveryRunCandidate);
     }
 
     public static void ValidateSourceOnboardingAutomationSettings(SourceOnboardingAutomationSettingsDto payload)
@@ -376,6 +428,41 @@ internal static class AdminApiContractValidator
         ValidateSourceCandidateProbe(payload.Probe, $"{path}.probe");
         ValidateSourceCandidateAutomationAssessment(payload.AutomationAssessment, $"{path}.automationAssessment");
         ValidateItems(payload.Reasons, $"{path}.reasons", ValidateSourceCandidateReason);
+    }
+
+    private static void ValidateDiscoveryRunCandidate(DiscoveryRunCandidateDto payload, string path)
+    {
+        ValidateRequiredString(payload.CandidateKey, $"{path}.candidateKey");
+        ValidateEnumValue(payload.State, DiscoveryRunCandidateStates, $"{path}.state", NormalizeLowerUnderscore);
+        ValidateSourceCandidate(new SourceCandidateDto
+        {
+            CandidateKey = payload.CandidateKey,
+            DisplayName = payload.DisplayName,
+            BaseUrl = payload.BaseUrl,
+            Host = payload.Host,
+            CandidateType = payload.CandidateType,
+            AllowedMarkets = payload.AllowedMarkets,
+            PreferredLocale = payload.PreferredLocale,
+            MarketEvidence = payload.MarketEvidence,
+            LocaleEvidence = payload.LocaleEvidence,
+            ConfidenceScore = payload.ConfidenceScore,
+            CrawlabilityScore = payload.CrawlabilityScore,
+            ExtractabilityScore = payload.ExtractabilityScore,
+            DuplicateRiskScore = payload.DuplicateRiskScore,
+            RecommendationStatus = payload.RecommendationStatus,
+            RuntimeExtractionStatus = payload.RuntimeExtractionStatus,
+            RuntimeExtractionMessage = payload.RuntimeExtractionMessage,
+            MatchedCategoryKeys = payload.MatchedCategoryKeys,
+            MatchedBrandHints = payload.MatchedBrandHints,
+            AlreadyRegistered = payload.AlreadyRegistered,
+            DuplicateSourceIds = payload.DuplicateSourceIds,
+            DuplicateSourceDisplayNames = payload.DuplicateSourceDisplayNames,
+            AllowedByGovernance = payload.AllowedByGovernance,
+            GovernanceWarning = payload.GovernanceWarning,
+            Probe = payload.Probe,
+            AutomationAssessment = payload.AutomationAssessment,
+            Reasons = payload.Reasons
+        }, path);
     }
 
     private static void ValidateSourceCandidateDiscoveryDiagnostic(SourceCandidateDiscoveryDiagnosticDto payload, string path)

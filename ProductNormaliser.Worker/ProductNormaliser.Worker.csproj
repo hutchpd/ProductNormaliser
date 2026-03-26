@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <UserSecretsId>dotnet-ProductNormaliser.Worker-9ef36fa2-62a3-4477-8589-732a613321c5</UserSecretsId>
+    <UserSecretsId>a1468b16-5216-4a5e-b81c-6f49064cf2b2</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

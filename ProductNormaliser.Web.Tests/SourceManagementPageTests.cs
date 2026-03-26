@@ -107,48 +107,25 @@ public sealed class SourceManagementPageTests
     }
 
     [Test]
-    public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_LoadsEphemeralCandidateResults()
+    public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_CreatesPersistedRunAndRedirectsToDetails()
     {
         var client = new FakeAdminApiClient
         {
             Categories = CreateCategories(),
-            SourceCandidateDiscoveryResponse = new SourceCandidateDiscoveryResponseDto
+            CreatedDiscoveryRun = new DiscoveryRunDto
             {
+                RunId = "discovery_run_123",
                 RequestedCategoryKeys = ["tv"],
-                GeneratedUtc = new DateTime(2026, 03, 25, 11, 00, 00, DateTimeKind.Utc),
-                Diagnostics =
-                [
-                    new SourceCandidateDiscoveryDiagnosticDto
-                    {
-                        Code = "search_provider_rate_limited",
-                        Severity = "error",
-                        Title = "Search provider rate-limited",
-                        Message = "Candidate lookup was rate-limited upstream."
-                    }
-                ],
-                Candidates =
-                [
-                    new SourceCandidateDto
-                    {
-                        CandidateKey = "currys_co_uk",
-                        DisplayName = "Currys",
-                        BaseUrl = "https://www.currys.co.uk/",
-                        Host = "www.currys.co.uk",
-                        CandidateType = "retailer",
-                        ConfidenceScore = 82m,
-                        RuntimeExtractionStatus = "not_compatible",
-                        RuntimeExtractionMessage = "Representative runtime extraction did not produce products from the sampled product page.",
-                        MatchedCategoryKeys = ["tv"],
-                        Probe = new SourceCandidateProbeDto
-                        {
-                            RepresentativeProductPageReachable = true,
-                            RuntimeExtractionCompatible = false,
-                            RepresentativeRuntimeProductCount = 0,
-                            TechnicalAttributeEvidenceDetected = true
-                        },
-                        Reasons = []
-                    }
-                ]
+                Market = "UK",
+                Locale = "en-GB",
+                AutomationMode = "operator_assisted",
+                Status = "queued",
+                CurrentStage = "search",
+                StatusMessage = "Discovery run is queued and waiting for worker capacity.",
+                LlmStatus = "disabled",
+                LlmStatusMessage = "LLM validation is disabled.",
+                CreatedUtc = new DateTime(2026, 03, 25, 11, 00, 00, DateTimeKind.Utc),
+                UpdatedUtc = new DateTime(2026, 03, 25, 11, 00, 00, DateTimeKind.Utc)
             }
         };
 
@@ -167,62 +144,37 @@ public sealed class SourceManagementPageTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result, Is.TypeOf<PageResult>());
-            Assert.That(client.LastSourceCandidateDiscoveryRequest, Is.Not.Null);
-            Assert.That(client.LastSourceCandidateDiscoveryRequest!.CategoryKeys, Is.EqualTo(new[] { "tv" }));
-            Assert.That(client.LastSourceCandidateDiscoveryRequest.Market, Is.EqualTo("UK"));
-            Assert.That(model.CandidateDiscoveryResult, Is.Not.Null);
-            Assert.That(model.CandidateDiscoveryResult!.Diagnostics.Select(diagnostic => diagnostic.Code), Is.EqualTo(new[] { "search_provider_rate_limited" }));
-            Assert.That(model.CandidateDiscoveryResult!.Candidates.Select(candidate => candidate.DisplayName), Is.EqualTo(new[] { "Currys" }));
-            Assert.That(model.CandidateDiscoveryResult.Candidates[0].RuntimeExtractionStatus, Is.EqualTo("not_compatible"));
-            Assert.That(model.CandidateDiscoveryResult.Candidates[0].RuntimeExtractionMessage, Is.EqualTo("Representative runtime extraction did not produce products from the sampled product page."));
-            Assert.That(model.GetRuntimeExtractionLabel(model.CandidateDiscoveryResult.Candidates[0]), Is.EqualTo("Not compatible with runtime extraction"));
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
+            Assert.That(client.LastCreateDiscoveryRunRequest, Is.Not.Null);
+            Assert.That(client.LastCreateDiscoveryRunRequest!.CategoryKeys, Is.EqualTo(new[] { "tv" }));
+            Assert.That(client.LastCreateDiscoveryRunRequest.Market, Is.EqualTo("UK"));
+            Assert.That(client.LastCreateDiscoveryRunRequest.Locale, Is.EqualTo("en-GB"));
+            Assert.That(((RedirectToPageResult)result).PageName, Is.EqualTo("/Sources/DiscoveryRuns/Details"));
+            Assert.That(((RedirectToPageResult)result).RouteValues!["runId"], Is.EqualTo("discovery_run_123"));
+            Assert.That(model.StatusMessage, Does.Contain("Started discovery run 'discovery_run_123'"));
         });
     }
 
     [Test]
-    public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_LeavesSuggestedCandidatesForOperatorConfirmation()
+    public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_QueuesSuggestAcceptRunWithoutImmediateRegistration()
     {
         var client = new FakeAdminApiClient
         {
             Categories = CreateCategories(),
-            SourceCandidateDiscoveryResponse = new SourceCandidateDiscoveryResponseDto
+            CreatedDiscoveryRun = new DiscoveryRunDto
             {
+                RunId = "discovery_run_suggest",
                 RequestedCategoryKeys = ["tv"],
                 Market = "UK",
                 Locale = "en-GB",
                 AutomationMode = "suggest_accept",
-                GeneratedUtc = DateTime.UtcNow,
-                Candidates =
-                [
-                    new SourceCandidateDto
-                    {
-                        CandidateKey = "safe_shop",
-                        DisplayName = "Safe Shop",
-                        BaseUrl = "https://safe.example/",
-                        Host = "safe.example",
-                        CandidateType = "retailer",
-                        AllowedMarkets = ["UK"],
-                        PreferredLocale = "en-GB",
-                        MarketEvidence = "explicit",
-                        LocaleEvidence = "explicit",
-                        ConfidenceScore = 91m,
-                        MatchedCategoryKeys = ["tv"],
-                        AllowedByGovernance = true,
-                        Probe = new SourceCandidateProbeDto(),
-                        AutomationAssessment = new SourceCandidateAutomationAssessmentDto
-                        {
-                            RequestedMode = "suggest_accept",
-                            Decision = "suggest_accept",
-                            EligibleForSuggestion = true,
-                            EligibleForAutoAccept = false,
-                            MarketEvidence = "explicit",
-                            LocaleEvidence = "explicit",
-                            SupportingReasons = ["Market evidence is explicit rather than only request-hinted."]
-                        },
-                        Reasons = []
-                    }
-                ]
+                Status = "queued",
+                CurrentStage = "search",
+                StatusMessage = "Discovery run is queued and waiting for worker capacity.",
+                LlmStatus = "disabled",
+                LlmStatusMessage = "LLM validation is disabled.",
+                CreatedUtc = DateTime.UtcNow,
+                UpdatedUtc = DateTime.UtcNow
             }
         };
 
@@ -241,10 +193,10 @@ public sealed class SourceManagementPageTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result, Is.TypeOf<PageResult>());
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
+            Assert.That(client.LastCreateDiscoveryRunRequest, Is.Not.Null);
+            Assert.That(client.LastCreateDiscoveryRunRequest!.AutomationMode, Is.EqualTo("suggest_accept"));
             Assert.That(client.LastRegisteredSourceRequest, Is.Null);
-            Assert.That(model.CandidateDiscoveryResult, Is.Not.Null);
-            Assert.That(model.CandidateDiscoveryResult!.Candidates[0].AutomationAssessment.Decision, Is.EqualTo("suggest_accept"));
         });
     }
 
@@ -254,7 +206,7 @@ public sealed class SourceManagementPageTests
         var client = new FakeAdminApiClient
         {
             Categories = CreateCategories(),
-            SourceCandidateDiscoveryException = new AdminApiException("The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.")
+            DiscoveryRunException = new AdminApiException("The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.")
         };
 
         var model = new ProductNormaliser.Web.Pages.Sources.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IndexModel>.Instance)
@@ -337,19 +289,26 @@ public sealed class SourceManagementPageTests
     }
 
     [Test]
-    public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_GuardedAutomationAutoAcceptsSeedsAndStillAllowsDisable()
+    public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_StartsGuardedAutomationRunWithoutImmediateRegistration()
     {
         var client = new FakeAdminApiClient
         {
             Categories = CreateCategories(),
-            CreatedJob = new CrawlJobDto { JobId = "job_guarded_1" },
-            SourceCandidateDiscoveryResponse = new SourceCandidateDiscoveryResponseDto
+            Sources = [CreateSource("guarded_example", "Guarded Example", isEnabled: true, categoryKeys: ["tv"], readinessStatus: "Ready", healthStatus: "Healthy")],
+            CreatedDiscoveryRun = new DiscoveryRunDto
             {
+                RunId = "discovery_run_guarded_1",
                 RequestedCategoryKeys = ["tv"],
                 Market = "UK",
                 Locale = "en-GB",
                 AutomationMode = "auto_accept_and_seed",
-                GeneratedUtc = DateTime.UtcNow,
+                CreatedUtc = DateTime.UtcNow,
+                UpdatedUtc = DateTime.UtcNow,
+                Status = "queued",
+                CurrentStage = "search",
+                StatusMessage = "Discovery run is queued and waiting for worker capacity.",
+                LlmStatus = "disabled",
+                LlmStatusMessage = "Representative product-page classification stayed heuristic-only because LLM evaluation is disabled.",
                 Diagnostics =
                 [
                     new SourceCandidateDiscoveryDiagnosticDto
@@ -358,37 +317,6 @@ public sealed class SourceManagementPageTests
                         Severity = "info",
                         Title = "LLM validation disabled",
                         Message = "Representative product-page classification stayed heuristic-only because LLM evaluation is disabled."
-                    }
-                ],
-                Candidates =
-                [
-                    new SourceCandidateDto
-                    {
-                        CandidateKey = "guarded_shop",
-                        DisplayName = "Guarded Shop",
-                        BaseUrl = "https://guarded.example/",
-                        Host = "guarded.example",
-                        CandidateType = "retailer",
-                        AllowedMarkets = ["UK"],
-                        PreferredLocale = "en-GB",
-                        MarketEvidence = "explicit",
-                        LocaleEvidence = "explicit",
-                        ConfidenceScore = 95m,
-                        MatchedCategoryKeys = ["tv"],
-                        AllowedByGovernance = true,
-                        Probe = new SourceCandidateProbeDto(),
-                        AutomationAssessment = new SourceCandidateAutomationAssessmentDto
-                        {
-                            RequestedMode = "auto_accept_and_seed",
-                            Decision = "auto_accept_and_seed",
-                            EligibleForSuggestion = true,
-                            EligibleForAutoAccept = true,
-                            EligibleForAutoSeed = true,
-                            MarketEvidence = "explicit",
-                            LocaleEvidence = "explicit",
-                            SupportingReasons = ["Representative category and product pages were both validated."]
-                        },
-                        Reasons = []
                     }
                 ]
             }
@@ -410,15 +338,13 @@ public sealed class SourceManagementPageTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(discoverResult, Is.TypeOf<PageResult>());
-            Assert.That(client.LastRegisteredSourceRequest, Is.Not.Null);
-            Assert.That(client.LastRegisteredSourceRequest!.AutomationPolicy!.Mode, Is.EqualTo("auto_accept_and_seed"));
-            Assert.That(client.LastCreatedJobRequest, Is.Not.Null);
-            Assert.That(client.LastCreatedJobRequest!.RequestedSources, Is.EqualTo(new[] { "guarded_example" }));
+            Assert.That(discoverResult, Is.TypeOf<RedirectToPageResult>());
+            Assert.That(client.LastCreateDiscoveryRunRequest, Is.Not.Null);
+            Assert.That(client.LastCreateDiscoveryRunRequest!.AutomationMode, Is.EqualTo("auto_accept_and_seed"));
+            Assert.That(client.LastRegisteredSourceRequest, Is.Null);
+            Assert.That(client.LastCreatedJobRequest, Is.Null);
             Assert.That(client.LastDisabledSourceId, Is.EqualTo("guarded_example"));
             Assert.That(toggleResult, Is.TypeOf<RedirectToPageResult>());
-            Assert.That(model.CandidateDiscoveryResult, Is.Not.Null);
-            Assert.That(model.CandidateDiscoveryResult!.Diagnostics.Select(diagnostic => diagnostic.Code), Is.EqualTo(new[] { "llm_disabled" }));
         });
     }
 
@@ -428,11 +354,16 @@ public sealed class SourceManagementPageTests
         var client = new FakeAdminApiClient
         {
             Categories = CreateCategories(),
-            SourceCandidateDiscoveryResponse = new SourceCandidateDiscoveryResponseDto
+            CreatedDiscoveryRun = new DiscoveryRunDto
             {
+                RunId = "discovery_run_fallback",
                 RequestedCategoryKeys = ["tv"],
-                GeneratedUtc = DateTime.UtcNow,
-                Candidates = []
+                Status = "queued",
+                CurrentStage = "search",
+                LlmStatus = "disabled",
+                LlmStatusMessage = "LLM validation is disabled.",
+                CreatedUtc = DateTime.UtcNow,
+                UpdatedUtc = DateTime.UtcNow
             }
         };
 
@@ -450,9 +381,9 @@ public sealed class SourceManagementPageTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(result, Is.TypeOf<PageResult>());
-            Assert.That(client.LastSourceCandidateDiscoveryRequest, Is.Not.Null);
-            Assert.That(client.LastSourceCandidateDiscoveryRequest!.CategoryKeys, Is.EqualTo(new[] { "tv" }));
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
+            Assert.That(client.LastCreateDiscoveryRunRequest, Is.Not.Null);
+            Assert.That(client.LastCreateDiscoveryRunRequest!.CategoryKeys, Is.EqualTo(new[] { "tv" }));
             Assert.That(model.CandidateDiscovery.CategoryKeys, Is.EqualTo(new[] { "tv" }));
         });
     }
@@ -710,7 +641,7 @@ public sealed class SourceManagementPageTests
         var client = new FakeAdminApiClient
         {
             Categories = CreateCategories(),
-            SourceCandidateDiscoveryException = new AdminApiValidationException(
+            DiscoveryRunException = new AdminApiValidationException(
                 "Validation failed.",
                 new Dictionary<string, string[]>
                 {
@@ -732,7 +663,7 @@ public sealed class SourceManagementPageTests
         {
             Assert.That(result, Is.TypeOf<PageResult>());
             Assert.That(model.ModelState[string.Empty]!.Errors.Select(error => error.ErrorMessage), Does.Contain("Choose at least one category before discovering source candidates."));
-            Assert.That(model.CandidateDiscoveryResult, Is.Null);
+            Assert.That(model.CandidateDiscoveryErrorMessage, Is.Null);
         });
     }
 
@@ -742,7 +673,7 @@ public sealed class SourceManagementPageTests
         var client = new FakeAdminApiClient
         {
             Categories = CreateCategories(),
-            SourceCandidateDiscoveryException = new AdminApiException("Candidate discovery is temporarily unavailable.")
+            DiscoveryRunException = new AdminApiException("Candidate discovery is temporarily unavailable.")
         };
 
         var model = new ProductNormaliser.Web.Pages.Sources.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IndexModel>.Instance)
@@ -759,7 +690,7 @@ public sealed class SourceManagementPageTests
         {
             Assert.That(result, Is.TypeOf<PageResult>());
             Assert.That(model.CandidateDiscoveryErrorMessage, Is.EqualTo("Candidate discovery is temporarily unavailable."));
-            Assert.That(model.CandidateDiscoveryResult, Is.Null);
+            Assert.That(model.StatusMessage, Is.Null);
         });
     }
 

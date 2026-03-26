@@ -1,0 +1,107 @@
+using ProductNormaliser.Core.Models;
+
+namespace ProductNormaliser.Application.Sources;
+
+internal static class DiscoveryRunMapper
+{
+    public static DiscoveryRunCandidate ToDocument(string runId, SourceCandidateResult candidate, string state, DateTime utcNow)
+    {
+        return new DiscoveryRunCandidate
+        {
+            Id = $"{runId}:{candidate.CandidateKey}",
+            RunId = runId,
+            CandidateKey = candidate.CandidateKey,
+            State = state,
+            DisplayName = candidate.DisplayName,
+            BaseUrl = candidate.BaseUrl,
+            Host = candidate.Host,
+            CandidateType = candidate.CandidateType,
+            AllowedMarkets = candidate.AllowedMarkets,
+            PreferredLocale = candidate.PreferredLocale,
+            MarketEvidence = candidate.MarketEvidence,
+            LocaleEvidence = candidate.LocaleEvidence,
+            ConfidenceScore = candidate.ConfidenceScore,
+            CrawlabilityScore = candidate.CrawlabilityScore,
+            ExtractabilityScore = candidate.ExtractabilityScore,
+            DuplicateRiskScore = candidate.DuplicateRiskScore,
+            RecommendationStatus = candidate.RecommendationStatus,
+            RuntimeExtractionStatus = candidate.RuntimeExtractionStatus,
+            RuntimeExtractionMessage = candidate.RuntimeExtractionMessage,
+            MatchedCategoryKeys = candidate.MatchedCategoryKeys,
+            MatchedBrandHints = candidate.MatchedBrandHints,
+            AlreadyRegistered = candidate.AlreadyRegistered,
+            DuplicateSourceIds = candidate.DuplicateSourceIds,
+            DuplicateSourceDisplayNames = candidate.DuplicateSourceDisplayNames,
+            AllowedByGovernance = candidate.AllowedByGovernance,
+            GovernanceWarning = candidate.GovernanceWarning,
+            Probe = new DiscoveryRunCandidateProbe
+            {
+                HomePageReachable = candidate.Probe.HomePageReachable,
+                RobotsTxtReachable = candidate.Probe.RobotsTxtReachable,
+                SitemapDetected = candidate.Probe.SitemapDetected,
+                SitemapUrls = candidate.Probe.SitemapUrls,
+                CrawlabilityScore = candidate.Probe.CrawlabilityScore,
+                CategoryRelevanceScore = candidate.Probe.CategoryRelevanceScore,
+                HeuristicExtractabilityScore = candidate.Probe.HeuristicExtractabilityScore,
+                ExtractabilityScore = candidate.Probe.ExtractabilityScore,
+                CatalogLikelihoodScore = candidate.Probe.CatalogLikelihoodScore,
+                RepresentativeCategoryPageUrl = candidate.Probe.RepresentativeCategoryPageUrl,
+                RepresentativeCategoryPageReachable = candidate.Probe.RepresentativeCategoryPageReachable,
+                RepresentativeProductPageUrl = candidate.Probe.RepresentativeProductPageUrl,
+                RepresentativeProductPageReachable = candidate.Probe.RepresentativeProductPageReachable,
+                RuntimeExtractionCompatible = candidate.Probe.RuntimeExtractionCompatible,
+                RepresentativeRuntimeProductCount = candidate.Probe.RepresentativeRuntimeProductCount,
+                AutomationCategorySampleCount = candidate.Probe.AutomationCategorySampleCount,
+                AutomationReachableCategorySampleCount = candidate.Probe.AutomationReachableCategorySampleCount,
+                AutomationProductSampleCount = candidate.Probe.AutomationProductSampleCount,
+                AutomationReachableProductSampleCount = candidate.Probe.AutomationReachableProductSampleCount,
+                AutomationRuntimeCompatibleProductSampleCount = candidate.Probe.AutomationRuntimeCompatibleProductSampleCount,
+                AutomationStructuredProductEvidenceSampleCount = candidate.Probe.AutomationStructuredProductEvidenceSampleCount,
+                AutomationTechnicalAttributeEvidenceSampleCount = candidate.Probe.AutomationTechnicalAttributeEvidenceSampleCount,
+                StructuredProductEvidenceDetected = candidate.Probe.StructuredProductEvidenceDetected,
+                TechnicalAttributeEvidenceDetected = candidate.Probe.TechnicalAttributeEvidenceDetected,
+                LlmAcceptedRepresentativeProductPage = candidate.Probe.LlmAcceptedRepresentativeProductPage,
+                LlmRejectedRepresentativeProductPage = candidate.Probe.LlmRejectedRepresentativeProductPage,
+                LlmDisagreedWithHeuristics = candidate.Probe.LlmDisagreedWithHeuristics,
+                LlmDetectedSpecifications = candidate.Probe.LlmDetectedSpecifications,
+                LlmDetectedCategory = candidate.Probe.LlmDetectedCategory,
+                LlmConfidenceScore = candidate.Probe.LlmConfidenceScore,
+                LlmReason = candidate.Probe.LlmReason,
+                ProbeAttemptCount = candidate.Probe.ProbeAttemptCount,
+                ProbeElapsedMs = candidate.Probe.ProbeElapsedMs,
+                LlmElapsedMs = candidate.Probe.LlmElapsedMs,
+                NonCatalogContentHeavy = candidate.Probe.NonCatalogContentHeavy,
+                CategoryPageHints = candidate.Probe.CategoryPageHints,
+                LikelyListingUrlPatterns = candidate.Probe.LikelyListingUrlPatterns,
+                LikelyProductUrlPatterns = candidate.Probe.LikelyProductUrlPatterns
+            },
+            AutomationAssessment = new DiscoveryRunCandidateAutomationAssessment
+            {
+                RequestedMode = candidate.AutomationAssessment.RequestedMode,
+                Decision = candidate.AutomationAssessment.Decision,
+                MarketMatchApproved = candidate.AutomationAssessment.MarketMatchApproved,
+                MarketEvidenceStrongEnough = candidate.AutomationAssessment.MarketEvidenceStrongEnough,
+                GovernancePassed = candidate.AutomationAssessment.GovernancePassed,
+                DuplicateRiskAccepted = candidate.AutomationAssessment.DuplicateRiskAccepted,
+                RepresentativeValidationPassed = candidate.AutomationAssessment.RepresentativeValidationPassed,
+                ExtractabilityConfidencePassed = candidate.AutomationAssessment.ExtractabilityConfidencePassed,
+                YieldConfidencePassed = candidate.AutomationAssessment.YieldConfidencePassed,
+                EligibleForSuggestion = candidate.AutomationAssessment.EligibleForSuggestion,
+                EligibleForAutoAccept = candidate.AutomationAssessment.EligibleForAutoAccept,
+                EligibleForAutoSeed = candidate.AutomationAssessment.EligibleForAutoSeed,
+                MarketEvidence = candidate.AutomationAssessment.MarketEvidence,
+                LocaleEvidence = candidate.AutomationAssessment.LocaleEvidence,
+                SupportingReasons = candidate.AutomationAssessment.SupportingReasons,
+                BlockingReasons = candidate.AutomationAssessment.BlockingReasons
+            },
+            Reasons = candidate.Reasons.Select(reason => new DiscoveryRunCandidateReason
+            {
+                Code = reason.Code,
+                Message = reason.Message,
+                Weight = reason.Weight
+            }).ToList(),
+            CreatedUtc = utcNow,
+            UpdatedUtc = utcNow
+        };
+    }
+}
