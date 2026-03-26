@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.Extensions.Options;
 using ProductNormaliser.Application.AI;
 using ProductNormaliser.Application.Categories;
 using ProductNormaliser.Application.Crawls;
@@ -58,7 +59,15 @@ builder.Services.AddHttpClient<ISourceCandidateSearchProvider, SearchApiSourceCa
 builder.Services.AddSingleton<ICategoryMetadataService, CategoryMetadataService>();
 builder.Services.AddSingleton<ICategoryManagementService, CategoryManagementService>();
 builder.Services.AddSingleton<ICrawlJobService, CrawlJobService>();
-builder.Services.AddSingleton<IPageClassificationService, LlamaPageClassificationService>();
+builder.Services.AddSingleton<LlamaPageClassificationService>(serviceProvider =>
+{
+    var llmOptions = serviceProvider.GetRequiredService<IOptions<LlmOptions>>().Value;
+    var hostEnvironment = serviceProvider.GetRequiredService<IHostEnvironment>();
+    var logger = serviceProvider.GetRequiredService<ILogger<LlamaPageClassificationService>>();
+    return new LlamaPageClassificationService(llmOptions, hostEnvironment.ContentRootPath, logger);
+});
+builder.Services.AddSingleton<IPageClassificationService>(serviceProvider => serviceProvider.GetRequiredService<LlamaPageClassificationService>());
+builder.Services.AddSingleton<ILlmStatusProvider>(serviceProvider => serviceProvider.GetRequiredService<LlamaPageClassificationService>());
 builder.Services.AddSingleton<ISourceCandidateProbeService, HttpSourceCandidateProbeService>();
 builder.Services.AddSingleton<ISourceCandidateDiscoveryService, SourceCandidateDiscoveryService>();
 builder.Services.AddSingleton<ISourceManagementService, SourceManagementService>();
@@ -69,6 +78,22 @@ builder.Services.AddSingleton<IAnalystWorkspaceService, AnalystWorkspaceService>
 builder.Services.AddSingleton<IManagementActorContext, HttpContextManagementActorContext>();
 
 var app = builder.Build();
+
+var llmStatusProvider = app.Services.GetRequiredService<ILlmStatusProvider>();
+var llmStartupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("LlmStartup");
+var llmStartupStatus = llmStatusProvider.GetStatus();
+if (string.Equals(llmStartupStatus.Code, LlmStatusCodes.Active, StringComparison.OrdinalIgnoreCase))
+{
+    llmStartupLogger.LogInformation("LLM startup status: {Status}. {Message}", llmStartupStatus.Code, llmStartupStatus.Message);
+}
+else if (string.Equals(llmStartupStatus.Code, LlmStatusCodes.Disabled, StringComparison.OrdinalIgnoreCase))
+{
+    llmStartupLogger.LogInformation("LLM startup status: {Status}. {Message}", llmStartupStatus.Code, llmStartupStatus.Message);
+}
+else
+{
+    llmStartupLogger.LogWarning("LLM startup status: {Status}. {Message}", llmStartupStatus.Code, llmStartupStatus.Message);
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

@@ -45,6 +45,7 @@ builder.Services.AddHttpClient<IProductNormaliserAdminApiClient, ProductNormalis
     }
 
     client.BaseAddress = baseAddress;
+    client.Timeout = TimeSpan.FromMinutes(4);
     client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 }).AddHttpMessageHandler<AdminApiManagementHeadersHandler>();
 

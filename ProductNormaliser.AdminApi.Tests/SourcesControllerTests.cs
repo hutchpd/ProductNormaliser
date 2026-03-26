@@ -94,14 +94,17 @@ public sealed class SourcesControllerTests
     [Test]
     public void GetAutomationSettings_ReturnsConfiguredThresholds()
     {
-        var controller = CreateController(new FakeSourceManagementService(), new SourceOnboardingAutomationOptions
-        {
-            DefaultMode = "operator_assisted",
-            MaxAutoAcceptedCandidatesPerRun = 1,
-            SuggestMinConfidenceScore = 78m,
-            AutoAcceptMinConfidenceScore = 90m,
-            MinYieldConfidenceScore = 70m
-        });
+        var controller = CreateController(
+            new FakeSourceManagementService(),
+            new SourceOnboardingAutomationOptions
+            {
+                DefaultMode = "operator_assisted",
+                MaxAutoAcceptedCandidatesPerRun = 1,
+                SuggestMinConfidenceScore = 78m,
+                AutoAcceptMinConfidenceScore = 90m,
+                MinYieldConfidenceScore = 70m
+            },
+            new FakeLlmStatusProvider("disabled", "LLM validation is disabled for this environment. Discovery uses heuristics only."));
 
         var result = controller.GetAutomationSettings() as OkObjectResult;
 
@@ -111,6 +114,8 @@ public sealed class SourcesControllerTests
         Assert.Multiple(() =>
         {
             Assert.That(payload!.DefaultMode, Is.EqualTo("operator_assisted"));
+            Assert.That(payload.LlmStatus, Is.EqualTo("disabled"));
+            Assert.That(payload.LlmStatusMessage, Does.Contain("heuristics only"));
             Assert.That(payload.MaxAutoAcceptedCandidatesPerRun, Is.EqualTo(1));
             Assert.That(payload.AutoAcceptMinConfidenceScore, Is.EqualTo(90m));
         });
@@ -227,12 +232,28 @@ public sealed class SourcesControllerTests
         };
     }
 
-    private static SourcesController CreateController(FakeSourceManagementService service, SourceOnboardingAutomationOptions? options = null)
+    private static SourcesController CreateController(
+        FakeSourceManagementService service,
+        SourceOnboardingAutomationOptions? options = null,
+        ProductNormaliser.Application.AI.ILlmStatusProvider? llmStatusProvider = null)
     {
         return new SourcesController(
             service,
             new FakeSourceOperationalInsightsProvider(),
-            Options.Create(options ?? new SourceOnboardingAutomationOptions()));
+            Options.Create(options ?? new SourceOnboardingAutomationOptions()),
+            llmStatusProvider);
+    }
+
+    private sealed class FakeLlmStatusProvider(string code, string message) : ProductNormaliser.Application.AI.ILlmStatusProvider
+    {
+        public ProductNormaliser.Application.AI.LlmServiceStatus GetStatus()
+        {
+            return new ProductNormaliser.Application.AI.LlmServiceStatus
+            {
+                Code = code,
+                Message = message
+            };
+        }
     }
 
     private sealed class FakeSourceManagementService(

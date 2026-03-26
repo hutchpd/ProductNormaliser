@@ -46,6 +46,8 @@ public sealed class IndexModel(
     public SourceOnboardingAutomationSettingsDto AutomationSettings { get; private set; } = new()
     {
         DefaultMode = OperatorAssistedMode,
+        LlmStatus = "disabled",
+        LlmStatusMessage = "LLM validation is disabled for this environment. Set Llm:Enabled=true and configure a local GGUF model to enable it. Discovery uses heuristics only.",
         AutomationCategorySampleBudget = 3,
         AutomationProductSampleBudget = 3,
         SuggestMinReachableCategorySamples = 2,
@@ -337,6 +339,97 @@ public sealed class IndexModel(
         return "Try broadening the category scope, reducing brand hints, or using a different market or locale. Registered sources remain unchanged.";
     }
 
+    public string GetLlmStatusTitle(string? status)
+    {
+        return NormalizeLlmStatus(status) switch
+        {
+            "active" => "LLM validation active",
+            "unconfigured" => "LLM not configured locally",
+            "load_failed" => "LLM model failed to load",
+            "runtime_failed" => "LLM validation failed during discovery",
+            _ => "LLM validation disabled"
+        };
+    }
+
+    public string GetLlmStatusNoticeClass(string? status)
+    {
+        return NormalizeLlmStatus(status) switch
+        {
+            "active" => "notice success",
+            "unconfigured" => "notice warning",
+            "load_failed" => "notice warning",
+            "runtime_failed" => "notice warning",
+            _ => "notice info"
+        };
+    }
+
+    public bool HasAutomationLlmStatusNotice()
+    {
+        return !string.IsNullOrWhiteSpace(AutomationSettings.LlmStatus)
+            && !string.IsNullOrWhiteSpace(AutomationSettings.LlmStatusMessage);
+    }
+
+    public bool HasDiscoveryLlmStatusNotice()
+    {
+        return CandidateDiscoveryResult is not null
+            && !string.IsNullOrWhiteSpace(CandidateDiscoveryResult.LlmStatus)
+            && !string.IsNullOrWhiteSpace(CandidateDiscoveryResult.LlmStatusMessage);
+    }
+
+    public IReadOnlyList<string> GetCandidatePrimaryReasons(SourceCandidateDto candidate)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        return candidate.Reasons
+            .Select(reason => reason.Message)
+            .Where(message => !string.IsNullOrWhiteSpace(message))
+            .Take(3)
+            .ToArray();
+    }
+
+    public IReadOnlyList<string> GetCandidatePrimaryBlockers(SourceCandidateDto candidate)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        return candidate.AutomationAssessment.BlockingReasons
+            .Where(message => !string.IsNullOrWhiteSpace(message))
+            .Take(3)
+            .ToArray();
+    }
+
+    public IReadOnlyList<string> GetCandidateVisibleSitemapHints(SourceCandidateDto candidate, int maxCount = 6)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        return candidate.Probe.SitemapUrls
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Take(Math.Max(1, maxCount))
+            .ToArray();
+    }
+
+    public int GetCandidateHiddenSitemapHintCount(SourceCandidateDto candidate, int maxCount = 6)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        return Math.Max(0, candidate.Probe.SitemapUrls.Count - Math.Max(1, maxCount));
+    }
+
+    public bool HasCandidateExpandedDetail(SourceCandidateDto candidate)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        return candidate.AutomationAssessment.SupportingReasons.Count > 0
+            || candidate.AutomationAssessment.BlockingReasons.Count > 0
+            || candidate.Probe.RepresentativeCategoryPageReachable
+            || candidate.Probe.RepresentativeProductPageReachable
+            || candidate.Probe.StructuredProductEvidenceDetected
+            || candidate.Probe.TechnicalAttributeEvidenceDetected
+            || candidate.Reasons.Count > 3
+            || candidate.Probe.LikelyListingUrlPatterns.Count > 0
+            || candidate.Probe.LikelyProductUrlPatterns.Count > 0
+            || candidate.Probe.SitemapUrls.Count > 0;
+    }
+
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
         try
@@ -404,6 +497,8 @@ public sealed class IndexModel(
             AutomationSettings = new SourceOnboardingAutomationSettingsDto
             {
                 DefaultMode = OperatorAssistedMode,
+                LlmStatus = "disabled",
+                LlmStatusMessage = "LLM validation is disabled for this environment. Set Llm:Enabled=true and configure a local GGUF model to enable it. Discovery uses heuristics only.",
                 AutomationCategorySampleBudget = 3,
                 AutomationProductSampleBudget = 3,
                 SuggestMinReachableCategorySamples = 2,
@@ -492,8 +587,29 @@ public sealed class IndexModel(
         catch (AdminApiException exception)
         {
             logger.LogWarning(exception, "Failed to discover source candidates from sources index.");
-            CandidateDiscoveryErrorMessage = exception.Message;
+            CandidateDiscoveryErrorMessage = IsCandidateDiscoveryTimeout(exception)
+                ? "Candidate discovery took too long to complete. Try fewer categories or use operator-assisted mode, then retry. Manual source registration remains available."
+                : exception.Message;
         }
+    }
+
+    private static bool IsCandidateDiscoveryTimeout(AdminApiException exception)
+    {
+        if (exception.InnerException is TaskCanceledException)
+        {
+            return true;
+        }
+
+        return exception.Message.Contains("HttpClient.Timeout", StringComparison.OrdinalIgnoreCase)
+            || exception.Message.Contains("operation was canceled", StringComparison.OrdinalIgnoreCase)
+            || exception.Message.Contains("request was canceled", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeLlmStatus(string? status)
+    {
+        return string.IsNullOrWhiteSpace(status)
+            ? "disabled"
+            : status.Trim().ToLowerInvariant();
     }
 
     private async Task<IActionResult> RegisterAsync(RegisterSourceInput registration, bool acceptedFromCandidate, CancellationToken cancellationToken)

@@ -13,7 +13,8 @@ namespace ProductNormaliser.AdminApi.Controllers;
 public sealed class SourcesController(
     ISourceManagementService sourceManagementService,
     ISourceOperationalInsightsProvider sourceOperationalInsightsProvider,
-    IOptions<SourceOnboardingAutomationOptions> onboardingAutomationOptions) : ControllerBase
+    IOptions<SourceOnboardingAutomationOptions> onboardingAutomationOptions,
+    ProductNormaliser.Application.AI.ILlmStatusProvider? llmStatusProvider = null) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType(typeof(SourceDto[]), StatusCodes.Status200OK)]
@@ -44,9 +45,16 @@ public sealed class SourcesController(
     public IActionResult GetAutomationSettings()
     {
         var settings = onboardingAutomationOptions.Value;
+        var llmStatus = llmStatusProvider?.GetStatus() ?? new ProductNormaliser.Application.AI.LlmServiceStatus
+        {
+            Code = ProductNormaliser.Application.AI.LlmStatusCodes.Active,
+            Message = "LLM validation status is not exposed by the current classifier."
+        };
         return Ok(new SourceOnboardingAutomationSettingsDto
         {
             DefaultMode = settings.DefaultMode,
+            LlmStatus = llmStatus.Code,
+            LlmStatusMessage = llmStatus.Message,
             MaxAutoAcceptedCandidatesPerRun = settings.MaxAutoAcceptedCandidatesPerRun,
             AutomationCategorySampleBudget = settings.AutomationCategorySampleBudget,
             AutomationProductSampleBudget = settings.AutomationProductSampleBudget,

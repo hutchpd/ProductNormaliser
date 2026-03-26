@@ -541,6 +541,8 @@ public sealed partial class HttpSourceCandidateProbeService(
                 IsProductPage = false,
                 HasSpecifications = false,
                 Confidence = 0d,
+                LlmStatus = LlmStatusCodes.Disabled,
+                LlmStatusMessage = "LLM validation is disabled for this environment. Set Llm:Enabled=true and configure a local GGUF model to enable it. Discovery uses heuristics only.",
                 Reason = "LLM disabled"
             };
         }
@@ -557,14 +559,18 @@ public sealed partial class HttpSourceCandidateProbeService(
                 IsProductPage = false,
                 HasSpecifications = false,
                 Confidence = 0d,
-                Reason = "LLM unavailable"
+                LlmStatus = LlmStatusCodes.RuntimeFailed,
+                LlmStatusMessage = "LLM validation is configured, but inference failed during this run. Discovery uses heuristics only.",
+                Reason = "LLM runtime failed"
             };
         }
     }
 
     private static bool IsNeutralLlmResult(PageClassificationResult result)
     {
-        return string.Equals(result.Reason, "LLM unavailable", StringComparison.OrdinalIgnoreCase)
+        return string.Equals(result.Reason, "LLM unconfigured", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(result.Reason, "LLM load failed", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(result.Reason, "LLM runtime failed", StringComparison.OrdinalIgnoreCase)
             || string.Equals(result.Reason, "LLM timeout", StringComparison.OrdinalIgnoreCase)
             || string.Equals(result.Reason, "LLM low confidence", StringComparison.OrdinalIgnoreCase)
             || string.Equals(result.Reason, "LLM disabled", StringComparison.OrdinalIgnoreCase);

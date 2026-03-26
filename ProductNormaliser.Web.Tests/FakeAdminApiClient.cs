@@ -23,6 +23,8 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public SourceOnboardingAutomationSettingsDto AutomationSettings { get; set; } = new()
     {
         DefaultMode = "operator_assisted",
+        LlmStatus = "disabled",
+        LlmStatusMessage = "LLM validation is disabled for this environment. Set Llm:Enabled=true and configure a local GGUF model to enable it. Discovery uses heuristics only.",
         MaxAutoAcceptedCandidatesPerRun = 1,
         SuggestMinConfidenceScore = 78m,
         AutoAcceptMinConfidenceScore = 90m,

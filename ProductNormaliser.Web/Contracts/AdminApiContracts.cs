@@ -329,6 +329,8 @@ public sealed class SourceCandidateDiscoveryResponseDto
     public string? Market { get; init; }
     public string AutomationMode { get; init; } = string.Empty;
     public IReadOnlyList<string> BrandHints { get; init; } = [];
+    public string LlmStatus { get; init; } = string.Empty;
+    public string LlmStatusMessage { get; init; } = string.Empty;
     public DateTime GeneratedUtc { get; init; }
     public IReadOnlyList<SourceCandidateDiscoveryDiagnosticDto> Diagnostics { get; init; } = [];
     public IReadOnlyList<SourceCandidateDto> Candidates { get; init; } = [];
@@ -395,6 +397,8 @@ public sealed class SourceCandidateAutomationAssessmentDto
 public sealed class SourceOnboardingAutomationSettingsDto
 {
     public string DefaultMode { get; init; } = string.Empty;
+    public string LlmStatus { get; init; } = string.Empty;
+    public string LlmStatusMessage { get; init; } = string.Empty;
     public int MaxAutoAcceptedCandidatesPerRun { get; init; }
     public int AutomationCategorySampleBudget { get; init; }
     public int AutomationProductSampleBudget { get; init; }

@@ -33,6 +33,8 @@ public sealed class SourceCandidateDiscoveryController(ISourceCandidateDiscovery
                 Market = result.Market,
                 AutomationMode = result.AutomationMode,
                 BrandHints = result.BrandHints,
+                LlmStatus = result.LlmStatus,
+                LlmStatusMessage = result.LlmStatusMessage,
                 GeneratedUtc = result.GeneratedUtc,
                 Diagnostics = result.Diagnostics.Select(diagnostic => new Contracts.SourceCandidateDiscoveryDiagnosticDto
                 {

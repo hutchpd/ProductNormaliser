@@ -15,6 +15,8 @@ public sealed class SourceCandidateDiscoveryControllerTests
             Locale = "en-GB",
             Market = "UK",
             BrandHints = ["Samsung"],
+            LlmStatus = "disabled",
+            LlmStatusMessage = "LLM validation is disabled for this environment. Discovery uses heuristics only.",
             GeneratedUtc = new DateTime(2026, 03, 25, 12, 00, 00, DateTimeKind.Utc),
             Diagnostics =
             [
@@ -98,6 +100,8 @@ public sealed class SourceCandidateDiscoveryControllerTests
         {
             Assert.That(payload!.RequestedCategoryKeys, Is.EqualTo(new[] { "tv" }));
             Assert.That(payload.Locale, Is.EqualTo("en-GB"));
+            Assert.That(payload.LlmStatus, Is.EqualTo("disabled"));
+            Assert.That(payload.LlmStatusMessage, Does.Contain("heuristics only"));
             Assert.That(payload.Diagnostics.Select(diagnostic => diagnostic.Code), Is.EqualTo(new[] { "llm_disabled" }));
             Assert.That(payload.Candidates, Has.Count.EqualTo(1));
             Assert.That(payload.Candidates[0].DisplayName, Is.EqualTo("Samsung Official Store"));

@@ -103,6 +103,8 @@ public sealed class SourceManagementRenderingTests
         {
             Assert.That(html, Does.Contain("Register a new crawl host"));
             Assert.That(html, Does.Contain("Register source"));
+            Assert.That(html, Does.Contain("LLM validation disabled"));
+            Assert.That(html, Does.Contain("Discovery uses heuristics only"));
             Assert.That(html, Does.Contain("Managed source hosts and health"));
             Assert.That(html, Does.Contain("Ready sources"));
             Assert.That(html, Does.Contain("AO UK"));
@@ -281,6 +283,8 @@ public sealed class SourceManagementRenderingTests
             SourceCandidateDiscoveryResponse = new SourceCandidateDiscoveryResponseDto
             {
                 RequestedCategoryKeys = ["tv"],
+                LlmStatus = "unconfigured",
+                LlmStatusMessage = "LLM validation is enabled, but the local GGUF model file was not found. Discovery uses heuristics only.",
                 GeneratedUtc = new DateTime(2026, 03, 25, 12, 00, 00, DateTimeKind.Utc),
                 Candidates =
                 [
@@ -344,6 +348,8 @@ public sealed class SourceManagementRenderingTests
         Assert.Multiple(() =>
         {
             Assert.That(html, Does.Contain("Ephemeral source candidates"));
+            Assert.That(html, Does.Contain("LLM not configured locally"));
+            Assert.That(html, Does.Contain("local GGUF model file was not found"));
             Assert.That(html, Does.Contain("Matches registered source"));
             Assert.That(html, Does.Contain("Governance review needed before registration."));
             Assert.That(html, Does.Contain("Use candidate"));

@@ -7,6 +7,8 @@ public sealed class SourceCandidateDiscoveryResponseDto
     public string? Market { get; init; }
     public string AutomationMode { get; init; } = string.Empty;
     public IReadOnlyList<string> BrandHints { get; init; } = [];
+    public string LlmStatus { get; init; } = string.Empty;
+    public string LlmStatusMessage { get; init; } = string.Empty;
     public DateTime GeneratedUtc { get; init; }
     public IReadOnlyList<SourceCandidateDiscoveryDiagnosticDto> Diagnostics { get; init; } = [];
     public IReadOnlyList<SourceCandidateDto> Candidates { get; init; } = [];

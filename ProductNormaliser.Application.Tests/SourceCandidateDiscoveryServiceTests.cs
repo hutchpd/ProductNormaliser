@@ -280,6 +280,72 @@ public sealed class SourceCandidateDiscoveryServiceTests
     }
 
     [Test]
+    public async Task DiscoverAsync_ContinuesWhenProbeTimesOut_AddingProbeTimeoutDiagnostic()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "timeout_candidate",
+                    DisplayName = "Timeout Candidate",
+                    BaseUrl = "https://timeout.example/",
+                    Host = "timeout.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new ThrowingSourceCandidateProbeService(_ => throw new TaskCanceledException("probe timeout")),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"]
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Candidates, Has.Count.EqualTo(1));
+            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Does.Contain("probe_timeout"));
+            Assert.That(result.Candidates[0].Probe.CrawlabilityScore, Is.EqualTo(0m));
+        });
+    }
+
+    [Test]
+    public async Task DiscoverAsync_ContinuesWhenProbeThrows_AddingProbeFailedDiagnostic()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "failing_candidate",
+                    DisplayName = "Failing Candidate",
+                    BaseUrl = "https://fail.example/",
+                    Host = "fail.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new ThrowingSourceCandidateProbeService(_ => throw new InvalidOperationException("probe failed")),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"]
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Candidates, Has.Count.EqualTo(1));
+            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Does.Contain("probe_failed"));
+            Assert.That(result.Candidates[0].Probe.CrawlabilityScore, Is.EqualTo(0m));
+        });
+    }
+
+    [Test]
     public async Task DiscoverAsync_AddsLlmDiagnostic_WhenProbeFallsBackToHeuristics()
     {
         var service = CreateService(
@@ -318,6 +384,98 @@ public sealed class SourceCandidateDiscoveryServiceTests
         });
 
         Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Does.Contain("llm_disabled"));
+    }
+
+    [Test]
+    public async Task DiscoverAsync_AddsLlmUnconfiguredDiagnostic_WhenProbeReportsMissingModel()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "llm_unconfigured_shop",
+                    DisplayName = "LLM Unconfigured Shop",
+                    BaseUrl = "https://llm-unconfigured.example/",
+                    Host = "llm-unconfigured.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new FakeSourceCandidateProbeService(
+                new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["llm-unconfigured.example"] = new SourceCandidateProbeResult
+                    {
+                        HomePageReachable = true,
+                        RepresentativeProductPageReachable = true,
+                        CategoryRelevanceScore = 50m,
+                        CatalogLikelihoodScore = 50m,
+                        CrawlabilityScore = 50m,
+                        ExtractabilityScore = 50m,
+                        LlmReason = "LLM unconfigured"
+                    }
+                }),
+            new PermissiveCrawlGovernanceService(),
+            llmStatusProvider: new FakeLlmStatusProvider("unconfigured", "LLM validation is enabled, but the local GGUF model file was not found. Discovery uses heuristics only."));
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"]
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Does.Contain("llm_unconfigured"));
+            Assert.That(result.LlmStatus, Is.EqualTo("unconfigured"));
+        });
+    }
+
+    [Test]
+    public async Task DiscoverAsync_AddsLlmRuntimeFailedDiagnostic_WhenProbeReportsInferenceFailure()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "llm_runtime_failed_shop",
+                    DisplayName = "LLM Runtime Failed Shop",
+                    BaseUrl = "https://llm-runtime-failed.example/",
+                    Host = "llm-runtime-failed.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new FakeSourceCandidateProbeService(
+                new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["llm-runtime-failed.example"] = new SourceCandidateProbeResult
+                    {
+                        HomePageReachable = true,
+                        RepresentativeProductPageReachable = true,
+                        CategoryRelevanceScore = 50m,
+                        CatalogLikelihoodScore = 50m,
+                        CrawlabilityScore = 50m,
+                        ExtractabilityScore = 50m,
+                        LlmReason = "LLM runtime failed"
+                    }
+                }),
+            new PermissiveCrawlGovernanceService(),
+            llmStatusProvider: new FakeLlmStatusProvider("runtime_failed", "LLM validation is configured, but inference failed during this run. Discovery uses heuristics only."));
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"]
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Does.Contain("llm_runtime_failed"));
+            Assert.That(result.LlmStatus, Is.EqualTo("runtime_failed"));
+        });
     }
 
     [Test]
@@ -1381,9 +1539,10 @@ public sealed class SourceCandidateDiscoveryServiceTests
         FakeCrawlSourceStore store,
         FakeCategoryMetadataService categoryService,
         FakeSourceCandidateSearchProvider searchProvider,
-        FakeSourceCandidateProbeService probeService,
+        ISourceCandidateProbeService probeService,
         ICrawlGovernanceService governanceService,
-        SourceOnboardingAutomationOptions? automationOptions = null)
+        SourceOnboardingAutomationOptions? automationOptions = null,
+        ProductNormaliser.Application.AI.ILlmStatusProvider? llmStatusProvider = null)
     {
         return new SourceCandidateDiscoveryService(
             store,
@@ -1391,7 +1550,8 @@ public sealed class SourceCandidateDiscoveryServiceTests
             governanceService,
             searchProvider,
             probeService,
-            Options.Create(automationOptions ?? new SourceOnboardingAutomationOptions()));
+            Options.Create(automationOptions ?? new SourceOnboardingAutomationOptions()),
+            llmStatusProvider);
     }
 
     private static CategoryMetadata CreateCategory(string key)
@@ -1515,6 +1675,18 @@ public sealed class SourceCandidateDiscoveryServiceTests
         }
     }
 
+    private sealed class ThrowingSourceCandidateProbeService(Func<SourceCandidateSearchResult, Exception> exceptionFactory) : ISourceCandidateProbeService
+    {
+        public Task<SourceCandidateProbeResult> ProbeAsync(
+            SourceCandidateSearchResult candidate,
+            IReadOnlyCollection<string> categoryKeys,
+            string automationMode,
+            CancellationToken cancellationToken = default)
+        {
+            throw exceptionFactory(candidate);
+        }
+    }
+
     private sealed class PermissiveCrawlGovernanceService : ICrawlGovernanceService
     {
         public void ValidateSourceBaseUrl(string baseUrl, string parameterName)
@@ -1523,6 +1695,18 @@ public sealed class SourceCandidateDiscoveryServiceTests
 
         public void ValidateCrawlRequest(string requestType, IReadOnlyCollection<string> categories, IReadOnlyCollection<string> sources, IReadOnlyCollection<string> productIds, IReadOnlyCollection<CrawlJobTargetDescriptor> targets, string parameterName)
         {
+        }
+    }
+
+    private sealed class FakeLlmStatusProvider(string code, string message) : ProductNormaliser.Application.AI.ILlmStatusProvider
+    {
+        public ProductNormaliser.Application.AI.LlmServiceStatus GetStatus()
+        {
+            return new ProductNormaliser.Application.AI.LlmServiceStatus
+            {
+                Code = code,
+                Message = message
+            };
         }
     }
 

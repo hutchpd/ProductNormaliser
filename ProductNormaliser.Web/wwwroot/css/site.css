@@ -1544,6 +1544,31 @@ h3,
   gap: 1.25rem;
 }
 
+.source-form.is-submitting [data-discovery-submit] {
+  opacity: 0.8;
+}
+
+.discovery-submit-feedback {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 0;
+}
+
+.discovery-submit-feedback[hidden] {
+  display: none;
+}
+
+.discovery-submit-feedback[data-state="loading"]::before {
+  content: "";
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 999px;
+  border: 2px solid rgba(15, 118, 110, 0.2);
+  border-top-color: #0f766e;
+  animation: discovery-spin 0.75s linear infinite;
+}
+
 .form-grid {
   display: grid;
   gap: 1rem;
@@ -1593,6 +1618,20 @@ h3,
   display: grid;
   gap: 1rem;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.candidate-results-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.candidate-results-pager {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .job-card {
@@ -1646,9 +1685,45 @@ h3,
   font-weight: 600;
 }
 
+.candidate-summary-section {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.candidate-summary-list {
+  padding-left: 1rem;
+}
+
+.candidate-detail-disclosure {
+  display: grid;
+  gap: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(20, 32, 51, 0.08);
+}
+
+.candidate-detail-disclosure summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.candidate-detail-disclosure summary::-webkit-details-marker {
+  color: var(--muted);
+}
+
 .actions-bar {
   display: flex;
   justify-content: flex-end;
+}
+
+@keyframes discovery-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .empty-state {

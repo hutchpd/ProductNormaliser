@@ -173,12 +173,20 @@
             <p class="subtle-copy">Automation stays opt-in. Operator-assisted remains the default, suggestion mode only labels safe candidates, and guarded auto-accept plus seeding only runs when the visible thresholds and guardrails pass.</p>
         </div>
 
+        @if (Model.HasAutomationLlmStatusNotice())
+        {
+            <div class="@Model.GetLlmStatusNoticeClass(Model.AutomationSettings.LlmStatus)">
+                <strong>@Model.GetLlmStatusTitle(Model.AutomationSettings.LlmStatus)</strong>
+                <div>@Model.AutomationSettings.LlmStatusMessage</div>
+            </div>
+        }
+
         @if (!string.IsNullOrWhiteSpace(Model.CandidateDiscoveryErrorMessage))
         {
             <div class="notice error">@Model.CandidateDiscoveryErrorMessage</div>
         }
 
-        <form method="post" asp-page-handler="DiscoverCandidates" class="source-form">
+        <form method="post" asp-page-handler="DiscoverCandidates" class="source-form" data-discovery-form>
             <div>
                 <div class="panel-heading">
                     <div>
@@ -267,8 +275,10 @@
             </div>
 
             <div class="actions-bar">
-                <button type="submit" class="btn btn-dark">Discover candidates</button>
+                <button type="submit" class="btn btn-dark" data-discovery-submit>Discover candidates</button>
             </div>
+
+            <div class="notice info discovery-submit-feedback" data-discovery-submit-status hidden aria-live="polite"></div>
         </form>
     </section>
 
@@ -318,6 +328,14 @@
                 </div>
             }
 
+            @if (Model.HasDiscoveryLlmStatusNotice())
+            {
+                <div class="mt-3 @Model.GetLlmStatusNoticeClass(Model.CandidateDiscoveryResult.LlmStatus)">
+                    <strong>@Model.GetLlmStatusTitle(Model.CandidateDiscoveryResult.LlmStatus)</strong>
+                    <div>@Model.CandidateDiscoveryResult.LlmStatusMessage</div>
+                </div>
+            }
+
             @if (Model.CandidateDiscoveryResult.Candidates.Count == 0)
             {
                 <div class="empty-panel mt-3">
@@ -327,10 +345,19 @@
             }
             else
             {
-                <div class="job-card-grid mt-3">
+                <div class="candidate-results-toolbar mt-3" data-candidate-results>
+                    <p class="subtle-copy mb-0">Showing concise summaries first. Expand a candidate when you need the full probe evidence.</p>
+                    <div class="candidate-results-pager" data-candidate-pager data-page-size="3">
+                        <button type="button" class="btn btn-outline-secondary" data-candidate-prev>Previous</button>
+                        <span class="subtle-copy" data-candidate-page-status></span>
+                        <button type="button" class="btn btn-outline-secondary" data-candidate-next>Next</button>
+                    </div>
+                </div>
+
+                <div class="job-card-grid mt-3" data-candidate-results-list>
                 @foreach (var candidate in Model.CandidateDiscoveryResult.Candidates)
                 {
-                    <article class="job-card @(candidate.AlreadyRegistered ? "attention" : string.Empty)">
+                    <article class="job-card @(candidate.AlreadyRegistered ? "attention" : string.Empty)" data-candidate-card>
                         <div class="job-card-header">
                             <div>
                                 <strong>@candidate.DisplayName</strong>
@@ -390,63 +417,108 @@
 
                         <p class="subtle-copy mt-2">@candidate.RuntimeExtractionMessage</p>
 
-                        <div class="subtle-copy mt-3">Automation assessment</div>
-                        <ul class="small mb-0">
-                            @foreach (var reason in candidate.AutomationAssessment.SupportingReasons)
-                            {
-                                <li>@reason</li>
-                            }
-                            @foreach (var reason in candidate.AutomationAssessment.BlockingReasons)
-                            {
-                                <li>@reason</li>
-                            }
-                        </ul>
-
-                        @if (candidate.Probe.RepresentativeCategoryPageReachable || candidate.Probe.RepresentativeProductPageReachable || candidate.Probe.StructuredProductEvidenceDetected || candidate.Probe.TechnicalAttributeEvidenceDetected)
+                        @if (Model.GetCandidatePrimaryReasons(candidate).Count > 0)
                         {
-                            <div class="subtle-copy mt-3">Representative evidence</div>
-                            <ul class="small mb-0">
-                                <li>Category page: @(candidate.Probe.RepresentativeCategoryPageReachable ? "reachable" : "not confirmed")@(string.IsNullOrWhiteSpace(candidate.Probe.RepresentativeCategoryPageUrl) ? string.Empty : $" ({candidate.Probe.RepresentativeCategoryPageUrl})")</li>
-                                <li>Product page: @(candidate.Probe.RepresentativeProductPageReachable ? "reachable" : "not confirmed")@(string.IsNullOrWhiteSpace(candidate.Probe.RepresentativeProductPageUrl) ? string.Empty : $" ({candidate.Probe.RepresentativeProductPageUrl})")</li>
-                                <li>Runtime extraction: @(candidate.Probe.RuntimeExtractionCompatible ? $"compatible ({candidate.Probe.RepresentativeRuntimeProductCount} product(s) extracted)" : "not compatible")</li>
-                                <li>Structured product evidence: @(candidate.Probe.StructuredProductEvidenceDetected ? "detected" : "not detected")</li>
-                                <li>Technical attribute evidence: @(candidate.Probe.TechnicalAttributeEvidenceDetected ? "detected" : "not detected")</li>
-                            </ul>
+                            <div class="candidate-summary-section">
+                                <div class="subtle-copy">Why it surfaced</div>
+                                <ul class="small mb-0 candidate-summary-list">
+                                @foreach (var reason in Model.GetCandidatePrimaryReasons(candidate))
+                                {
+                                    <li>@reason</li>
+                                }
+                                </ul>
+                            </div>
+                        }
+
+                        @if (Model.GetCandidatePrimaryBlockers(candidate).Count > 0)
+                        {
+                            <div class="candidate-summary-section">
+                                <div class="subtle-copy">Main blockers</div>
+                                <ul class="small mb-0 candidate-summary-list">
+                                @foreach (var reason in Model.GetCandidatePrimaryBlockers(candidate))
+                                {
+                                    <li>@reason</li>
+                                }
+                                </ul>
+                            </div>
+                        }
+
+                        @if (Model.HasCandidateExpandedDetail(candidate))
+                        {
+                            <details class="candidate-detail-disclosure">
+                                <summary>View evidence and probe detail</summary>
+
+                                <div>
+                                    <div class="subtle-copy mt-3">Automation assessment</div>
+                                    <ul class="small mb-0">
+                                        @foreach (var reason in candidate.AutomationAssessment.SupportingReasons)
+                                        {
+                                            <li>@reason</li>
+                                        }
+                                        @foreach (var reason in candidate.AutomationAssessment.BlockingReasons)
+                                        {
+                                            <li>@reason</li>
+                                        }
+                                    </ul>
+                                </div>
+
+                                @if (candidate.Probe.RepresentativeCategoryPageReachable || candidate.Probe.RepresentativeProductPageReachable || candidate.Probe.StructuredProductEvidenceDetected || candidate.Probe.TechnicalAttributeEvidenceDetected)
+                                {
+                                    <div>
+                                        <div class="subtle-copy mt-3">Representative evidence</div>
+                                        <ul class="small mb-0">
+                                            <li>Category page: @(candidate.Probe.RepresentativeCategoryPageReachable ? "reachable" : "not confirmed")@(string.IsNullOrWhiteSpace(candidate.Probe.RepresentativeCategoryPageUrl) ? string.Empty : $" ({candidate.Probe.RepresentativeCategoryPageUrl})")</li>
+                                            <li>Product page: @(candidate.Probe.RepresentativeProductPageReachable ? "reachable" : "not confirmed")@(string.IsNullOrWhiteSpace(candidate.Probe.RepresentativeProductPageUrl) ? string.Empty : $" ({candidate.Probe.RepresentativeProductPageUrl})")</li>
+                                            <li>Runtime extraction: @(candidate.Probe.RuntimeExtractionCompatible ? $"compatible ({candidate.Probe.RepresentativeRuntimeProductCount} product(s) extracted)" : "not compatible")</li>
+                                            <li>Structured product evidence: @(candidate.Probe.StructuredProductEvidenceDetected ? "detected" : "not detected")</li>
+                                            <li>Technical attribute evidence: @(candidate.Probe.TechnicalAttributeEvidenceDetected ? "detected" : "not detected")</li>
+                                        </ul>
+                                    </div>
+                                }
+
+                                @if (candidate.Reasons.Count > 3)
+                                {
+                                    <div>
+                                        <div class="subtle-copy mt-3">All discovery reasons</div>
+                                        <ul class="small mb-0">
+                                        @foreach (var reason in candidate.Reasons.Skip(3))
+                                        {
+                                            <li>@reason.Message</li>
+                                        }
+                                        </ul>
+                                    </div>
+                                }
+
+                                @if (candidate.Probe.LikelyListingUrlPatterns.Count > 0 || candidate.Probe.LikelyProductUrlPatterns.Count > 0 || candidate.Probe.SitemapUrls.Count > 0)
+                                {
+                                    <div>
+                                        <div class="subtle-copy mt-3">Probe hints</div>
+                                        <ul class="small mb-0">
+                                            @foreach (var sitemapUrl in Model.GetCandidateVisibleSitemapHints(candidate))
+                                            {
+                                                <li>Sitemap: @sitemapUrl</li>
+                                            }
+                                            @if (Model.GetCandidateHiddenSitemapHintCount(candidate) > 0)
+                                            {
+                                                <li>Plus @Model.GetCandidateHiddenSitemapHintCount(candidate) additional sitemap hint(s).</li>
+                                            }
+                                            @foreach (var pattern in candidate.Probe.LikelyListingUrlPatterns)
+                                            {
+                                                <li>Listing pattern: @pattern</li>
+                                            }
+                                            @foreach (var pattern in candidate.Probe.LikelyProductUrlPatterns)
+                                            {
+                                                <li>Product pattern: @pattern</li>
+                                            }
+                                        </ul>
+                                    </div>
+                                }
+                            </details>
                         }
 
                         @if (candidate.Probe.NonCatalogContentHeavy)
                         {
                             <p class="subtle-copy mt-2">Sampled pages look more support, blog, or marketing heavy than product-catalog heavy.</p>
-                        }
-
-                        @if (candidate.Reasons.Count > 0)
-                        {
-                            <div class="subtle-copy mt-3">Why suggested</div>
-                            <ul class="small mb-0">
-                            @foreach (var reason in candidate.Reasons)
-                            {
-                                <li>@reason.Message</li>
-                            }
-                            </ul>
-                        }
-
-                        @if (candidate.Probe.LikelyListingUrlPatterns.Count > 0 || candidate.Probe.LikelyProductUrlPatterns.Count > 0 || candidate.Probe.SitemapUrls.Count > 0)
-                        {
-                            <div class="subtle-copy mt-3">Probe hints</div>
-                            <ul class="small mb-0">
-                                @foreach (var sitemapUrl in candidate.Probe.SitemapUrls)
-                                {
-                                    <li>Sitemap: @sitemapUrl</li>
-                                }
-                                @foreach (var pattern in candidate.Probe.LikelyListingUrlPatterns)
-                                {
-                                    <li>Listing pattern: @pattern</li>
-                                }
-                                @foreach (var pattern in candidate.Probe.LikelyProductUrlPatterns)
-                                {
-                                    <li>Product pattern: @pattern</li>
-                                }
-                            </ul>
                         }
 
                         <div class="actions-bar mt-3">

@@ -249,6 +249,32 @@ public sealed class SourceManagementPageTests
     }
 
     [Test]
+    public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_ShowsFriendlyTimeoutMessage()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            SourceCandidateDiscoveryException = new AdminApiException("The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.")
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IndexModel>.Instance)
+        {
+            CandidateDiscovery = new ProductNormaliser.Web.Pages.Sources.IndexModel.DiscoverSourceCandidatesInput
+            {
+                CategoryKeys = ["tv"]
+            }
+        };
+
+        var result = await model.OnPostDiscoverCandidatesAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<PageResult>());
+            Assert.That(model.CandidateDiscoveryErrorMessage, Is.EqualTo("Candidate discovery took too long to complete. Try fewer categories or use operator-assisted mode, then retry. Manual source registration remains available."));
+        });
+    }
+
+    [Test]
     public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_GuardedAutomationAutoAcceptsSeedsAndStillAllowsDisable()
     {
         var client = new FakeAdminApiClient

@@ -57,6 +57,15 @@ internal static class AdminApiContractValidator
         "auto_accept_and_seed"
     };
 
+    private static readonly IReadOnlySet<string> LlmStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "active",
+        "disabled",
+        "unconfigured",
+        "load_failed",
+        "runtime_failed"
+    };
+
     private static readonly IReadOnlySet<string> ExtractionOutcomes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "products_extracted",
@@ -166,6 +175,7 @@ internal static class AdminApiContractValidator
     {
         ValidateStringItems(payload.RequestedCategoryKeys, "sourceCandidateDiscovery.requestedCategoryKeys");
         ValidateEnumValue(payload.AutomationMode, SourceAutomationModes, "sourceCandidateDiscovery.automationMode", value => value);
+        ValidateEnumValue(payload.LlmStatus, LlmStatuses, "sourceCandidateDiscovery.llmStatus", value => value);
         ValidateStringItems(payload.BrandHints, "sourceCandidateDiscovery.brandHints");
         ValidateItems(payload.Diagnostics, "sourceCandidateDiscovery.diagnostics", ValidateSourceCandidateDiscoveryDiagnostic);
         ValidateItems(payload.Candidates, "sourceCandidateDiscovery.candidates", ValidateSourceCandidate);
@@ -175,6 +185,7 @@ internal static class AdminApiContractValidator
     {
         ArgumentNullException.ThrowIfNull(payload);
         ValidateEnumValue(payload.DefaultMode, SourceAutomationModes, "sourceOnboardingAutomation.defaultMode", value => value);
+        ValidateEnumValue(payload.LlmStatus, LlmStatuses, "sourceOnboardingAutomation.llmStatus", value => value);
     }
 
     public static void ValidateCrawlJobList(CrawlJobListResponseDto payload)

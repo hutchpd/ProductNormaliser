@@ -3,6 +3,8 @@ namespace ProductNormaliser.AdminApi.Contracts;
 public sealed class SourceOnboardingAutomationSettingsDto
 {
     public string DefaultMode { get; init; } = string.Empty;
+    public string LlmStatus { get; init; } = string.Empty;
+    public string LlmStatusMessage { get; init; } = string.Empty;
     public int MaxAutoAcceptedCandidatesPerRun { get; init; }
     public int AutomationCategorySampleBudget { get; init; }
     public int AutomationProductSampleBudget { get; init; }

@@ -48,3 +48,7 @@ node_modules/
 # Temporary files
 *.tmp
 *.temp
+
+# Local LLM models
+models/
+*.gguf

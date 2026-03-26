@@ -234,4 +234,87 @@
 			updateRequiredLabel(checkbox);
 		});
 	});
+
+	document.querySelectorAll("[data-discovery-form]").forEach(function (form) {
+		var submitButton = form.querySelector("[data-discovery-submit]");
+		var feedbackNode = form.querySelector("[data-discovery-submit-status]");
+
+		form.addEventListener("submit", function () {
+			form.classList.add("is-submitting");
+			form.setAttribute("aria-busy", "true");
+
+			if (submitButton) {
+				submitButton.disabled = true;
+				submitButton.textContent = "Discovering candidates...";
+			}
+
+			if (feedbackNode) {
+				feedbackNode.hidden = false;
+				feedbackNode.setAttribute("data-state", "loading");
+				feedbackNode.textContent = "Discovery started. Probing likely hosts and representative pages can take a couple of minutes.";
+			}
+		});
+	});
+
+	document.querySelectorAll("[data-candidate-results]").forEach(function (resultsRoot) {
+		var pager = resultsRoot.querySelector("[data-candidate-pager]");
+		var list = resultsRoot.parentElement?.querySelector("[data-candidate-results-list]");
+		if (!pager || !list) {
+			return;
+		}
+
+		var cards = Array.from(list.querySelectorAll("[data-candidate-card]"));
+		var prevButton = pager.querySelector("[data-candidate-prev]");
+		var nextButton = pager.querySelector("[data-candidate-next]");
+		var statusNode = pager.querySelector("[data-candidate-page-status]");
+		var pageSize = Math.max(1, Number(pager.getAttribute("data-page-size") || "3"));
+		var totalPages = Math.max(1, Math.ceil(cards.length / pageSize));
+		var currentPage = 1;
+
+		if (cards.length <= pageSize) {
+			pager.hidden = true;
+			if (statusNode) {
+				statusNode.textContent = "Showing all candidates";
+			}
+			return;
+		}
+
+		function renderPage() {
+			cards.forEach(function (card, index) {
+				card.hidden = Math.floor(index / pageSize) + 1 !== currentPage;
+			});
+
+			if (statusNode) {
+				statusNode.textContent = "Page " + currentPage + " of " + totalPages;
+			}
+
+			if (prevButton) {
+				prevButton.disabled = currentPage === 1;
+			}
+
+			if (nextButton) {
+				nextButton.disabled = currentPage === totalPages;
+			}
+		}
+
+		prevButton?.addEventListener("click", function () {
+			if (currentPage === 1) {
+				return;
+			}
+
+			currentPage -= 1;
+			renderPage();
+		});
+
+		nextButton?.addEventListener("click", function () {
+			if (currentPage === totalPages) {
+				return;
+			}
+
+			currentPage += 1;
+			renderPage();
+		});
+
+		renderPage();
+	});
 });

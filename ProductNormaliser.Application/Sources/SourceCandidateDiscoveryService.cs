@@ -11,9 +11,11 @@ public sealed class SourceCandidateDiscoveryService(
     ICrawlGovernanceService crawlGovernanceService,
     ISourceCandidateSearchProvider sourceCandidateSearchProvider,
     ISourceCandidateProbeService sourceCandidateProbeService,
-    IOptions<SourceOnboardingAutomationOptions>? onboardingAutomationOptions = null) : ISourceCandidateDiscoveryService
+    IOptions<SourceOnboardingAutomationOptions>? onboardingAutomationOptions = null,
+    ProductNormaliser.Application.AI.ILlmStatusProvider? llmStatusProvider = null) : ISourceCandidateDiscoveryService
 {
     private readonly SourceOnboardingAutomationOptions onboardingAutomationOptions = onboardingAutomationOptions?.Value ?? new SourceOnboardingAutomationOptions();
+    private readonly ProductNormaliser.Application.AI.ILlmStatusProvider? llmStatusProvider = llmStatusProvider;
 
     public async Task<SourceCandidateDiscoveryResult> DiscoverAsync(DiscoverSourceCandidatesRequest request, CancellationToken cancellationToken = default)
     {
@@ -58,7 +60,39 @@ public sealed class SourceCandidateDiscoveryService(
             var duplicateSources = registeredSources
                 .Where(source => IsPotentialDuplicate(source, searchResult))
                 .ToArray();
-            var probe = await sourceCandidateProbeService.ProbeAsync(searchResult, categoryKeys, normalizedAutomationMode, cancellationToken);
+            SourceCandidateProbeResult probe;
+            try
+            {
+                probe = await sourceCandidateProbeService.ProbeAsync(searchResult, categoryKeys, normalizedAutomationMode, cancellationToken);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                MergeDiagnostics(diagnostics,
+                [
+                    new SourceCandidateDiscoveryDiagnostic
+                    {
+                        Code = "probe_timeout",
+                        Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
+                        Title = "Candidate probing timed out",
+                        Message = $"Probing timed out for '{searchResult.DisplayName}'. Discovery continued with reduced confidence for this candidate."
+                    }
+                ]);
+                probe = new SourceCandidateProbeResult();
+            }
+            catch (Exception)
+            {
+                MergeDiagnostics(diagnostics,
+                [
+                    new SourceCandidateDiscoveryDiagnostic
+                    {
+                        Code = "probe_failed",
+                        Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
+                        Title = "Candidate probing failed",
+                        Message = $"Probing failed for '{searchResult.DisplayName}'. Discovery continued with reduced confidence for this candidate."
+                    }
+                ]);
+                probe = new SourceCandidateProbeResult();
+            }
 
             var governanceWarning = default(string);
             var allowedByGovernance = true;
@@ -113,6 +147,7 @@ public sealed class SourceCandidateDiscoveryService(
         }
 
         MergeDiagnostics(diagnostics, BuildLlmDiagnostics(candidates));
+        var llmStatus = GetLlmStatus();
 
         return new SourceCandidateDiscoveryResult
         {
@@ -121,6 +156,8 @@ public sealed class SourceCandidateDiscoveryService(
             Market = normalizedRequest.Market,
             AutomationMode = normalizedRequest.AutomationMode ?? SourceAutomationModes.OperatorAssisted,
             BrandHints = NormalizeValues(normalizedRequest.BrandHints),
+            LlmStatus = llmStatus.Code,
+            LlmStatusMessage = llmStatus.Message,
             GeneratedUtc = DateTime.UtcNow,
             Diagnostics = diagnostics,
             Candidates = candidates
@@ -152,6 +189,36 @@ public sealed class SourceCandidateDiscoveryService(
                         Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
                         Title = "LLM validation unavailable",
                         Message = $"Representative product-page classification fell back to heuristics for {count} candidate(s) because the LLM was unavailable."
+                    });
+                    break;
+
+                case "LLM unconfigured":
+                    diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
+                    {
+                        Code = "llm_unconfigured",
+                        Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
+                        Title = "LLM validation not configured locally",
+                        Message = $"Representative product-page classification stayed heuristic-only for {count} candidate(s) because no local GGUF model is configured or present."
+                    });
+                    break;
+
+                case "LLM load failed":
+                    diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
+                    {
+                        Code = "llm_load_failed",
+                        Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
+                        Title = "LLM model failed to load",
+                        Message = $"Representative product-page classification fell back to heuristics for {count} candidate(s) because the configured local model could not be loaded."
+                    });
+                    break;
+
+                case "LLM runtime failed":
+                    diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
+                    {
+                        Code = "llm_runtime_failed",
+                        Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
+                        Title = "LLM validation failed during probing",
+                        Message = $"Representative product-page classification fell back to heuristics for {count} candidate(s) because inference failed during the discovery run."
                     });
                     break;
 
@@ -199,11 +266,23 @@ public sealed class SourceCandidateDiscoveryService(
 
         return reason.Trim() switch
         {
+            "LLM unconfigured" => "LLM unconfigured",
+            "LLM load failed" => "LLM load failed",
+            "LLM runtime failed" => "LLM runtime failed",
             "LLM unavailable" => "LLM unavailable",
             "LLM timeout" => "LLM timeout",
             "LLM low confidence" => "LLM low confidence",
             "LLM disabled" => "LLM disabled",
             _ => null
+        };
+    }
+
+    private ProductNormaliser.Application.AI.LlmServiceStatus GetLlmStatus()
+    {
+        return llmStatusProvider?.GetStatus() ?? new ProductNormaliser.Application.AI.LlmServiceStatus
+        {
+            Code = ProductNormaliser.Application.AI.LlmStatusCodes.Active,
+            Message = "LLM validation status is not exposed by the current classifier."
         };
     }
 
