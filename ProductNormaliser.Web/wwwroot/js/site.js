@@ -1,4 +1,14 @@
 ﻿document.addEventListener("DOMContentLoaded", function () {
+	var navigationDrawer = document.getElementById("appNavigationDrawer");
+	if (navigationDrawer && window.bootstrap && window.bootstrap.Offcanvas) {
+		var navigationDrawerInstance = window.bootstrap.Offcanvas.getOrCreateInstance(navigationDrawer);
+		navigationDrawer.querySelectorAll("[data-nav-drawer-dismiss]").forEach(function (link) {
+			link.addEventListener("click", function () {
+				navigationDrawerInstance.hide();
+			});
+		});
+	}
+
 	document.querySelectorAll("[data-category-selector]").forEach(function (selectorRoot) {
 		var summaryRoot = selectorRoot.querySelector("[data-category-summary]");
 		var launchButton = selectorRoot.closest("form")?.querySelector("[data-category-launch]");
