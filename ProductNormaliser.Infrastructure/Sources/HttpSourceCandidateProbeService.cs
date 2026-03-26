@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -31,6 +32,35 @@ public sealed partial class HttpSourceCandidateProbeService(
     {
         ArgumentNullException.ThrowIfNull(candidate);
         ArgumentNullException.ThrowIfNull(categoryKeys);
+
+        var maxRetries = Math.Max(0, options.ProbeRetryCount);
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await ProbeOnceAsync(candidate, categoryKeys, automationMode, attempt + 1, cancellationToken);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && attempt < maxRetries)
+            {
+                var retryDelay = GetRetryDelay(attempt, options.ProbeRetryBaseDelayMs);
+                logger.LogInformation(
+                    "Candidate probing timed out for {Host} on attempt {Attempt}. Retrying after {RetryDelayMs}ms.",
+                    candidate.Host,
+                    attempt + 1,
+                    retryDelay.TotalMilliseconds);
+                await Task.Delay(retryDelay, cancellationToken);
+            }
+        }
+    }
+
+    private async Task<SourceCandidateProbeResult> ProbeOnceAsync(
+        SourceCandidateSearchResult candidate,
+        IReadOnlyCollection<string> categoryKeys,
+        string automationMode,
+        int attemptNumber,
+        CancellationToken cancellationToken)
+    {
+        var attemptStopwatch = Stopwatch.StartNew();
 
         var normalizedAutomationMode = SourceAutomationModes.Normalize(automationMode);
         var collectAutomationEvidence = normalizedAutomationMode is SourceAutomationModes.SuggestAccept or SourceAutomationModes.AutoAcceptAndSeed;
@@ -86,7 +116,8 @@ public sealed partial class HttpSourceCandidateProbeService(
             .Select(value => value.Trim())
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault() ?? "product";
-        var llmResult = await TryClassifyRepresentativeProductPageAsync(representativeProductPageHtml, requestedCategory, timeoutCts.Token);
+        var timedClassification = await TryClassifyRepresentativeProductPageAsync(representativeProductPageHtml, requestedCategory, timeoutCts.Token);
+        var llmResult = timedClassification.Result;
         var llmNeutral = llmResult is not null && IsNeutralLlmResult(llmResult);
         var llmAcceptedRepresentativeProductPage = llmResult is not null
             && !llmNeutral
@@ -155,6 +186,9 @@ public sealed partial class HttpSourceCandidateProbeService(
             LlmDetectedCategory = llmResult?.DetectedCategory,
             LlmConfidenceScore = llmResult is null ? null : decimal.Round((decimal)llmResult.Confidence * 100m, 2, MidpointRounding.AwayFromZero),
             LlmReason = llmResult?.Reason,
+            ProbeAttemptCount = attemptNumber,
+            ProbeElapsedMs = attemptStopwatch.ElapsedMilliseconds,
+            LlmElapsedMs = timedClassification.ElapsedMs > 0 ? timedClassification.ElapsedMs : null,
             NonCatalogContentHeavy = catalogLikelihoodScore <= 40m,
             CategoryPageHints = categoryPageHints,
             LikelyListingUrlPatterns = likelyListingUrlPatterns,
@@ -527,16 +561,18 @@ public sealed partial class HttpSourceCandidateProbeService(
         return extractabilityScore;
     }
 
-    private async Task<PageClassificationResult?> TryClassifyRepresentativeProductPageAsync(string? representativeProductPageHtml, string category, CancellationToken cancellationToken)
+    private async Task<TimedPageClassificationResult> TryClassifyRepresentativeProductPageAsync(string? representativeProductPageHtml, string category, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(representativeProductPageHtml))
         {
-            return null;
+            return new TimedPageClassificationResult(null, 0);
         }
+
+        var stopwatch = Stopwatch.StartNew();
 
         if (!llmOptions.Enabled)
         {
-            return new PageClassificationResult
+            return new TimedPageClassificationResult(new PageClassificationResult
             {
                 IsProductPage = false,
                 HasSpecifications = false,
@@ -544,17 +580,19 @@ public sealed partial class HttpSourceCandidateProbeService(
                 LlmStatus = LlmStatusCodes.Disabled,
                 LlmStatusMessage = "LLM validation is disabled for this environment. Set Llm:Enabled=true and configure a local GGUF model to enable it. Discovery uses heuristics only.",
                 Reason = "LLM disabled"
-            };
+            }, stopwatch.ElapsedMilliseconds);
         }
 
         try
         {
-            return await pageClassifier.ClassifyAsync(representativeProductPageHtml, category, cancellationToken);
+            return new TimedPageClassificationResult(
+                await pageClassifier.ClassifyAsync(representativeProductPageHtml, category, cancellationToken),
+                stopwatch.ElapsedMilliseconds);
         }
         catch (Exception exception)
         {
             logger.LogWarning(exception, "Representative product-page classification failed for category {Category} during candidate probing.", category);
-            return new PageClassificationResult
+            return new TimedPageClassificationResult(new PageClassificationResult
             {
                 IsProductPage = false,
                 HasSpecifications = false,
@@ -562,8 +600,15 @@ public sealed partial class HttpSourceCandidateProbeService(
                 LlmStatus = LlmStatusCodes.RuntimeFailed,
                 LlmStatusMessage = "LLM validation is configured, but inference failed during this run. Discovery uses heuristics only.",
                 Reason = "LLM runtime failed"
-            };
+            }, stopwatch.ElapsedMilliseconds);
         }
+    }
+
+    private static TimeSpan GetRetryDelay(int attempt, int baseDelayMs)
+    {
+        var safeBaseDelay = Math.Max(50, baseDelayMs);
+        var multiplier = Math.Min(8, 1 << Math.Max(0, attempt));
+        return TimeSpan.FromMilliseconds(safeBaseDelay * multiplier);
     }
 
     private static bool IsNeutralLlmResult(PageClassificationResult result)
@@ -781,6 +826,8 @@ public sealed partial class HttpSourceCandidateProbeService(
     private static partial Regex ProductSlugRegex();
 
     private sealed record FetchedPageSample(string Url, string? Html);
+
+    private sealed record TimedPageClassificationResult(PageClassificationResult? Result, long ElapsedMs);
 
     private sealed record ProductSampleEvidence(
         string? Url,

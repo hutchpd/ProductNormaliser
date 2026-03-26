@@ -1550,9 +1550,14 @@ h3,
 
 .discovery-submit-feedback {
   display: flex;
-  align-items: center;
+  align-items: start;
   gap: 0.7rem;
   margin: 0;
+}
+
+.discovery-submit-feedback-body {
+  display: grid;
+  gap: 0.45rem;
 }
 
 .discovery-submit-feedback[hidden] {
@@ -1563,10 +1568,32 @@ h3,
   content: "";
   width: 0.9rem;
   height: 0.9rem;
+  margin-top: 0.3rem;
   border-radius: 999px;
   border: 2px solid rgba(15, 118, 110, 0.2);
   border-top-color: #0f766e;
   animation: discovery-spin 0.75s linear infinite;
+}
+
+.discovery-submit-stages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.discovery-submit-stages span {
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(20, 32, 51, 0.12);
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.discovery-submit-stages span[data-state="active"] {
+  border-color: rgba(15, 118, 110, 0.28);
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--teal);
 }
 
 .form-grid {
@@ -1694,6 +1721,10 @@ h3,
   padding-left: 1rem;
 }
 
+.candidate-timing-row {
+  margin-top: -0.15rem;
+}
+
 .candidate-detail-disclosure {
   display: grid;
   gap: 0.85rem;
@@ -1709,6 +1740,19 @@ h3,
 
 .candidate-detail-disclosure summary::-webkit-details-marker {
   color: var(--muted);
+}
+
+.candidate-archive-disclosure {
+  display: grid;
+  gap: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(20, 32, 51, 0.08);
+}
+
+.candidate-archive-disclosure summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink);
 }
 
 .actions-bar {

@@ -33,6 +33,9 @@ public sealed class SourceCandidateProbeResult
     public string? LlmDetectedCategory { get; init; }
     public decimal? LlmConfidenceScore { get; init; }
     public string? LlmReason { get; init; }
+    public int ProbeAttemptCount { get; init; }
+    public long ProbeElapsedMs { get; init; }
+    public long? LlmElapsedMs { get; init; }
     public bool NonCatalogContentHeavy { get; init; }
     public IReadOnlyList<string> CategoryPageHints { get; init; } = [];
     public IReadOnlyList<string> LikelyListingUrlPatterns { get; init; } = [];

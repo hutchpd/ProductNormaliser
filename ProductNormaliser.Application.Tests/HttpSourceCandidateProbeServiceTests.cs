@@ -435,6 +435,73 @@ public sealed class HttpSourceCandidateProbeServiceTests
     }
 
     [Test]
+    public async Task ProbeAsync_RetriesTimedOutProbeOnceBeforeSucceeding()
+    {
+        var fetcher = new FlakyHttpFetcher(CreateRepresentativeProductResponses());
+        fetcher.TimeoutOnce("https://candidate.example/");
+
+        var service = new HttpSourceCandidateProbeService(
+            fetcher,
+            new SchemaOrgJsonLdExtractor(),
+            new NoOpPageClassificationService(),
+            Options.Create(new SourceCandidateDiscoveryOptions
+            {
+                ProbeTimeoutSeconds = 5,
+                ProbeRetryCount = 1,
+                ProbeRetryBaseDelayMs = 10
+            }),
+            Options.Create(new SourceOnboardingAutomationOptions()),
+            Options.Create(new LlmOptions()),
+            NullLogger<HttpSourceCandidateProbeService>.Instance);
+
+        var result = await service.ProbeAsync(new SourceCandidateSearchResult
+        {
+            CandidateKey = "candidate_example",
+            DisplayName = "Candidate Example",
+            BaseUrl = "https://candidate.example/",
+            Host = "candidate.example",
+            CandidateType = "retailer"
+        }, ["tv"], SourceAutomationModes.OperatorAssisted);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.HomePageReachable, Is.True);
+            Assert.That(result.ProbeAttemptCount, Is.EqualTo(2));
+            Assert.That(fetcher.RequestedUrls.Count(url => string.Equals(url, "https://candidate.example/", StringComparison.OrdinalIgnoreCase)), Is.EqualTo(2));
+        });
+    }
+
+    [Test]
+    public async Task ProbeAsync_RecordsObservedLlmElapsedTime()
+    {
+        var fetcher = CreateRepresentativeProductFetcher();
+        var service = new HttpSourceCandidateProbeService(
+            fetcher,
+            new SchemaOrgJsonLdExtractor(),
+            new SlowPageClassificationService(40),
+            Options.Create(new SourceCandidateDiscoveryOptions { ProbeTimeoutSeconds = 5 }),
+            Options.Create(new SourceOnboardingAutomationOptions()),
+            Options.Create(new LlmOptions { Enabled = true, TimeoutMs = 250 }),
+            NullLogger<HttpSourceCandidateProbeService>.Instance);
+
+        var result = await service.ProbeAsync(new SourceCandidateSearchResult
+        {
+            CandidateKey = "candidate_example",
+            DisplayName = "Candidate Example",
+            BaseUrl = "https://candidate.example/",
+            Host = "candidate.example",
+            CandidateType = "retailer"
+        }, ["tv"], SourceAutomationModes.OperatorAssisted);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.LlmElapsedMs, Is.Not.Null);
+            Assert.That(result.LlmElapsedMs, Is.GreaterThanOrEqualTo(30));
+            Assert.That(result.ProbeElapsedMs, Is.GreaterThanOrEqualTo(result.LlmElapsedMs!.Value));
+        });
+    }
+
+    [Test]
     public async Task ProbeAsync_Continues_WhenLlmInferenceFails()
     {
         var fetcher = CreateRepresentativeProductFetcher();
@@ -470,7 +537,12 @@ public sealed class HttpSourceCandidateProbeServiceTests
 
     private static FakeHttpFetcher CreateRepresentativeProductFetcher()
     {
-        return new FakeHttpFetcher(new Dictionary<string, FetchResult>(StringComparer.OrdinalIgnoreCase)
+        return new FakeHttpFetcher(CreateRepresentativeProductResponses());
+    }
+
+    private static IReadOnlyDictionary<string, FetchResult> CreateRepresentativeProductResponses()
+    {
+        return new Dictionary<string, FetchResult>(StringComparer.OrdinalIgnoreCase)
         {
             ["https://candidate.example/"] = new FetchResult
             {
@@ -504,7 +576,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
                 Html = "<html><head><script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"Product\",\"name\":\"OLED TV\"}</script></head><body><section>Specifications</section><table><tr><th>Resolution</th><td>3840x2160</td></tr></table></body></html>",
                 FetchedUtc = DateTime.UtcNow
             }
-        });
+        };
     }
 
     private static FakeHttpFetcher CreateAutomationBreadthFetcher()
@@ -598,6 +670,40 @@ public sealed class HttpSourceCandidateProbeServiceTests
         }
     }
 
+    private sealed class FlakyHttpFetcher(IReadOnlyDictionary<string, FetchResult> resultsByUrl) : IHttpFetcher
+    {
+        private readonly Dictionary<string, int> timeoutBudgetByUrl = new(StringComparer.OrdinalIgnoreCase);
+
+        public List<string> RequestedUrls { get; } = [];
+
+        public void TimeoutOnce(string url)
+        {
+            timeoutBudgetByUrl[url] = 1;
+        }
+
+        public Task<FetchResult> FetchAsync(CrawlTarget target, CancellationToken cancellationToken)
+        {
+            RequestedUrls.Add(target.Url);
+
+            if (timeoutBudgetByUrl.TryGetValue(target.Url, out var remainingTimeouts) && remainingTimeouts > 0)
+            {
+                timeoutBudgetByUrl[target.Url] = remainingTimeouts - 1;
+                throw new OperationCanceledException("Synthetic timeout.", cancellationToken);
+            }
+
+            return Task.FromResult(resultsByUrl.TryGetValue(target.Url, out var result)
+                ? result
+                : new FetchResult
+                {
+                    Url = target.Url,
+                    IsSuccess = false,
+                    StatusCode = 404,
+                    FailureReason = "not found",
+                    FetchedUtc = DateTime.UtcNow
+                });
+        }
+    }
+
     private sealed class FakeRejectingPageClassificationService : IPageClassificationService
     {
         public Task<PageClassificationResult> ClassifyAsync(string content, string category, CancellationToken cancellationToken = default)
@@ -624,6 +730,20 @@ public sealed class HttpSourceCandidateProbeServiceTests
                 HasSpecifications = true,
                 Confidence = 0.8d
             });
+        }
+    }
+
+    private sealed class SlowPageClassificationService(int delayMs) : IPageClassificationService
+    {
+        public async Task<PageClassificationResult> ClassifyAsync(string content, string category, CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(delayMs, cancellationToken);
+            return new PageClassificationResult
+            {
+                IsProductPage = true,
+                HasSpecifications = true,
+                Confidence = 0.8d
+            };
         }
     }
 

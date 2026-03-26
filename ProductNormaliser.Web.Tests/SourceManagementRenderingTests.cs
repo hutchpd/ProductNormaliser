@@ -353,6 +353,8 @@ public sealed class SourceManagementRenderingTests
             Assert.That(html, Does.Contain("Matches registered source"));
             Assert.That(html, Does.Contain("Governance review needed before registration."));
             Assert.That(html, Does.Contain("Use candidate"));
+            Assert.That(html, Does.Contain("Dismiss candidate"));
+            Assert.That(html, Does.Contain("Local verification queue"));
             Assert.That(html, Does.Not.Contain("<button type=\"submit\" class=\"btn btn-dark\">Accept candidate</button>"));
             Assert.That(html, Does.Contain("Do not accept"));
             Assert.That(html, Does.Contain("en-GB"));

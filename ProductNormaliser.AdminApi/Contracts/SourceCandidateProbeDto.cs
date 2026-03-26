@@ -16,6 +16,9 @@ public sealed class SourceCandidateProbeDto
     public bool RepresentativeProductPageReachable { get; init; }
     public bool RuntimeExtractionCompatible { get; init; }
     public int RepresentativeRuntimeProductCount { get; init; }
+    public int ProbeAttemptCount { get; init; }
+    public long ProbeElapsedMs { get; init; }
+    public long? LlmElapsedMs { get; init; }
     public bool StructuredProductEvidenceDetected { get; init; }
     public bool TechnicalAttributeEvidenceDetected { get; init; }
     public bool NonCatalogContentHeavy { get; init; }

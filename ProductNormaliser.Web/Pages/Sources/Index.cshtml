@@ -278,12 +278,26 @@
                 <button type="submit" class="btn btn-dark" data-discovery-submit>Discover candidates</button>
             </div>
 
-            <div class="notice info discovery-submit-feedback" data-discovery-submit-status hidden aria-live="polite"></div>
+            <div class="notice info discovery-submit-feedback" data-discovery-submit-status hidden aria-live="polite">
+                <div class="discovery-submit-feedback-body">
+                    <strong data-discovery-submit-title>Preparing discovery run</strong>
+                    <div data-discovery-submit-message>Discovery will search, probe, and locally verify candidate hosts.</div>
+                    <div class="subtle-copy" data-discovery-submit-elapsed></div>
+                    <div class="discovery-submit-stages">
+                        <span data-discovery-stage="search">Search hosts</span>
+                        <span data-discovery-stage="probe">Probe pages</span>
+                        <span data-discovery-stage="llm">Local verification queue</span>
+                    </div>
+                </div>
+            </div>
         </form>
     </section>
 
     @if (Model.CandidateDiscoveryResult is not null)
     {
+        var visibleCandidates = Model.GetVisibleCandidateResults();
+        var archivedCandidates = Model.GetArchivedCandidateResults();
+
         <section class="panel">
             <div class="panel-heading">
                 <div>
@@ -343,10 +357,17 @@
                     <p class="subtle-copy">@Model.GetCandidateDiscoveryEmptyStateMessage()</p>
                 </div>
             }
+            else if (visibleCandidates.Count == 0)
+            {
+                <div class="empty-panel mt-3">
+                    <p class="empty-state">All candidates from this run are archived.</p>
+                    <p class="subtle-copy">Restore a candidate from the archive below when you want it back in the active review queue.</p>
+                </div>
+            }
             else
             {
                 <div class="candidate-results-toolbar mt-3" data-candidate-results>
-                    <p class="subtle-copy mb-0">Showing concise summaries first. Expand a candidate when you need the full probe evidence.</p>
+                    <p class="subtle-copy mb-0">Showing @visibleCandidates.Count active candidate(s) first. Expand a candidate when you need the full probe evidence.@(archivedCandidates.Count > 0 ? $" {archivedCandidates.Count} candidate(s) are archived for this run." : string.Empty)</p>
                     <div class="candidate-results-pager" data-candidate-pager data-page-size="3">
                         <button type="button" class="btn btn-outline-secondary" data-candidate-prev>Previous</button>
                         <span class="subtle-copy" data-candidate-page-status></span>
@@ -355,7 +376,7 @@
                 </div>
 
                 <div class="job-card-grid mt-3" data-candidate-results-list>
-                @foreach (var candidate in Model.CandidateDiscoveryResult.Candidates)
+                @foreach (var candidate in visibleCandidates)
                 {
                     <article class="job-card @(candidate.AlreadyRegistered ? "attention" : string.Empty)" data-candidate-card>
                         <div class="job-card-header">
@@ -416,6 +437,20 @@
                         </dl>
 
                         <p class="subtle-copy mt-2">@candidate.RuntimeExtractionMessage</p>
+
+                        @if (!string.IsNullOrWhiteSpace(Model.GetCandidateProbeTimingSummary(candidate)) || !string.IsNullOrWhiteSpace(Model.GetCandidateLlmTimingSummary(candidate)))
+                        {
+                            <div class="chip-row compact-wrap candidate-timing-row">
+                                @if (!string.IsNullOrWhiteSpace(Model.GetCandidateProbeTimingSummary(candidate)))
+                                {
+                                    <span class="chip">@Model.GetCandidateProbeTimingSummary(candidate)</span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(Model.GetCandidateLlmTimingSummary(candidate)))
+                                {
+                                    <span class="chip">@Model.GetCandidateLlmTimingSummary(candidate)</span>
+                                }
+                            </div>
+                        }
 
                         @if (Model.GetCandidatePrimaryReasons(candidate).Count > 0)
                         {
@@ -543,7 +578,12 @@
                                 <input type="hidden" asp-for="CandidateDiscovery.Locale" />
                                 <input type="hidden" asp-for="CandidateDiscovery.Market" />
                                 <input type="hidden" asp-for="CandidateDiscovery.BrandHints" />
+                                <input type="hidden" asp-for="CandidateDiscovery.AutomationMode" />
                                 <input type="hidden" asp-for="CandidateDiscovery.MaxCandidates" />
+                                @foreach (var dismissedCandidateKey in Model.CandidateDiscovery.DismissedCandidateKeys)
+                                {
+                                    <input type="hidden" name="CandidateDiscovery.DismissedCandidateKeys" value="@dismissedCandidateKey" />
+                                }
                                 <button type="submit" class="btn btn-outline-secondary">Use candidate</button>
                             </form>
 
@@ -570,16 +610,84 @@
                                     <input type="hidden" asp-for="CandidateDiscovery.Locale" />
                                     <input type="hidden" asp-for="CandidateDiscovery.Market" />
                                     <input type="hidden" asp-for="CandidateDiscovery.BrandHints" />
+                                    <input type="hidden" asp-for="CandidateDiscovery.AutomationMode" />
                                     <input type="hidden" asp-for="CandidateDiscovery.MaxCandidates" />
+                                    @foreach (var dismissedCandidateKey in Model.CandidateDiscovery.DismissedCandidateKeys)
+                                    {
+                                        <input type="hidden" name="CandidateDiscovery.DismissedCandidateKeys" value="@dismissedCandidateKey" />
+                                    }
                                     <button type="submit" class="btn btn-dark">Accept candidate</button>
                                 </form>
                             }
+
+                            <form method="post" asp-page-handler="DismissCandidate">
+                                <input type="hidden" asp-for="CandidateSelection.CandidateKey" value="@candidate.CandidateKey" />
+                                <input type="hidden" asp-for="CandidateSelection.DisplayName" value="@candidate.DisplayName" />
+                                @foreach (var categoryKey in Model.CandidateDiscovery.CategoryKeys)
+                                {
+                                    <input type="hidden" name="CandidateDiscovery.CategoryKeys" value="@categoryKey" />
+                                }
+                                <input type="hidden" asp-for="CandidateDiscovery.Locale" />
+                                <input type="hidden" asp-for="CandidateDiscovery.Market" />
+                                <input type="hidden" asp-for="CandidateDiscovery.BrandHints" />
+                                <input type="hidden" asp-for="CandidateDiscovery.AutomationMode" />
+                                <input type="hidden" asp-for="CandidateDiscovery.MaxCandidates" />
+                                @foreach (var dismissedCandidateKey in Model.CandidateDiscovery.DismissedCandidateKeys)
+                                {
+                                    <input type="hidden" name="CandidateDiscovery.DismissedCandidateKeys" value="@dismissedCandidateKey" />
+                                }
+                                <button type="submit" class="btn btn-outline-secondary">Dismiss candidate</button>
+                            </form>
                         </div>
 
                         <p class="subtle-copy mt-2 mb-0">Use candidate keeps the registration form editable. Accept candidate is only shown for recommended candidates and still registers through the same source registration pipeline.</p>
                     </article>
                 }
                 </div>
+            }
+
+            @if (archivedCandidates.Count > 0)
+            {
+                <details class="candidate-archive-disclosure mt-3">
+                    <summary>Archived for this run (@archivedCandidates.Count)</summary>
+
+                    <div class="job-card-grid mt-3">
+                    @foreach (var candidate in archivedCandidates)
+                    {
+                        <article class="job-card">
+                            <div class="job-card-header">
+                                <div>
+                                    <strong>@candidate.DisplayName</strong>
+                                    <div class="subtle-copy mono">@candidate.Host</div>
+                                    <div class="subtle-copy">Archived from the active review queue for this discovery run.</div>
+                                </div>
+                                <partial name="_StatusBadge" model='new ProductNormaliser.Web.Models.StatusBadgeModel { Text = "Archived", Tone = "pending" }' />
+                            </div>
+
+                            <div class="actions-bar">
+                                <form method="post" asp-page-handler="RestoreCandidate">
+                                    <input type="hidden" asp-for="CandidateSelection.CandidateKey" value="@candidate.CandidateKey" />
+                                    <input type="hidden" asp-for="CandidateSelection.DisplayName" value="@candidate.DisplayName" />
+                                    @foreach (var categoryKey in Model.CandidateDiscovery.CategoryKeys)
+                                    {
+                                        <input type="hidden" name="CandidateDiscovery.CategoryKeys" value="@categoryKey" />
+                                    }
+                                    <input type="hidden" asp-for="CandidateDiscovery.Locale" />
+                                    <input type="hidden" asp-for="CandidateDiscovery.Market" />
+                                    <input type="hidden" asp-for="CandidateDiscovery.BrandHints" />
+                                    <input type="hidden" asp-for="CandidateDiscovery.AutomationMode" />
+                                    <input type="hidden" asp-for="CandidateDiscovery.MaxCandidates" />
+                                    @foreach (var dismissedCandidateKey in Model.CandidateDiscovery.DismissedCandidateKeys)
+                                    {
+                                        <input type="hidden" name="CandidateDiscovery.DismissedCandidateKeys" value="@dismissedCandidateKey" />
+                                    }
+                                    <button type="submit" class="btn btn-outline-secondary">Restore candidate</button>
+                                </form>
+                            </div>
+                        </article>
+                    }
+                    </div>
+                </details>
             }
         </section>
     }

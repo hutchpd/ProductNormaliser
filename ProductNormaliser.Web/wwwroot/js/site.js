@@ -238,8 +238,49 @@
 	document.querySelectorAll("[data-discovery-form]").forEach(function (form) {
 		var submitButton = form.querySelector("[data-discovery-submit]");
 		var feedbackNode = form.querySelector("[data-discovery-submit-status]");
+		var feedbackTitleNode = form.querySelector("[data-discovery-submit-title]");
+		var feedbackMessageNode = form.querySelector("[data-discovery-submit-message]");
+		var feedbackElapsedNode = form.querySelector("[data-discovery-submit-elapsed]");
+		var feedbackStageNodes = Array.from(form.querySelectorAll("[data-discovery-stage]"));
 
 		form.addEventListener("submit", function () {
+			var startedAt = Date.now();
+			var stageTimer = null;
+
+			function updateProgress() {
+				var elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+				var currentStage = elapsedSeconds < 5
+					? "search"
+					: elapsedSeconds < 15
+						? "probe"
+						: "llm";
+
+				feedbackStageNodes.forEach(function (node) {
+					var stage = node.getAttribute("data-discovery-stage");
+					node.setAttribute("data-state", stage === currentStage ? "active" : "pending");
+				});
+
+				if (feedbackElapsedNode) {
+					feedbackElapsedNode.textContent = "Elapsed: " + elapsedSeconds + "s. The page updates when this run completes.";
+				}
+
+				if (feedbackTitleNode) {
+					feedbackTitleNode.textContent = currentStage === "search"
+						? "Searching likely hosts"
+						: currentStage === "probe"
+							? "Probing representative pages"
+							: "Running local verification queue";
+				}
+
+				if (feedbackMessageNode) {
+					feedbackMessageNode.textContent = currentStage === "search"
+						? "Discovery is building and issuing the provider queries for this request."
+						: currentStage === "probe"
+							? "Representative category and product pages are being fetched and scored."
+							: "The local GGUF model validates candidates serially, so this stage can take longer without indicating failure.";
+				}
+			}
+
 			form.classList.add("is-submitting");
 			form.setAttribute("aria-busy", "true");
 
@@ -251,7 +292,13 @@
 			if (feedbackNode) {
 				feedbackNode.hidden = false;
 				feedbackNode.setAttribute("data-state", "loading");
-				feedbackNode.textContent = "Discovery started. Probing likely hosts and representative pages can take a couple of minutes.";
+				updateProgress();
+				stageTimer = window.setInterval(updateProgress, 1000);
+				window.addEventListener("beforeunload", function () {
+					if (stageTimer) {
+						window.clearInterval(stageTimer);
+					}
+				}, { once: true });
 			}
 		});
 	});

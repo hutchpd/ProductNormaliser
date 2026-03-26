@@ -146,6 +146,7 @@ public sealed class SourceCandidateDiscoveryService(
             });
         }
 
+        MergeDiagnostics(diagnostics, BuildProbeDiagnostics(candidates));
         MergeDiagnostics(diagnostics, BuildLlmDiagnostics(candidates));
         var llmStatus = GetLlmStatus();
 
@@ -167,6 +168,26 @@ public sealed class SourceCandidateDiscoveryService(
                 .Take(normalizedRequest.MaxCandidates)
                 .ToArray()
         };
+    }
+
+    private static IReadOnlyList<SourceCandidateDiscoveryDiagnostic> BuildProbeDiagnostics(IReadOnlyCollection<SourceCandidateResult> candidates)
+    {
+        var retriedCandidates = candidates.Count(candidate => candidate.Probe.ProbeAttemptCount > 1);
+        if (retriedCandidates == 0)
+        {
+            return [];
+        }
+
+        return
+        [
+            new SourceCandidateDiscoveryDiagnostic
+            {
+                Code = "probe_retried",
+                Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
+                Title = "Candidate probing retried",
+                Message = $"Transient probe slowdowns were retried with exponential backoff for {retriedCandidates} candidate(s) before final scoring."
+            }
+        ];
     }
 
     private static IReadOnlyList<SourceCandidateDiscoveryDiagnostic> BuildLlmDiagnostics(IReadOnlyCollection<SourceCandidateResult> candidates)
@@ -223,12 +244,18 @@ public sealed class SourceCandidateDiscoveryService(
                     break;
 
                 case "LLM timeout":
+                    var timeoutCandidates = candidates
+                        .Where(candidate => string.Equals(NormalizeNeutralLlmReason(candidate.Probe.LlmReason), group.Key, StringComparison.OrdinalIgnoreCase))
+                        .ToArray();
+                    var timeoutAverageMs = GetAverageDurationMs(timeoutCandidates.Select(candidate => candidate.Probe.LlmElapsedMs));
                     diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
                     {
                         Code = "llm_timeout",
                         Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
                         Title = "LLM validation timed out",
-                        Message = $"Representative product-page classification fell back to heuristics for {count} candidate(s) because the LLM timed out."
+                        Message = timeoutAverageMs is null
+                            ? $"Representative product-page classification fell back to heuristics for {count} candidate(s) because the LLM timed out."
+                            : $"Representative product-page classification fell back to heuristics for {count} candidate(s) because the LLM timed out after about {FormatDuration(timeoutAverageMs.Value)} per candidate."
                     });
                     break;
 
@@ -254,7 +281,40 @@ public sealed class SourceCandidateDiscoveryService(
             }
         }
 
+        var llmMeasuredCandidates = candidates
+            .Where(candidate => candidate.Probe.LlmElapsedMs is > 0)
+            .ToArray();
+        if (llmMeasuredCandidates.Length > 0)
+        {
+            var totalElapsedMs = llmMeasuredCandidates.Sum(candidate => candidate.Probe.LlmElapsedMs ?? 0);
+            var averageElapsedMs = (long)Math.Round(totalElapsedMs / (double)llmMeasuredCandidates.Length, MidpointRounding.AwayFromZero);
+            diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
+            {
+                Code = "llm_throughput",
+                Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
+                Title = "Local LLM verification throughput",
+                Message = $"Representative product-page validation processed {llmMeasuredCandidates.Length} candidate(s) in {FormatDuration(totalElapsedMs)} total, averaging {FormatDuration(averageElapsedMs)} per candidate. Local verification runs serially so the model can keep up."
+            });
+        }
+
         return diagnostics;
+    }
+
+    private static long? GetAverageDurationMs(IEnumerable<long?> durations)
+    {
+        var measured = durations
+            .Where(value => value is > 0)
+            .Select(value => value!.Value)
+            .ToArray();
+
+        return measured.Length == 0 ? null : (long)Math.Round(measured.Average(), MidpointRounding.AwayFromZero);
+    }
+
+    private static string FormatDuration(long durationMs)
+    {
+        return durationMs >= 1000
+            ? $"{durationMs / 1000d:0.#}s"
+            : $"{durationMs}ms";
     }
 
     private static string? NormalizeNeutralLlmReason(string? reason)

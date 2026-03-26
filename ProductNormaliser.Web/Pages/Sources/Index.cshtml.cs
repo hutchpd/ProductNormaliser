@@ -142,6 +142,28 @@ public sealed class IndexModel(
         return await RegisterAsync(Registration, acceptedFromCandidate: true, cancellationToken);
     }
 
+    public async Task<IActionResult> OnPostDismissCandidateAsync(CancellationToken cancellationToken)
+    {
+        await LoadAsync(cancellationToken);
+        await DiscoverCandidatesAsync(addValidationErrorWhenEmpty: false, cancellationToken);
+
+        AddDismissedCandidate(CandidateSelection.CandidateKey);
+        StatusMessage = $"Dismissed candidate '{CandidateSelection.DisplayName}'. It has been moved into this run's archive.";
+
+        return Page();
+    }
+
+    public async Task<IActionResult> OnPostRestoreCandidateAsync(CancellationToken cancellationToken)
+    {
+        await LoadAsync(cancellationToken);
+        await DiscoverCandidatesAsync(addValidationErrorWhenEmpty: false, cancellationToken);
+
+        RemoveDismissedCandidate(CandidateSelection.CandidateKey);
+        StatusMessage = $"Restored candidate '{CandidateSelection.DisplayName}' to the active queue.";
+
+        return Page();
+    }
+
     public async Task<IActionResult> OnPostToggleAsync(string sourceId, bool currentlyEnabled, string? category, string? search, bool? enabled, CancellationToken cancellationToken)
     {
         CategoryKey = category;
@@ -376,6 +398,45 @@ public sealed class IndexModel(
             && !string.IsNullOrWhiteSpace(CandidateDiscoveryResult.LlmStatusMessage);
     }
 
+    public IReadOnlyList<SourceCandidateDto> GetVisibleCandidateResults()
+    {
+        return CandidateDiscoveryResult?.Candidates
+            .Where(candidate => !IsDismissedCandidate(candidate.CandidateKey))
+            .ToArray() ?? [];
+    }
+
+    public IReadOnlyList<SourceCandidateDto> GetArchivedCandidateResults()
+    {
+        return CandidateDiscoveryResult?.Candidates
+            .Where(candidate => IsDismissedCandidate(candidate.CandidateKey))
+            .ToArray() ?? [];
+    }
+
+    public string GetCandidateProbeTimingSummary(SourceCandidateDto candidate)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        if (candidate.Probe.ProbeElapsedMs <= 0)
+        {
+            return candidate.Probe.ProbeAttemptCount > 1
+                ? $"Probe retried {candidate.Probe.ProbeAttemptCount} times."
+                : string.Empty;
+        }
+
+        return candidate.Probe.ProbeAttemptCount > 1
+            ? $"Probe took {FormatDuration(candidate.Probe.ProbeElapsedMs)} across {candidate.Probe.ProbeAttemptCount} attempt(s)."
+            : $"Probe took {FormatDuration(candidate.Probe.ProbeElapsedMs)}.";
+    }
+
+    public string GetCandidateLlmTimingSummary(SourceCandidateDto candidate)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        return candidate.Probe.LlmElapsedMs is > 0
+            ? $"Local LLM verification took {FormatDuration(candidate.Probe.LlmElapsedMs.Value)}."
+            : string.Empty;
+    }
+
     public IReadOnlyList<string> GetCandidatePrimaryReasons(SourceCandidateDto candidate)
     {
         ArgumentNullException.ThrowIfNull(candidate);
@@ -573,6 +634,7 @@ public sealed class IndexModel(
                 BrandHints = ParseDelimitedValues(CandidateDiscovery.BrandHints),
                 MaxCandidates = NormalizeMaxCandidates(CandidateDiscovery.MaxCandidates)
             }, cancellationToken);
+            ApplyDismissedCandidates();
         }
         catch (AdminApiValidationException exception)
         {
@@ -780,6 +842,7 @@ public sealed class IndexModel(
                 }
                 : candidate).ToArray()
         };
+            ApplyDismissedCandidates();
 
         await LoadAsync(cancellationToken);
 
@@ -942,6 +1005,36 @@ public sealed class IndexModel(
         };
     }
 
+    private void ApplyDismissedCandidates()
+    {
+        CandidateDiscovery.DismissedCandidateKeys = NormalizeValues(CandidateDiscovery.DismissedCandidateKeys);
+    }
+
+    private void AddDismissedCandidate(string? candidateKey)
+    {
+        CandidateDiscovery.DismissedCandidateKeys = NormalizeValues(
+            CandidateDiscovery.DismissedCandidateKeys.Concat([candidateKey ?? string.Empty]));
+    }
+
+    private void RemoveDismissedCandidate(string? candidateKey)
+    {
+        CandidateDiscovery.DismissedCandidateKeys = NormalizeValues(
+            CandidateDiscovery.DismissedCandidateKeys.Where(value => !string.Equals(value, candidateKey, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private bool IsDismissedCandidate(string? candidateKey)
+    {
+        return !string.IsNullOrWhiteSpace(candidateKey)
+            && CandidateDiscovery.DismissedCandidateKeys.Contains(candidateKey, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string FormatDuration(long durationMs)
+    {
+        return durationMs >= 1000
+            ? $"{durationMs / 1000d:0.#}s"
+            : $"{durationMs}ms";
+    }
+
     public sealed class RegisterSourceInput
     {
         [Required]
@@ -994,6 +1087,8 @@ public sealed class IndexModel(
         [Range(1, 25)]
         [Display(Name = "Max candidates")]
         public int MaxCandidates { get; set; } = 10;
+
+        public List<string> DismissedCandidateKeys { get; set; } = [];
     }
 
     public sealed class UseCandidateInput

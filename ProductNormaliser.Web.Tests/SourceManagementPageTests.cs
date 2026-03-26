@@ -275,6 +275,68 @@ public sealed class SourceManagementPageTests
     }
 
     [Test]
+    public async Task SourcesIndex_OnPostDismissCandidateAsync_ArchivesDismissedCandidate()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            SourceCandidateDiscoveryResponse = new SourceCandidateDiscoveryResponseDto
+            {
+                RequestedCategoryKeys = ["tv"],
+                GeneratedUtc = DateTime.UtcNow,
+                Candidates =
+                [
+                    new SourceCandidateDto
+                    {
+                        CandidateKey = "alpha",
+                        DisplayName = "Alpha Audio",
+                        BaseUrl = "https://alpha.example/",
+                        Host = "alpha.example",
+                        CandidateType = "retailer",
+                        RuntimeExtractionStatus = "manual_review",
+                        RuntimeExtractionMessage = "Manual review only.",
+                        MatchedCategoryKeys = ["tv"]
+                    },
+                    new SourceCandidateDto
+                    {
+                        CandidateKey = "beta",
+                        DisplayName = "Beta Audio",
+                        BaseUrl = "https://beta.example/",
+                        Host = "beta.example",
+                        CandidateType = "retailer",
+                        RuntimeExtractionStatus = "manual_review",
+                        RuntimeExtractionMessage = "Manual review only.",
+                        MatchedCategoryKeys = ["tv"]
+                    }
+                ]
+            }
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IndexModel>.Instance)
+        {
+            CandidateDiscovery = new ProductNormaliser.Web.Pages.Sources.IndexModel.DiscoverSourceCandidatesInput
+            {
+                CategoryKeys = ["tv"]
+            },
+            CandidateSelection = new ProductNormaliser.Web.Pages.Sources.IndexModel.UseCandidateInput
+            {
+                CandidateKey = "alpha",
+                DisplayName = "Alpha Audio"
+            }
+        };
+
+        var result = await model.OnPostDismissCandidateAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<PageResult>());
+            Assert.That(model.GetVisibleCandidateResults().Select(candidate => candidate.CandidateKey), Is.EqualTo(new[] { "beta" }));
+            Assert.That(model.GetArchivedCandidateResults().Select(candidate => candidate.CandidateKey), Is.EqualTo(new[] { "alpha" }));
+            Assert.That(model.StatusMessage, Does.Contain("Dismissed candidate 'Alpha Audio'"));
+        });
+    }
+
+    [Test]
     public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_GuardedAutomationAutoAcceptsSeedsAndStillAllowsDisable()
     {
         var client = new FakeAdminApiClient

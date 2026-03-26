@@ -387,6 +387,55 @@ public sealed class SourceCandidateDiscoveryServiceTests
     }
 
     [Test]
+    public async Task DiscoverAsync_AddsProbeRetryAndLlmThroughputDiagnostics_WhenTimingMetadataIsAvailable()
+    {
+        var service = CreateService(
+            new FakeCrawlSourceStore(),
+            new FakeCategoryMetadataService(CreateCategory("tv")),
+            new FakeSourceCandidateSearchProvider(
+                new SourceCandidateSearchResult
+                {
+                    CandidateKey = "timed_shop",
+                    DisplayName = "Timed Shop",
+                    BaseUrl = "https://timed.example/",
+                    Host = "timed.example",
+                    CandidateType = "retailer",
+                    MatchedCategoryKeys = ["tv"],
+                    SearchReasons = ["Matched retailer search results."]
+                }),
+            new FakeSourceCandidateProbeService(
+                new Dictionary<string, SourceCandidateProbeResult>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["timed.example"] = new SourceCandidateProbeResult
+                    {
+                        HomePageReachable = true,
+                        RepresentativeProductPageReachable = true,
+                        CategoryRelevanceScore = 60m,
+                        CatalogLikelihoodScore = 55m,
+                        CrawlabilityScore = 70m,
+                        ExtractabilityScore = 65m,
+                        ProbeAttemptCount = 2,
+                        ProbeElapsedMs = 1800,
+                        LlmElapsedMs = 1200,
+                        LlmReason = "LLM low confidence"
+                    }
+                }),
+            new PermissiveCrawlGovernanceService());
+
+        var result = await service.DiscoverAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"]
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Does.Contain("probe_retried"));
+            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Does.Contain("llm_throughput"));
+            Assert.That(result.Diagnostics.Single(diagnostic => diagnostic.Code == "llm_throughput").Message, Does.Contain("1.2s per candidate"));
+        });
+    }
+
+    [Test]
     public async Task DiscoverAsync_AddsLlmUnconfiguredDiagnostic_WhenProbeReportsMissingModel()
     {
         var service = CreateService(
