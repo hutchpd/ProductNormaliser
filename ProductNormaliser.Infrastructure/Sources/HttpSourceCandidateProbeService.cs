@@ -5,6 +5,7 @@ using ProductNormaliser.Application.AI;
 using ProductNormaliser.Application.Sources;
 using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
+using ProductNormaliser.Infrastructure.AI;
 using ProductNormaliser.Infrastructure.Crawling;
 
 namespace ProductNormaliser.Infrastructure.Sources;
@@ -14,9 +15,11 @@ public sealed partial class HttpSourceCandidateProbeService(
     IStructuredDataExtractor structuredDataExtractor,
     IPageClassificationService pageClassifier,
     IOptions<SourceCandidateDiscoveryOptions> options,
+    IOptions<LlmOptions> llmOptions,
     ILogger<HttpSourceCandidateProbeService> logger) : ISourceCandidateProbeService
 {
     private readonly SourceCandidateDiscoveryOptions options = options.Value;
+    private readonly LlmOptions llmOptions = llmOptions.Value;
 
     public async Task<SourceCandidateProbeResult> ProbeAsync(SourceCandidateSearchResult candidate, IReadOnlyCollection<string> categoryKeys, CancellationToken cancellationToken = default)
     {
@@ -50,8 +53,12 @@ public sealed partial class HttpSourceCandidateProbeService(
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault() ?? "product";
         var llmResult = await TryClassifyRepresentativeProductPageAsync(representativeProductPageHtml, requestedCategory, timeoutCts.Token);
-        var llmAcceptedRepresentativeProductPage = llmResult is not null && llmResult.IsProductPage && llmResult.HasSpecifications;
-        var llmRejectedRepresentativeProductPage = llmResult is not null && !llmAcceptedRepresentativeProductPage;
+        var llmAcceptedRepresentativeProductPage = llmResult is not null
+            && llmResult.IsProductPage
+            && llmResult.HasSpecifications
+            && llmResult.Confidence >= llmOptions.ConfidenceThreshold;
+        var llmRejectedRepresentativeProductPage = llmResult is not null
+            && !llmResult.IsProductPage;
         var llmDisagreedWithHeuristics = llmResult is not null && llmAcceptedRepresentativeProductPage != heuristicProductEvidenceDetected;
         var catalogLikelihoodScore = ScoreCatalogLikelihood(homePageHtml, representativeCategoryPageHtml, representativeProductPageUrl);
         var categoryRelevanceScore = ScoreCategoryRelevance(categoryKeys, homePageHtml, representativeCategoryPageHtml, categoryPageHints);
@@ -360,7 +367,7 @@ public sealed partial class HttpSourceCandidateProbeService(
 
     private async Task<PageClassificationResult?> TryClassifyRepresentativeProductPageAsync(string? representativeProductPageHtml, string category, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(representativeProductPageHtml))
+        if (!llmOptions.Enabled || string.IsNullOrWhiteSpace(representativeProductPageHtml))
         {
             return null;
         }

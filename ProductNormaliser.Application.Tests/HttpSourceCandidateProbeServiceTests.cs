@@ -4,6 +4,7 @@ using ProductNormaliser.Application.AI;
 using ProductNormaliser.Application.Sources;
 using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
+using ProductNormaliser.Infrastructure.AI;
 using ProductNormaliser.Infrastructure.Crawling;
 using ProductNormaliser.Infrastructure.Sources;
 using ProductNormaliser.Infrastructure.StructuredData;
@@ -92,7 +93,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
                 var service = new HttpSourceCandidateProbeService(fetcher, new SchemaOrgJsonLdExtractor(), new NoOpPageClassificationService(), Options.Create(new SourceCandidateDiscoveryOptions
         {
             ProbeTimeoutSeconds = 5
-            }), NullLogger<HttpSourceCandidateProbeService>.Instance);
+            }), Options.Create(new LlmOptions()), NullLogger<HttpSourceCandidateProbeService>.Instance);
 
         var result = await service.ProbeAsync(new SourceCandidateSearchResult
         {
@@ -164,7 +165,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
         var service = new HttpSourceCandidateProbeService(fetcher, new SchemaOrgJsonLdExtractor(), new NoOpPageClassificationService(), Options.Create(new SourceCandidateDiscoveryOptions
         {
             ProbeTimeoutSeconds = 5
-        }), NullLogger<HttpSourceCandidateProbeService>.Instance);
+        }), Options.Create(new LlmOptions()), NullLogger<HttpSourceCandidateProbeService>.Instance);
 
         var result = await service.ProbeAsync(new SourceCandidateSearchResult
         {
@@ -229,6 +230,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
             new SchemaOrgJsonLdExtractor(),
             new FakeRejectingPageClassificationService(),
             Options.Create(new SourceCandidateDiscoveryOptions { ProbeTimeoutSeconds = 5 }),
+            Options.Create(new LlmOptions()),
             NullLogger<HttpSourceCandidateProbeService>.Instance);
 
         var result = await service.ProbeAsync(new SourceCandidateSearchResult
@@ -246,6 +248,108 @@ public sealed class HttpSourceCandidateProbeServiceTests
             Assert.That(result.LlmRejectedRepresentativeProductPage, Is.True);
             Assert.That(result.LlmDisagreedWithHeuristics, Is.True);
             Assert.That(result.ExtractabilityScore, Is.EqualTo(5m));
+        });
+    }
+
+    [Test]
+    public async Task ProbeAsync_DoesNotCallLlm_WhenLlmIsDisabled()
+    {
+        var fetcher = CreateRepresentativeProductFetcher();
+        var classifier = new CountingPageClassificationService();
+        var service = new HttpSourceCandidateProbeService(
+            fetcher,
+            new SchemaOrgJsonLdExtractor(),
+            classifier,
+            Options.Create(new SourceCandidateDiscoveryOptions { ProbeTimeoutSeconds = 5 }),
+            Options.Create(new LlmOptions { Enabled = false }),
+            NullLogger<HttpSourceCandidateProbeService>.Instance);
+
+        var result = await service.ProbeAsync(new SourceCandidateSearchResult
+        {
+            CandidateKey = "candidate_example",
+            DisplayName = "Candidate Example",
+            BaseUrl = "https://candidate.example/",
+            Host = "candidate.example",
+            CandidateType = "retailer"
+        }, ["tv"]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(classifier.CallCount, Is.EqualTo(0));
+            Assert.That(result.LlmAcceptedRepresentativeProductPage, Is.False);
+            Assert.That(result.LlmRejectedRepresentativeProductPage, Is.False);
+            Assert.That(result.ExtractabilityScore, Is.EqualTo(100m));
+        });
+    }
+
+    [Test]
+    public async Task ProbeAsync_Continues_WhenLlmInferenceFails()
+    {
+        var fetcher = CreateRepresentativeProductFetcher();
+        var service = new HttpSourceCandidateProbeService(
+            fetcher,
+            new SchemaOrgJsonLdExtractor(),
+            new ThrowingPageClassificationService(),
+            Options.Create(new SourceCandidateDiscoveryOptions { ProbeTimeoutSeconds = 5 }),
+            Options.Create(new LlmOptions { Enabled = true }),
+            NullLogger<HttpSourceCandidateProbeService>.Instance);
+
+        var result = await service.ProbeAsync(new SourceCandidateSearchResult
+        {
+            CandidateKey = "candidate_example",
+            DisplayName = "Candidate Example",
+            BaseUrl = "https://candidate.example/",
+            Host = "candidate.example",
+            CandidateType = "retailer"
+        }, ["tv"]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.RepresentativeProductPageReachable, Is.True);
+            Assert.That(result.StructuredProductEvidenceDetected, Is.True);
+            Assert.That(result.TechnicalAttributeEvidenceDetected, Is.True);
+            Assert.That(result.LlmAcceptedRepresentativeProductPage, Is.False);
+            Assert.That(result.LlmRejectedRepresentativeProductPage, Is.False);
+            Assert.That(result.ExtractabilityScore, Is.EqualTo(100m));
+        });
+    }
+
+    private static FakeHttpFetcher CreateRepresentativeProductFetcher()
+    {
+        return new FakeHttpFetcher(new Dictionary<string, FetchResult>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["https://candidate.example/"] = new FetchResult
+            {
+                Url = "https://candidate.example/",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "<html><body><a href=\"/tv/\">TV</a><a href=\"/product/oled-123\">OLED</a></body></html>",
+                FetchedUtc = DateTime.UtcNow
+            },
+            ["https://candidate.example/robots.txt"] = new FetchResult
+            {
+                Url = "https://candidate.example/robots.txt",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "User-agent: *",
+                FetchedUtc = DateTime.UtcNow
+            },
+            ["https://candidate.example/tv/"] = new FetchResult
+            {
+                Url = "https://candidate.example/tv/",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "<html><body><a href=\"/product/oled-123\">OLED TV</a></body></html>",
+                FetchedUtc = DateTime.UtcNow
+            },
+            ["https://candidate.example/product/oled-123"] = new FetchResult
+            {
+                Url = "https://candidate.example/product/oled-123",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "<html><head><script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"Product\",\"name\":\"OLED TV\"}</script></head><body><section>Specifications</section><table><tr><th>Resolution</th><td>3840x2160</td></tr></table></body></html>",
+                FetchedUtc = DateTime.UtcNow
+            }
         });
     }
 
@@ -276,6 +380,30 @@ public sealed class HttpSourceCandidateProbeServiceTests
                 HasSpecifications = false,
                 Confidence = 0.15
             });
+        }
+    }
+
+    private sealed class CountingPageClassificationService : IPageClassificationService
+    {
+        public int CallCount { get; private set; }
+
+        public Task<PageClassificationResult> ClassifyAsync(string content, string category, CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            return Task.FromResult(new PageClassificationResult
+            {
+                IsProductPage = true,
+                HasSpecifications = true,
+                Confidence = 0.8d
+            });
+        }
+    }
+
+    private sealed class ThrowingPageClassificationService : IPageClassificationService
+    {
+        public Task<PageClassificationResult> ClassifyAsync(string content, string category, CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("Synthetic inference failure.");
         }
     }
 }

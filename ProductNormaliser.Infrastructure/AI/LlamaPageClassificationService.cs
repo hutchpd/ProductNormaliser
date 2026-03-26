@@ -2,6 +2,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using LLama;
 using LLama.Common;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using ProductNormaliser.Application.AI;
 
@@ -9,10 +11,10 @@ namespace ProductNormaliser.Infrastructure.AI;
 
 public sealed class LlamaPageClassificationService : IPageClassificationService, IDisposable
 {
-    private const int MaxPromptContentLength = 4000;
     private static readonly Regex YesPattern = new("\\bYES\\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private readonly LlmOptions options;
+    private readonly ILogger<LlamaPageClassificationService> logger;
     private readonly Func<string, CancellationToken, Task<string>> inferenceRunner;
     private readonly SemaphoreSlim initializationLock = new(1, 1);
     private readonly SemaphoreSlim inferenceLock = new(1, 1);
@@ -20,27 +22,30 @@ public sealed class LlamaPageClassificationService : IPageClassificationService,
     private LLamaWeights? model;
     private LLamaContext? context;
     private InteractiveExecutor? executor;
+    private bool initializationUnavailable;
     private bool disposed;
 
-    public LlamaPageClassificationService(IOptions<LlmOptions> options)
-        : this(options.Value)
+    public LlamaPageClassificationService(IOptions<LlmOptions> options, ILogger<LlamaPageClassificationService> logger)
+        : this(options.Value, logger)
     {
     }
 
-    public LlamaPageClassificationService(LlmOptions options)
+    public LlamaPageClassificationService(LlmOptions options, ILogger<LlamaPageClassificationService>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         this.options = options;
+        this.logger = logger ?? NullLogger<LlamaPageClassificationService>.Instance;
         inferenceRunner = RunInferenceAsync;
     }
 
-    public LlamaPageClassificationService(LlmOptions options, Func<string, CancellationToken, Task<string>> inferenceRunner)
+    public LlamaPageClassificationService(LlmOptions options, Func<string, CancellationToken, Task<string>> inferenceRunner, ILogger<LlamaPageClassificationService>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(inferenceRunner);
 
         this.options = options;
+        this.logger = logger ?? NullLogger<LlamaPageClassificationService>.Instance;
         this.inferenceRunner = inferenceRunner;
     }
 
@@ -48,24 +53,43 @@ public sealed class LlamaPageClassificationService : IPageClassificationService,
     {
         ThrowIfDisposed();
 
-        var normalizedCategory = NormalizeCategory(category);
-        var prompt = BuildPrompt(content, normalizedCategory);
-        var output = await inferenceRunner(prompt, cancellationToken);
-        var isYes = YesPattern.IsMatch(output ?? string.Empty);
-
-        return new PageClassificationResult
+        if (!options.Enabled)
         {
-            IsProductPage = isYes,
-            HasSpecifications = isYes,
-            DetectedCategory = isYes ? normalizedCategory : null,
-            Confidence = isYes ? 0.8d : 0.2d
-        };
+            return CreateNeutralResult();
+        }
+
+        try
+        {
+            var normalizedCategory = NormalizeCategory(category);
+            var prompt = BuildPrompt(content, normalizedCategory, options.MaxContentLength);
+            var output = await inferenceRunner(prompt, cancellationToken);
+            var isYes = YesPattern.IsMatch(output ?? string.Empty);
+
+            return new PageClassificationResult
+            {
+                IsProductPage = isYes,
+                HasSpecifications = isYes,
+                DetectedCategory = isYes ? normalizedCategory : null,
+                Confidence = isYes ? 0.8d : 0.2d
+            };
+        }
+        catch (FileNotFoundException exception)
+        {
+            logger.LogWarning(exception, "The configured GGUF model could not be found. Continuing without LLM page classification.");
+            initializationUnavailable = true;
+            return CreateNeutralResult();
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "LLM page classification failed. Continuing without LLM page classification for this request.");
+            return CreateNeutralResult();
+        }
     }
 
-    internal static string BuildPrompt(string content, string category)
+    internal static string BuildPrompt(string content, string category, int maxContentLength)
     {
         var normalizedCategory = NormalizeCategory(category);
-        var truncatedContent = TruncateContent(content);
+        var truncatedContent = TruncateContent(content, maxContentLength);
 
         return $"""
 You are validating a webpage.
@@ -80,21 +104,26 @@ Content:
 """;
     }
 
-    internal static string TruncateContent(string? content)
+    internal static string TruncateContent(string? content, int maxContentLength)
     {
         if (string.IsNullOrEmpty(content))
         {
             return string.Empty;
         }
 
-        return content.Length <= MaxPromptContentLength
+        var boundedLength = Math.Max(1, maxContentLength);
+
+        return content.Length <= boundedLength
             ? content
-            : content[..MaxPromptContentLength];
+            : content[..boundedLength];
     }
 
     private async Task<string> RunInferenceAsync(string prompt, CancellationToken cancellationToken)
     {
-        await EnsureExecutorAsync(cancellationToken);
+        if (!await EnsureExecutorAsync(cancellationToken))
+        {
+            throw new FileNotFoundException("The configured GGUF model could not be loaded.", ResolveModelPath(options.ModelPath));
+        }
 
         await inferenceLock.WaitAsync(cancellationToken);
         try
@@ -118,11 +147,16 @@ Content:
         }
     }
 
-    private async Task EnsureExecutorAsync(CancellationToken cancellationToken)
+    private async Task<bool> EnsureExecutorAsync(CancellationToken cancellationToken)
     {
         if (executor is not null)
         {
-            return;
+            return true;
+        }
+
+        if (initializationUnavailable)
+        {
+            return false;
         }
 
         await initializationLock.WaitAsync(cancellationToken);
@@ -130,13 +164,20 @@ Content:
         {
             if (executor is not null)
             {
-                return;
+                return true;
+            }
+
+            if (initializationUnavailable)
+            {
+                return false;
             }
 
             var modelPath = ResolveModelPath(options.ModelPath);
             if (!File.Exists(modelPath))
             {
-                throw new FileNotFoundException($"The configured GGUF model could not be found at '{modelPath}'.", modelPath);
+                initializationUnavailable = true;
+                logger.LogWarning("The configured GGUF model could not be found at {ModelPath}. Continuing without LLM page classification.", modelPath);
+                return false;
             }
 
             var parameters = new ModelParams(modelPath)
@@ -147,6 +188,13 @@ Content:
             model = LLamaWeights.LoadFromFile(parameters);
             context = model.CreateContext(parameters);
             executor = new InteractiveExecutor(context);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            initializationUnavailable = true;
+            logger.LogWarning(exception, "Failed to initialize the GGUF model at {ModelPath}. Continuing without LLM page classification.", options.ModelPath);
+            return false;
         }
         finally
         {
@@ -170,6 +218,16 @@ Content:
         return Path.IsPathRooted(path)
             ? path
             : Path.GetFullPath(path, AppContext.BaseDirectory);
+    }
+
+    private static PageClassificationResult CreateNeutralResult()
+    {
+        return new PageClassificationResult
+        {
+            IsProductPage = false,
+            HasSpecifications = false,
+            Confidence = 0d
+        };
     }
 
     public void Dispose()
