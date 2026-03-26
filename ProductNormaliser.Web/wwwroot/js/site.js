@@ -161,4 +161,77 @@
 
 		syncUi();
 	});
+
+	document.querySelectorAll("[data-schema-toggle-form]").forEach(function (form) {
+		var toggleUrl = form.getAttribute("data-schema-toggle-url");
+		var categoryKeyInput = form.querySelector("input[name='CategorySchema.CategoryKey']");
+		var feedbackNode = form.querySelector("[data-schema-toggle-feedback]");
+
+		function setFeedback(message, state) {
+			if (!feedbackNode) {
+				return;
+			}
+
+			feedbackNode.textContent = message || "";
+			if (state) {
+				feedbackNode.setAttribute("data-state", state);
+			} else {
+				feedbackNode.removeAttribute("data-state");
+			}
+		}
+
+		function updateRequiredLabel(checkbox) {
+			var label = checkbox.closest("label")?.querySelector("[data-required-label]");
+			if (label) {
+				label.textContent = checkbox.checked ? "required" : "optional";
+			}
+		}
+
+		form.querySelectorAll("[data-schema-required-toggle]").forEach(function (checkbox) {
+			checkbox.addEventListener("change", async function () {
+				var previousChecked = !checkbox.checked;
+				var attributeKey = checkbox.getAttribute("data-attribute-key") || "";
+
+				updateRequiredLabel(checkbox);
+				setFeedback("Saving schema update...", "saving");
+				checkbox.disabled = true;
+
+				try {
+					var formData = new FormData(form);
+					formData.set("categoryKey", categoryKeyInput?.value || "");
+					formData.set("attributeKey", attributeKey);
+					formData.set("isRequired", checkbox.checked ? "true" : "false");
+
+					var response = await fetch(toggleUrl || window.location.pathname + "?handler=ToggleCategorySchemaRequired", {
+						method: "POST",
+						body: formData,
+						headers: {
+							"X-Requested-With": "XMLHttpRequest"
+						}
+					});
+
+					var payload = null;
+					try {
+						payload = await response.json();
+					} catch (error) {
+						payload = null;
+					}
+
+					if (!response.ok) {
+						throw new Error(payload?.message || "The schema update could not be saved.");
+					}
+
+					setFeedback(payload?.message || "Schema updated.", "success");
+				} catch (error) {
+					checkbox.checked = previousChecked;
+					updateRequiredLabel(checkbox);
+					setFeedback(error instanceof Error ? error.message : "The schema update could not be saved.", "error");
+				} finally {
+					checkbox.disabled = false;
+				}
+			});
+
+			updateRequiredLabel(checkbox);
+		});
+	});
 });

@@ -41,6 +41,7 @@ public sealed class OperatorLandingPageTests
             Assert.That(html, Does.Contain("Quality Summary"));
             Assert.That(html, Does.Contain("Save attribute lens"));
             Assert.That(html, Does.Contain("Track another field during discovery"));
+            Assert.That(html, Does.Contain("Changes to required fields save directly to the managed category schema"));
             Assert.That(html, Does.Contain("Source Health Summary"));
             Assert.That(html, Does.Contain("Queue depth"));
             Assert.That(html, Does.Contain("Retry backlog"));
@@ -123,6 +124,23 @@ public sealed class OperatorLandingPageTests
             Assert.That(fakeAdminApiClient.LastUpdatedCategorySchemaRequest, Is.Not.Null);
             Assert.That(fakeAdminApiClient.LastUpdatedCategorySchemaRequest!.Attributes.Select(attribute => attribute.Key), Does.Contain("display_port_count"));
             Assert.That(fakeAdminApiClient.LastUpdatedCategorySchemaRequest.Attributes.Single(attribute => attribute.Key == "screen_size_inch").IsRequired, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task OperatorLanding_OnPostToggleCategorySchemaRequiredAsync_UpdatesManagedSchemaBehindTheScenes()
+    {
+        var fakeAdminApiClient = CreateLandingClient();
+        var model = new IndexModel(fakeAdminApiClient, NullLogger<IndexModel>.Instance);
+
+        var result = await model.OnPostToggleCategorySchemaRequiredAsync("monitor", "panel_type", isRequired: false, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<JsonResult>());
+            Assert.That(fakeAdminApiClient.LastUpdatedCategorySchemaCategoryKey, Is.EqualTo("monitor"));
+            Assert.That(fakeAdminApiClient.LastUpdatedCategorySchemaRequest, Is.Not.Null);
+            Assert.That(fakeAdminApiClient.LastUpdatedCategorySchemaRequest!.Attributes.Single(attribute => attribute.Key == "panel_type").IsRequired, Is.False);
         });
     }
 

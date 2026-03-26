@@ -44,6 +44,16 @@ public sealed class AdminApiClientTests
                     RequestsPerMinute = 24,
                     RespectRobotsTxt = true
                 },
+                Health = new SourceHealthSummaryDto
+                {
+                    Status = "Healthy",
+                    Automation = new SourceAutomationPostureDto
+                    {
+                        Status = "advisory",
+                        EffectiveMode = "operator_assisted",
+                        RecommendedAction = "none"
+                    }
+                },
                 CreatedUtc = new DateTime(2026, 03, 20, 10, 00, 00, DateTimeKind.Utc),
                 UpdatedUtc = new DateTime(2026, 03, 20, 10, 10, 00, DateTimeKind.Utc)
             }

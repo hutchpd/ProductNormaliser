@@ -1,0 +1,109 @@
+@page
+@model ProductNormaliser.Web.Pages.HelpModel
+@{
+    ViewData["Title"] = "Help";
+}
+
+<section class="dashboard-shell help-shell">
+    <partial name="_PageHero" model="Model.Hero" />
+
+    <section class="panel panel-muted">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Browse Topics</p>
+                <h2>Choose the question you are trying to answer</h2>
+                <p class="subtle-copy">Start with a journey if you are doing a task end to end, or jump straight to a topic if you already know where the problem sits.</p>
+            </div>
+        </div>
+
+        <div class="analytics-card-grid help-category-grid">
+            @foreach (var helpSection in Model.Sections)
+            {
+                <a href="#@helpSection.Id" class="card-link help-category-card">
+                    <div>
+                        <p class="eyebrow">@helpSection.AudienceHint</p>
+                        <strong>@helpSection.Title</strong>
+                    </div>
+                    <p class="subtle-copy">@helpSection.Summary</p>
+                    <div class="chip-row help-category-meta">
+                        <span class="chip">@helpSection.Journeys.Count journeys</span>
+                        <span class="chip">@helpSection.Questions.Count questions</span>
+                    </div>
+                </a>
+            }
+        </div>
+    </section>
+
+    <div class="help-content-layout">
+        <aside class="panel panel-muted product-jump-nav-panel help-jump-nav-panel">
+            <div class="panel-heading compact-panel-heading">
+                <div>
+                    <p class="eyebrow">Jump To</p>
+                    <h2>Help categories</h2>
+                </div>
+            </div>
+
+            <nav class="product-jump-nav help-jump-nav" aria-label="Help topics">
+                @foreach (var helpSection in Model.Sections)
+                {
+                    <a href="#@helpSection.Id">@helpSection.Title</a>
+                }
+            </nav>
+        </aside>
+
+        <div class="stacked-panels help-section-stack">
+            @foreach (var helpSection in Model.Sections)
+            {
+                <section class="panel help-section" id="@helpSection.Id">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">@helpSection.AudienceHint</p>
+                            <h2>@helpSection.Title</h2>
+                            <p class="subtle-copy">@helpSection.Summary</p>
+                        </div>
+                    </div>
+
+                    <div class="actions-bar help-link-row">
+                        @foreach (var link in helpSection.Links)
+                        {
+                            <a asp-page="@link.Page" class="btn btn-outline-dark btn-sm">@link.Label</a>
+                        }
+                    </div>
+
+                    <div class="analytics-card-grid help-journey-grid">
+                        @foreach (var journey in helpSection.Journeys)
+                        {
+                            <article class="analytics-card help-journey-card">
+                                <div class="analytics-card-header">
+                                    <div>
+                                        <p class="eyebrow">Journey</p>
+                                        <strong>@journey.Title</strong>
+                                    </div>
+                                </div>
+
+                                <p class="help-journey-outcome">@journey.Outcome</p>
+
+                                <ol class="help-step-list">
+                                    @for (var index = 0; index < journey.Steps.Count; index++)
+                                    {
+                                        <li>@journey.Steps[index]</li>
+                                    }
+                                </ol>
+                            </article>
+                        }
+                    </div>
+
+                    <div class="help-faq-list">
+                        @foreach (var question in helpSection.Questions)
+                        {
+                            <details class="help-question">
+                                <summary>@question.Question</summary>
+                                <p>@question.Answer</p>
+                            </details>
+                        }
+                    </div>
+                </section>
+            }
+        </div>
+    </div>
+</section>

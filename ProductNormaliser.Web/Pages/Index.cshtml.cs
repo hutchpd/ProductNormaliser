@@ -430,19 +430,7 @@ public sealed class IndexModel(
         {
             var updatedSchema = await adminApiClient.UpdateCategorySchemaAsync(
                 CategorySchema.CategoryKey,
-                new UpdateCategorySchemaRequest
-                {
-                    Attributes = CategorySchema.Attributes.Select(attribute => new CategorySchemaAttributeDto
-                    {
-                        Key = attribute.Key,
-                        DisplayName = attribute.DisplayName,
-                        ValueType = attribute.ValueType,
-                        Unit = attribute.Unit,
-                        IsRequired = attribute.IsRequired,
-                        ConflictSensitivity = attribute.ConflictSensitivity,
-                        Description = attribute.Description
-                    }).ToArray()
-                },
+                BuildUpdateCategorySchemaRequest(CategorySchema.Attributes),
                 cancellationToken);
 
             StatusMessage = $"Updated the quality summary attribute profile for {updatedSchema.DisplayName}.";
@@ -466,6 +454,94 @@ public sealed class IndexModel(
 
         await LoadDashboardAsync(cancellationToken);
         return Page();
+    }
+
+    public async Task<IActionResult> OnPostToggleCategorySchemaRequiredAsync(string categoryKey, string attributeKey, bool isRequired, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(categoryKey))
+        {
+            return new JsonResult(new { message = "Select a category before updating its schema." })
+            {
+                StatusCode = StatusCodes.Status400BadRequest
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(attributeKey))
+        {
+            return new JsonResult(new { message = "Select an attribute before updating its required status." })
+            {
+                StatusCode = StatusCodes.Status400BadRequest
+            };
+        }
+
+        try
+        {
+            var categoryDetail = await adminApiClient.GetCategoryDetailAsync(categoryKey, cancellationToken);
+            if (categoryDetail is null)
+            {
+                return new JsonResult(new { message = "The selected category schema could not be found." })
+                {
+                    StatusCode = StatusCodes.Status404NotFound
+                };
+            }
+
+            var targetAttribute = categoryDetail.Schema.Attributes.FirstOrDefault(attribute => string.Equals(attribute.Key, attributeKey, StringComparison.OrdinalIgnoreCase));
+            if (targetAttribute is null)
+            {
+                return new JsonResult(new { message = $"The attribute '{attributeKey}' is not part of the selected category schema." })
+                {
+                    StatusCode = StatusCodes.Status404NotFound
+                };
+            }
+
+            var updatedSchema = await adminApiClient.UpdateCategorySchemaAsync(
+                categoryKey,
+                new UpdateCategorySchemaRequest
+                {
+                    Attributes = categoryDetail.Schema.Attributes
+                        .Select(attribute => new CategorySchemaAttributeDto
+                        {
+                            Key = attribute.Key,
+                            DisplayName = attribute.DisplayName,
+                            ValueType = attribute.ValueType,
+                            Unit = attribute.Unit,
+                            IsRequired = string.Equals(attribute.Key, attributeKey, StringComparison.OrdinalIgnoreCase)
+                                ? isRequired
+                                : attribute.IsRequired,
+                            ConflictSensitivity = attribute.ConflictSensitivity,
+                            Description = attribute.Description
+                        })
+                        .ToArray()
+                },
+                cancellationToken);
+
+            return new JsonResult(new
+            {
+                message = $"Saved {targetAttribute.DisplayName} as {(isRequired ? "required" : "optional")} for {updatedSchema.DisplayName}.",
+                label = isRequired ? "required" : "optional"
+            });
+        }
+        catch (AdminApiValidationException exception)
+        {
+            var message = exception.Errors
+                .SelectMany(entry => entry.Value)
+                .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))
+                ?? "The schema update was rejected by the platform.";
+
+            return new JsonResult(new { message })
+            {
+                StatusCode = StatusCodes.Status400BadRequest
+            };
+        }
+        catch (AdminApiException exception)
+        {
+            logger.LogWarning(exception, "Failed to toggle required status for category schema attribute {AttributeKey} in category {CategoryKey}.", attributeKey, categoryKey);
+
+            return new JsonResult(new { message = exception.Message })
+            {
+                StatusCode = StatusCodes.Status502BadGateway
+            };
+        }
     }
 
     public bool HasDiscoveryScaffold(SourceDto source)
@@ -628,6 +704,23 @@ public sealed class IndexModel(
                 ModelState.AddModelError($"{nameof(CategorySchema)}.{nameof(CategorySchema.Attributes)}[{index}].{nameof(ManageCategorySchemaAttributeInput.Key)}", $"Attribute key '{attribute.Key}' is duplicated.");
             }
         }
+    }
+
+    private static UpdateCategorySchemaRequest BuildUpdateCategorySchemaRequest(IEnumerable<ManageCategorySchemaAttributeInput> attributes)
+    {
+        return new UpdateCategorySchemaRequest
+        {
+            Attributes = attributes.Select(attribute => new CategorySchemaAttributeDto
+            {
+                Key = attribute.Key,
+                DisplayName = attribute.DisplayName,
+                ValueType = attribute.ValueType,
+                Unit = attribute.Unit,
+                IsRequired = attribute.IsRequired,
+                ConflictSensitivity = attribute.ConflictSensitivity,
+                Description = attribute.Description
+            }).ToArray()
+        };
     }
 
     private static bool HasMeaningfulNewAttribute(NewCategorySchemaAttributeInput attribute)
