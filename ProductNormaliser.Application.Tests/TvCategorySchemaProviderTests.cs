@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using ProductNormaliser.Core.Models;
+using ProductNormaliser.Core.Normalisation;
 using ProductNormaliser.Core.Schemas;
 
 namespace ProductNormaliser.Tests;
@@ -6,7 +8,7 @@ namespace ProductNormaliser.Tests;
 [Category(TestResponsibilities.CategorySchema)]
 public sealed class TvCategorySchemaProviderTests
 {
-    private static readonly string[] RequiredKeys =
+    private static readonly string[] ExpectedKeys =
     [
         "brand",
         "model_number",
@@ -25,36 +27,50 @@ public sealed class TvCategorySchemaProviderTests
         "depth_mm"
     ];
 
-    [Test]
-    public void TvSchemaExists()
-    {
-        var provider = new TvCategorySchemaProvider();
+    private static readonly string[] RequiredKeys =
+    [
+        "brand",
+        "model_number"
+    ];
 
-        var schema = provider.GetSchema();
+    private static readonly string[] IdentityRelevantKeys =
+    [
+        "gtin",
+        "brand",
+        "model_number",
+        "screen_size_inch",
+        "native_resolution"
+    ];
+
+    [Test]
+    public void TvSchema_ContainsExpectedCanonicalKeys()
+    {
+        var schema = new TvCategorySchemaProvider().GetSchema();
 
         Assert.Multiple(() =>
         {
-            Assert.That(schema, Is.Not.Null);
             Assert.That(schema.CategoryKey, Is.EqualTo(TvCategorySchemaProvider.CategoryKey));
-            Assert.That(schema.Attributes, Is.Not.Empty);
+            Assert.That(schema.Attributes.Select(attribute => attribute.Key), Is.EquivalentTo(ExpectedKeys));
+            Assert.That(schema.Attributes, Has.Count.EqualTo(ExpectedKeys.Length));
         });
     }
 
     [Test]
-    public void TvSchemaContainsRequiredCanonicalKeys()
+    public void TvSchema_MarksRequiredFieldsExplicitly()
     {
-        var provider = new TvCategorySchemaProvider();
-        var schema = provider.GetSchema();
-        var keys = schema.Attributes.Select(attribute => attribute.Key).ToArray();
+        var schema = new TvCategorySchemaProvider().GetSchema();
+        var requiredKeys = schema.Attributes
+            .Where(attribute => attribute.IsRequired)
+            .Select(attribute => attribute.Key)
+            .ToArray();
 
-        Assert.That(keys, Is.SupersetOf(RequiredKeys));
+        Assert.That(requiredKeys, Is.EquivalentTo(RequiredKeys));
     }
 
     [Test]
-    public void TvSchemaDoesNotContainDuplicateCanonicalKeys()
+    public void TvSchema_DoesNotContainDuplicateCanonicalKeys()
     {
-        var provider = new TvCategorySchemaProvider();
-        var schema = provider.GetSchema();
+        var schema = new TvCategorySchemaProvider().GetSchema();
 
         var duplicateKeys = schema.Attributes
             .GroupBy(attribute => attribute.Key, StringComparer.Ordinal)
@@ -66,10 +82,9 @@ public sealed class TvCategorySchemaProviderTests
     }
 
     [Test]
-    public void TvSchemaKeysUseSnakeCase()
+    public void TvSchema_UsesSnakeCaseKeys()
     {
-        var provider = new TvCategorySchemaProvider();
-        var schema = provider.GetSchema();
+        var schema = new TvCategorySchemaProvider().GetSchema();
         var snakeCasePattern = new Regex("^[a-z]+(?:_[a-z0-9]+)*$", RegexOptions.Compiled);
 
         var invalidKeys = schema.Attributes
@@ -81,15 +96,23 @@ public sealed class TvCategorySchemaProviderTests
     }
 
     [Test]
+    public void TvSchema_IdentityRelevantFields_AlignWithNormaliserIdentityKeys()
+    {
+        var normaliser = new TvAttributeNormaliser();
+
+        Assert.That(normaliser.IdentityAttributeKeys, Is.EquivalentTo(IdentityRelevantKeys));
+    }
+
+    [Test]
     public void TvSchema_AssignsConflictSensitivityForMergeCriticalFields()
     {
         var schema = new TvCategorySchemaProvider().GetSchema();
 
         Assert.Multiple(() =>
         {
-            Assert.That(schema.Attributes.Single(attribute => attribute.Key == "brand").ConflictSensitivity, Is.EqualTo(ProductNormaliser.Core.Models.ConflictSensitivity.Critical));
-            Assert.That(schema.Attributes.Single(attribute => attribute.Key == "native_resolution").ConflictSensitivity, Is.EqualTo(ProductNormaliser.Core.Models.ConflictSensitivity.High));
-            Assert.That(schema.Attributes.Single(attribute => attribute.Key == "smart_platform").ConflictSensitivity, Is.EqualTo(ProductNormaliser.Core.Models.ConflictSensitivity.Low));
+            Assert.That(schema.Attributes.Single(attribute => attribute.Key == "brand").ConflictSensitivity, Is.EqualTo(ConflictSensitivity.Critical));
+            Assert.That(schema.Attributes.Single(attribute => attribute.Key == "native_resolution").ConflictSensitivity, Is.EqualTo(ConflictSensitivity.High));
+            Assert.That(schema.Attributes.Single(attribute => attribute.Key == "smart_platform").ConflictSensitivity, Is.EqualTo(ConflictSensitivity.Low));
         });
     }
 }

@@ -7,6 +7,18 @@ namespace ProductNormaliser.Tests;
 [Category(TestResponsibilities.Normalisation)]
 public sealed class TvAttributeNormaliserTests
 {
+    [Test]
+    public void TvNormaliser_ExposesIdentityAndCompletenessKeysForRolloutSchema()
+    {
+        var sut = new TvAttributeNormaliser();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sut.IdentityAttributeKeys, Is.EquivalentTo(new[] { "gtin", "brand", "model_number", "screen_size_inch", "native_resolution" }));
+            Assert.That(sut.CompletenessAttributeKeys, Is.EquivalentTo(new[] { "brand", "model_number", "screen_size_inch", "native_resolution", "display_technology" }));
+        });
+    }
+
     [TestCase("Yes", true)]
     [TestCase("No", false)]
     [TestCase("true", true)]
@@ -108,6 +120,38 @@ public sealed class TvAttributeNormaliserTests
             Assert.That(results["refresh_rate_hz"].Unit, Is.EqualTo("hz"));
             Assert.That(results["hdmi_port_count"].Value, Is.EqualTo(4));
             Assert.That(results["hdmi_port_count"].ParseNotes, Is.EqualTo("Parsed integer value."));
+        });
+    }
+
+    [Test]
+    public void Normalise_MapsRepresentativeRetailerFixtureToStableCanonicalOutput()
+    {
+        var sut = new TvAttributeNormaliser();
+
+        var results = sut.Normalise(
+            "tv",
+            new Dictionary<string, SourceAttributeValue>
+            {
+                ["Screen Diagonal"] = new() { AttributeKey = "Screen Diagonal", Value = "139.7 cm", ValueType = "string" },
+                ["Native Resolution"] = new() { AttributeKey = "Native Resolution", Value = "3840 x 2160", ValueType = "string" },
+                ["Display Technology"] = new() { AttributeKey = "Display Technology", Value = "qled", ValueType = "string" },
+                ["Smart TV"] = new() { AttributeKey = "Smart TV", Value = "Yes", ValueType = "string" },
+                ["Number of HDMI Ports"] = new() { AttributeKey = "Number of HDMI Ports", Value = "4", ValueType = "string" },
+                ["Refresh Rate"] = new() { AttributeKey = "Refresh Rate", Value = "120 Hz", ValueType = "string" },
+                ["VESA Horizontal"] = new() { AttributeKey = "VESA Horizontal", Value = "400 mm", ValueType = "string" },
+                ["VESA Vertical"] = new() { AttributeKey = "VESA Vertical", Value = "300 mm", ValueType = "string" }
+            });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results["screen_size_inch"].Value, Is.EqualTo(55m));
+            Assert.That(results["native_resolution"].Value, Is.EqualTo("4K"));
+            Assert.That(results["display_technology"].Value, Is.EqualTo("QLED"));
+            Assert.That(results["smart_tv"].Value, Is.EqualTo(true));
+            Assert.That(results["hdmi_port_count"].Value, Is.EqualTo(4));
+            Assert.That(results["refresh_rate_hz"].Value, Is.EqualTo(120));
+            Assert.That(results["vesa_mount_width_mm"].Value, Is.EqualTo(400));
+            Assert.That(results["vesa_mount_height_mm"].Value, Is.EqualTo(300));
         });
     }
 
