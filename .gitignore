@@ -50,5 +50,5 @@ node_modules/
 *.temp
 
 # Local LLM models
-models/
+ProductNormaliser.AdminApi/models/
 *.gguf
