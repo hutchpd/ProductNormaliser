@@ -2,7 +2,7 @@
 
 ProductNormaliser is an open product-intelligence engine for turning messy retail and manufacturer page data into clean, canonical, comparable product records. It crawls source pages, extracts structured product evidence, normalises attributes into a category schema, resolves identity across sources, merges competing claims into a canonical product, and keeps learning over time from quality history, disagreement patterns, and page volatility.
 
-Milestone 1 is centered on an end-to-end operator workflow for three rollout categories: `tv`, `monitor`, and `laptop`. The platform still keeps category and normalisation extension points broad enough for future electrical-goods expansion, but the completed milestone scope is the crawl, management, product, and quality experience for those three categories.
+Milestone 1 is centered on an end-to-end operator workflow for four supported categories: `tv`, `monitor`, `laptop`, and `smartphone`. The platform still keeps category and normalisation extension points broad enough for broader electrical-goods expansion, while `tablet`, `headphones`, and `speakers` remain enabled experimental categories that share the same workflow surface.
 
 ## What problem this solves
 
@@ -76,7 +76,7 @@ The solution now contains ten projects:
 
 ## Architecture at a glance
 
-1. Operators register or enable managed crawl sources and assign categories such as `tv`, `monitor`, and `laptop`.
+1. Operators register or enable managed crawl sources and assign categories such as `tv`, `monitor`, `laptop`, and `smartphone`.
 2. Each source carries a discovery profile with category entry pages, sitemap hints, allow or deny path rules, URL patterns, depth limits, and per-run budgets.
 3. A category crawl job now seeds deterministic discovery from eligible managed sources instead of relying only on pre-known targets.
 4. The discovery worker fetches sitemaps and listing pages while respecting robots rules, source throttling, depth limits, and URL budgets.
@@ -93,8 +93,8 @@ The solution now contains ten projects:
 The solution currently includes:
 
 - category metadata and schema discovery for electrical-goods families
-- category registry support for the Milestone 1 rollout set: TVs, Monitors, and Laptops
-- schema-driven attribute normalisation with category-specific providers for TVs, Monitors, and Laptops
+- category registry support for the current supported set: TVs, Monitors, Laptops, and Smartphones
+- schema-driven attribute normalisation with category-specific providers for TVs, Monitors, Laptops, Smartphones, and enabled experimental next-wave categories
 - alias handling and measurement parsing
 - structured data extraction from HTML and JSON-LD
 - MongoDB persistence for source and canonical records

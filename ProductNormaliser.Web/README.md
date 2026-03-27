@@ -9,7 +9,8 @@ The web host currently delivers:
 - an operator landing page that keeps the active category context visible
 - an operator landing page operational health panel for queue depth, retry backlog, recent failures, at-risk sources, and category pressure
 - an operator landing page boot-and-populate panel showing boot-ready sources, categories in context, estimated discovery seeds, and recent confirmed-product throughput
-- category selection for the rollout set: TVs, Monitors, and Laptops
+- category selection for the current supported set: TVs, Monitors, Laptops, and Smartphones
+- category selectors and explorer filters that continue to expose enabled experimental categories such as Tablets, Headphones, and Speakers with their maturity badges intact
 - seeded crawl launch and crawl-job monitoring with discovery and product progress shown together
 - canonical product exploration with quality-aware filters and paging
 - product detail pages with source comparison, evidence, conflicts, and history

@@ -91,7 +91,7 @@ public sealed class ProductPageRenderingTests
                 new CategoryMetadataDto { CategoryKey = "monitor", DisplayName = "Monitors", IsEnabled = true, CrawlSupportStatus = "Supported" },
                 new CategoryMetadataDto { CategoryKey = "laptop", DisplayName = "Laptops", IsEnabled = true, CrawlSupportStatus = "Supported" },
                 new CategoryMetadataDto { CategoryKey = "tablet", DisplayName = "Tablets", IsEnabled = true, CrawlSupportStatus = "Experimental" },
-                new CategoryMetadataDto { CategoryKey = "smartphone", DisplayName = "Smartphones", IsEnabled = true, CrawlSupportStatus = "Experimental" },
+                new CategoryMetadataDto { CategoryKey = "smartphone", DisplayName = "Smartphones", IsEnabled = true, CrawlSupportStatus = "Supported" },
                 new CategoryMetadataDto { CategoryKey = "headphones", DisplayName = "Headphones", IsEnabled = true, CrawlSupportStatus = "Experimental" },
                 new CategoryMetadataDto { CategoryKey = "speakers", DisplayName = "Speakers", IsEnabled = true, CrawlSupportStatus = "Experimental" },
                 new CategoryMetadataDto { CategoryKey = "refrigerator", DisplayName = "Refrigerators", IsEnabled = false, CrawlSupportStatus = "Planned" }

@@ -272,6 +272,390 @@ public sealed class IdentityAndMergeTests
         });
     }
 
+    [Test]
+    public void Match_SmartphoneExactBrandAndModel_WithAlignedVariantSignals_Succeeds()
+    {
+        var resolver = new ProductIdentityResolver();
+        var incoming = CreateSmartphoneSourceProduct(
+            sourceId: "phone-source-1",
+            brand: "Samsung",
+            modelNumber: "SM-S928B",
+            title: "Samsung Galaxy S24 Ultra 256GB",
+            attributes:
+            [
+                ("model_family", "Galaxy S24 Ultra", "string"),
+                ("storage_capacity_gb", 256, "integer"),
+                ("regional_variant", "EU", "string"),
+                ("carrier_lock_status", "Unlocked", "string")
+            ]);
+        var candidates = new[]
+        {
+            CreateSmartphoneCandidate(
+                id: "canon-phone-1",
+                brand: "Samsung",
+                modelNumber: "SM-S928B",
+                displayName: "Samsung Galaxy S24 Ultra",
+                attributes:
+                [
+                    ("model_family", "Galaxy S24 Ultra", "string"),
+                    ("storage_capacity_gb", 256, "integer"),
+                    ("regional_variant", "EU", "string"),
+                    ("carrier_lock_status", "Unlocked", "string")
+                ])
+        };
+
+        var result = resolver.Match(incoming, candidates);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsMatch, Is.True);
+            Assert.That(result.CanonicalProductId, Is.EqualTo("canon-phone-1"));
+            Assert.That(result.MatchReason, Is.EqualTo("Exact brand and model number match."));
+        });
+    }
+
+    [Test]
+    public void Match_SmartphoneSameModelDifferentStorage_DoesNotMerge()
+    {
+        var resolver = new ProductIdentityResolver();
+        var incoming = CreateSmartphoneSourceProduct(
+            sourceId: "phone-source-2",
+            brand: "Samsung",
+            modelNumber: "SM-S928B",
+            title: "Samsung Galaxy S24 Ultra 256GB",
+            attributes:
+            [
+                ("model_family", "Galaxy S24 Ultra", "string"),
+                ("storage_capacity_gb", 256, "integer")
+            ]);
+        var candidates = new[]
+        {
+            CreateSmartphoneCandidate(
+                id: "canon-phone-storage-conflict",
+                brand: "Samsung",
+                modelNumber: "SM-S928B",
+                displayName: "Samsung Galaxy S24 Ultra 512GB",
+                attributes:
+                [
+                    ("model_family", "Galaxy S24 Ultra", "string"),
+                    ("storage_capacity_gb", 512, "integer")
+                ])
+        };
+
+        var result = resolver.Match(incoming, candidates);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsMatch, Is.False);
+            Assert.That(result.MatchReason, Is.EqualTo("Strong smartphone variant conflict prevented a safe match."));
+        });
+    }
+
+    [Test]
+    public void Match_SmartphoneSameModelDifferentRegionalVariant_DoesNotMerge()
+    {
+        var resolver = new ProductIdentityResolver();
+        var incoming = CreateSmartphoneSourceProduct(
+            sourceId: "phone-source-3",
+            brand: "Samsung",
+            modelNumber: "SM-S928B",
+            title: "Samsung Galaxy S24 Ultra EU",
+            attributes:
+            [
+                ("model_family", "Galaxy S24 Ultra", "string"),
+                ("regional_variant", "EU", "string")
+            ]);
+        var candidates = new[]
+        {
+            CreateSmartphoneCandidate(
+                id: "canon-phone-region-conflict",
+                brand: "Samsung",
+                modelNumber: "SM-S928B",
+                displayName: "Samsung Galaxy S24 Ultra US",
+                attributes:
+                [
+                    ("model_family", "Galaxy S24 Ultra", "string"),
+                    ("regional_variant", "US", "string")
+                ])
+        };
+
+        var result = resolver.Match(incoming, candidates);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsMatch, Is.False);
+            Assert.That(result.MatchReason, Is.EqualTo("Strong smartphone variant conflict prevented a safe match."));
+        });
+    }
+
+    [Test]
+    public void Match_SmartphoneSameModelDifferentCarrierLockStatus_DoesNotMerge()
+    {
+        var resolver = new ProductIdentityResolver();
+        var incoming = CreateSmartphoneSourceProduct(
+            sourceId: "phone-source-4",
+            brand: "Apple",
+            modelNumber: "A3090",
+            title: "Apple iPhone 15 Unlocked",
+            attributes:
+            [
+                ("model_family", "iPhone 15", "string"),
+                ("carrier_lock_status", "Unlocked", "string")
+            ]);
+        var candidates = new[]
+        {
+            CreateSmartphoneCandidate(
+                id: "canon-phone-lock-conflict",
+                brand: "Apple",
+                modelNumber: "A3090",
+                displayName: "Apple iPhone 15 Carrier Locked",
+                attributes:
+                [
+                    ("model_family", "iPhone 15", "string"),
+                    ("carrier_lock_status", "Carrier Locked", "string")
+                ])
+        };
+
+        var result = resolver.Match(incoming, candidates);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsMatch, Is.False);
+            Assert.That(result.MatchReason, Is.EqualTo("Strong smartphone variant conflict prevented a safe match."));
+        });
+    }
+
+    [Test]
+    public void Match_SmartphoneExactManufacturerPartNumber_StillSucceedsDespiteVariantNoise()
+    {
+        var resolver = new ProductIdentityResolver();
+        var incoming = CreateSmartphoneSourceProduct(
+            sourceId: "phone-source-5",
+            brand: "Samsung",
+            modelNumber: "SM-S928B",
+            title: "Samsung Galaxy S24 Ultra 256GB",
+            attributes:
+            [
+                ("manufacturer_part_number", "SM-S928BZKDEUB", "string"),
+                ("storage_capacity_gb", 256, "integer"),
+                ("regional_variant", "EU", "string")
+            ]);
+        var candidates = new[]
+        {
+            CreateSmartphoneCandidate(
+                id: "canon-phone-mpn",
+                brand: "Samsung",
+                modelNumber: "SM-S928B",
+                displayName: "Samsung Galaxy S24 Ultra",
+                attributes:
+                [
+                    ("manufacturer_part_number", "SM-S928BZKDEUB", "string"),
+                    ("storage_capacity_gb", 512, "integer"),
+                    ("regional_variant", "EU", "string")
+                ])
+        };
+
+        var result = resolver.Match(incoming, candidates);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsMatch, Is.True);
+            Assert.That(result.CanonicalProductId, Is.EqualTo("canon-phone-mpn"));
+            Assert.That(result.MatchReason, Is.EqualTo("Exact manufacturer part number match."));
+            Assert.That(result.Confidence, Is.EqualTo(0.98m));
+        });
+    }
+
+    [Test]
+    public void Match_TabletSameModelDifferentConnectivity_DoesNotMerge()
+    {
+        var resolver = new ProductIdentityResolver();
+        var incoming = CreateTabletSourceProduct(
+            sourceId: "tablet-source-1",
+            brand: "Samsung",
+            modelNumber: "SM-X610",
+            title: "Samsung Galaxy Tab S9 FE Wi-Fi",
+            attributes:
+            [
+                ("model_family", "Galaxy Tab S9 FE", "string"),
+                ("connectivity", "Wi-Fi", "string")
+            ]);
+        var candidates = new[]
+        {
+            CreateTabletCandidate(
+                id: "canon-tablet-connectivity-conflict",
+                brand: "Samsung",
+                modelNumber: "SM-X610",
+                displayName: "Samsung Galaxy Tab S9 FE Wi-Fi + Cellular",
+                attributes:
+                [
+                    ("model_family", "Galaxy Tab S9 FE", "string"),
+                    ("connectivity", "Wi-Fi + Cellular", "string")
+                ])
+        };
+
+        var result = resolver.Match(incoming, candidates);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsMatch, Is.False);
+            Assert.That(result.MatchReason, Is.EqualTo("Strong tablet variant conflict prevented a safe match."));
+        });
+    }
+
+    [Test]
+    public void Match_TabletSameModelDifferentCellularGeneration_DoesNotMerge()
+    {
+        var resolver = new ProductIdentityResolver();
+        var incoming = CreateTabletSourceProduct(
+            sourceId: "tablet-source-2",
+            brand: "Samsung",
+            modelNumber: "SM-X616",
+            title: "Samsung Galaxy Tab S9 FE 5G",
+            attributes:
+            [
+                ("model_family", "Galaxy Tab S9 FE", "string"),
+                ("connectivity", "Wi-Fi + Cellular", "string"),
+                ("cellular_generation", "5G", "string")
+            ]);
+        var candidates = new[]
+        {
+            CreateTabletCandidate(
+                id: "canon-tablet-generation-conflict",
+                brand: "Samsung",
+                modelNumber: "SM-X616",
+                displayName: "Samsung Galaxy Tab S9 FE LTE",
+                attributes:
+                [
+                    ("model_family", "Galaxy Tab S9 FE", "string"),
+                    ("connectivity", "Wi-Fi + Cellular", "string"),
+                    ("cellular_generation", "4G", "string")
+                ])
+        };
+
+        var result = resolver.Match(incoming, candidates);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsMatch, Is.False);
+            Assert.That(result.MatchReason, Is.EqualTo("Strong tablet variant conflict prevented a safe match."));
+        });
+    }
+
+    [Test]
+    public void Match_TabletExactManufacturerPartNumber_StillSucceedsDespiteConnectivityNoise()
+    {
+        var resolver = new ProductIdentityResolver();
+        var incoming = CreateTabletSourceProduct(
+            sourceId: "tablet-source-3",
+            brand: "Samsung",
+            modelNumber: "SM-X610",
+            title: "Samsung Galaxy Tab S9 FE 128GB",
+            attributes:
+            [
+                ("manufacturer_part_number", "SM-X610NZAEEUB", "string"),
+                ("connectivity", "Wi-Fi", "string"),
+                ("storage_capacity_gb", 128, "integer")
+            ]);
+        var candidates = new[]
+        {
+            CreateTabletCandidate(
+                id: "canon-tablet-mpn",
+                brand: "Samsung",
+                modelNumber: "SM-X610",
+                displayName: "Samsung Galaxy Tab S9 FE",
+                attributes:
+                [
+                    ("manufacturer_part_number", "SM-X610NZAEEUB", "string"),
+                    ("connectivity", "Wi-Fi + Cellular", "string"),
+                    ("storage_capacity_gb", 256, "integer")
+                ])
+        };
+
+        var result = resolver.Match(incoming, candidates);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsMatch, Is.True);
+            Assert.That(result.CanonicalProductId, Is.EqualTo("canon-tablet-mpn"));
+            Assert.That(result.MatchReason, Is.EqualTo("Exact manufacturer part number match."));
+        });
+    }
+
+    [Test]
+    public void Match_HeadphonesSameModelDifferentConnectionType_DoesNotMerge()
+    {
+        var resolver = new ProductIdentityResolver();
+        var incoming = CreateHeadphonesSourceProduct(
+            sourceId: "headphones-source-1",
+            brand: "Sony",
+            modelNumber: "WH-CH520",
+            title: "Sony WH-CH520 Bluetooth Headphones",
+            attributes:
+            [
+                ("model_family", "WH-CH520", "string"),
+                ("connection_type", "Bluetooth", "string")
+            ]);
+        var candidates = new[]
+        {
+            CreateHeadphonesCandidate(
+                id: "canon-headphones-connection-conflict",
+                brand: "Sony",
+                modelNumber: "WH-CH520",
+                displayName: "Sony WH-CH520 Wired",
+                attributes:
+                [
+                    ("model_family", "WH-CH520", "string"),
+                    ("connection_type", "Wired", "string")
+                ])
+        };
+
+        var result = resolver.Match(incoming, candidates);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsMatch, Is.False);
+            Assert.That(result.MatchReason, Is.EqualTo("Strong headphones variant conflict prevented a safe match."));
+        });
+    }
+
+    [Test]
+    public void Match_SpeakersSameModelDifferentConnectionType_DoesNotMerge()
+    {
+        var resolver = new ProductIdentityResolver();
+        var incoming = CreateSpeakersSourceProduct(
+            sourceId: "speakers-source-1",
+            brand: "Sonos",
+            modelNumber: "Era 100",
+            title: "Sonos Era 100 Bluetooth Speaker",
+            attributes:
+            [
+                ("model_family", "Era 100", "string"),
+                ("connection_type", "Bluetooth", "string")
+            ]);
+        var candidates = new[]
+        {
+            CreateSpeakersCandidate(
+                id: "canon-speakers-connection-conflict",
+                brand: "Sonos",
+                modelNumber: "Era 100",
+                displayName: "Sonos Era 100 Wi-Fi Speaker",
+                attributes:
+                [
+                    ("model_family", "Era 100", "string"),
+                    ("connection_type", "Wi-Fi", "string")
+                ])
+        };
+
+        var result = resolver.Match(incoming, candidates);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsMatch, Is.False);
+            Assert.That(result.MatchReason, Is.EqualTo("Strong speakers variant conflict prevented a safe match."));
+        });
+    }
+
     private static SourceProduct CreateSourceProduct(string sourceId, string brand, string model, string? gtin, string title)
     {
         return new SourceProduct
@@ -286,6 +670,147 @@ public sealed class IdentityAndMergeTests
             Title = title,
             RawSchemaJson = "{}",
             FetchedUtc = new DateTime(2026, 03, 20, 11, 00, 00, DateTimeKind.Utc)
+        };
+    }
+
+    private static SourceProduct CreateSmartphoneSourceProduct(
+        string sourceId,
+        string brand,
+        string? modelNumber,
+        string title,
+        params (string Key, object Value, string ValueType)[] attributes)
+    {
+        return CreateCategorySourceProduct("smartphone", sourceId, brand, modelNumber, title, attributes);
+    }
+
+    private static SourceProduct CreateTabletSourceProduct(
+        string sourceId,
+        string brand,
+        string? modelNumber,
+        string title,
+        params (string Key, object Value, string ValueType)[] attributes)
+    {
+        return CreateCategorySourceProduct("tablet", sourceId, brand, modelNumber, title, attributes);
+    }
+
+    private static SourceProduct CreateHeadphonesSourceProduct(
+        string sourceId,
+        string brand,
+        string? modelNumber,
+        string title,
+        params (string Key, object Value, string ValueType)[] attributes)
+    {
+        return CreateCategorySourceProduct("headphones", sourceId, brand, modelNumber, title, attributes);
+    }
+
+    private static SourceProduct CreateSpeakersSourceProduct(
+        string sourceId,
+        string brand,
+        string? modelNumber,
+        string title,
+        params (string Key, object Value, string ValueType)[] attributes)
+    {
+        return CreateCategorySourceProduct("speakers", sourceId, brand, modelNumber, title, attributes);
+    }
+
+    private static SourceProduct CreateCategorySourceProduct(
+        string categoryKey,
+        string sourceId,
+        string brand,
+        string? modelNumber,
+        string title,
+        params (string Key, object Value, string ValueType)[] attributes)
+    {
+        return new SourceProduct
+        {
+            Id = sourceId,
+            SourceName = "test-source",
+            SourceUrl = $"https://example.com/{sourceId}",
+            CategoryKey = categoryKey,
+            Brand = brand,
+            ModelNumber = modelNumber,
+            Title = title,
+            RawSchemaJson = "{}",
+            FetchedUtc = new DateTime(2026, 03, 20, 11, 00, 00, DateTimeKind.Utc),
+            NormalisedAttributes = attributes.ToDictionary(
+                attribute => attribute.Key,
+                attribute => new NormalisedAttributeValue
+                {
+                    AttributeKey = attribute.Key,
+                    Value = attribute.Value,
+                    ValueType = attribute.ValueType,
+                    Confidence = 0.95m,
+                    SourceAttributeKey = attribute.Key,
+                    OriginalValue = attribute.Value.ToString()
+                },
+                StringComparer.OrdinalIgnoreCase)
+        };
+    }
+
+    private static CanonicalProduct CreateSmartphoneCandidate(
+        string id,
+        string brand,
+        string? modelNumber,
+        string displayName,
+        params (string Key, object Value, string ValueType)[] attributes)
+    {
+        return CreateCategoryCandidate("smartphone", id, brand, modelNumber, displayName, attributes);
+    }
+
+    private static CanonicalProduct CreateTabletCandidate(
+        string id,
+        string brand,
+        string? modelNumber,
+        string displayName,
+        params (string Key, object Value, string ValueType)[] attributes)
+    {
+        return CreateCategoryCandidate("tablet", id, brand, modelNumber, displayName, attributes);
+    }
+
+    private static CanonicalProduct CreateHeadphonesCandidate(
+        string id,
+        string brand,
+        string? modelNumber,
+        string displayName,
+        params (string Key, object Value, string ValueType)[] attributes)
+    {
+        return CreateCategoryCandidate("headphones", id, brand, modelNumber, displayName, attributes);
+    }
+
+    private static CanonicalProduct CreateSpeakersCandidate(
+        string id,
+        string brand,
+        string? modelNumber,
+        string displayName,
+        params (string Key, object Value, string ValueType)[] attributes)
+    {
+        return CreateCategoryCandidate("speakers", id, brand, modelNumber, displayName, attributes);
+    }
+
+    private static CanonicalProduct CreateCategoryCandidate(
+        string categoryKey,
+        string id,
+        string brand,
+        string? modelNumber,
+        string displayName,
+        params (string Key, object Value, string ValueType)[] attributes)
+    {
+        return new CanonicalProduct
+        {
+            Id = id,
+            CategoryKey = categoryKey,
+            Brand = brand,
+            ModelNumber = modelNumber,
+            DisplayName = displayName,
+            Attributes = attributes.ToDictionary(
+                attribute => attribute.Key,
+                attribute => new CanonicalAttributeValue
+                {
+                    AttributeKey = attribute.Key,
+                    Value = attribute.Value,
+                    ValueType = attribute.ValueType
+                },
+                StringComparer.OrdinalIgnoreCase)
         };
     }
 

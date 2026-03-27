@@ -10,7 +10,7 @@ public static class DefaultCategoryMetadataCatalog
         Create("monitor", "Monitors", "display", "Display", "monitor", CrawlSupportStatus.Supported, 0.89m, true),
         Create("laptop", "Laptops", "computing", "Computing", "laptop", CrawlSupportStatus.Supported, 0.87m, true),
         Create("tablet", "Tablets", "mobile", "Mobile", "tablet", CrawlSupportStatus.Experimental, 0.78m, true),
-        Create("smartphone", "Smartphones", "mobile", "Mobile", "smartphone", CrawlSupportStatus.Experimental, 0.79m, true),
+        Create("smartphone", "Smartphones", "mobile", "Mobile", "smartphone", CrawlSupportStatus.Supported, 0.91m, true),
         Create("headphones", "Headphones", "audio", "Audio", "headphones", CrawlSupportStatus.Experimental, 0.74m, true),
         Create("speakers", "Speakers", "audio", "Audio", "speaker", CrawlSupportStatus.Experimental, 0.72m, true),
         Create("refrigerator", "Refrigerators", "kitchen_appliances", "Kitchen Appliances", "refrigerator", CrawlSupportStatus.Planned, 0.10m, false),

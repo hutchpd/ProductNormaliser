@@ -71,7 +71,7 @@ The goal is not just to pick a winner, but to pick a winner with an audit trail.
 
 ## Category schema
 
-The first fully modelled category is `tv` in the TV schema provider. Additional category providers for `monitor`, `laptop`, and `refrigerator` now exist so the rest of the platform can score completeness, route normalisation, and expose dashboard metadata without assuming TV-only semantics.
+The first fully modelled category is `tv` in the TV schema provider. Additional category providers now exist for `monitor`, `laptop`, `smartphone`, `tablet`, `headphones`, `speakers`, and `refrigerator` so the rest of the platform can score completeness, route normalisation, and expose dashboard metadata without assuming TV-only semantics.
 
 The TV schema still defines the richest required and optional canonical attributes such as:
 
@@ -90,6 +90,8 @@ Adding a new category typically means:
 2. teaching the normaliser how to map source names and values
 3. deciding identity heuristics and attribute reliability rules for that category
 4. registering metadata so the admin API and web dashboard can discover the category safely
+
+At the current maturity line, `tv`, `monitor`, `laptop`, and `smartphone` are the supported categories with the strongest schema, normalisation, and identity coverage. `tablet`, `headphones`, and `speakers` are enabled experimental categories with broader canonical field sets and category-specific normalisers, but they are still being hardened before promotion.
 
 ## How other projects use Domain
 

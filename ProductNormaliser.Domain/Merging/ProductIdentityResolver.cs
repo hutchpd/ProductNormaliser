@@ -10,6 +10,15 @@ public sealed class ProductIdentityResolver(
     ConfidenceScorer? confidenceScorer = null,
     ICategoryAttributeNormaliserRegistry? categoryAttributeNormaliserRegistry = null) : IProductIdentityResolver
 {
+    private const string SmartphoneCategoryKey = "smartphone";
+    private static readonly IReadOnlyDictionary<string, string[]> StrongDisambiguatorKeysByCategory = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+    {
+        [SmartphoneCategoryKey] = ["storage_capacity_gb", "manufacturer_part_number", "regional_variant", "carrier_lock_status"],
+        ["tablet"] = ["connectivity", "cellular_generation", "manufacturer_part_number", "regional_variant", "storage_capacity_gb"],
+        ["headphones"] = ["connection_type", "manufacturer_part_number"],
+        ["speakers"] = ["connection_type", "speaker_type", "manufacturer_part_number"]
+    };
+
     private readonly ProductFingerprintBuilder fingerprintBuilder = fingerprintBuilder ?? new ProductFingerprintBuilder();
     private readonly ConfidenceScorer confidenceScorer = confidenceScorer ?? new ConfidenceScorer();
     private readonly ICategoryAttributeNormaliserRegistry categoryAttributeNormaliserRegistry = categoryAttributeNormaliserRegistry ?? DefaultCategoryRegistries.CreateAttributeNormaliserRegistry();
@@ -46,7 +55,15 @@ public sealed class ProductIdentityResolver(
             };
         }
 
-        var brandModelMatch = candidates.FirstOrDefault(candidate =>
+        var manufacturerPartNumberMatch = FindManufacturerPartNumberMatch(sourceProduct, candidates);
+        if (manufacturerPartNumberMatch is not null)
+        {
+            return manufacturerPartNumberMatch;
+        }
+
+        var broaderCandidates = FilterCandidatesForBroaderMatching(sourceProduct, candidates);
+
+        var brandModelMatch = broaderCandidates.FirstOrDefault(candidate =>
             string.Equals(candidate.Brand?.Trim(), sourceProduct.Brand?.Trim(), StringComparison.OrdinalIgnoreCase)
             && string.Equals(candidate.ModelNumber?.Trim(), sourceProduct.ModelNumber?.Trim(), StringComparison.OrdinalIgnoreCase)
             && !string.IsNullOrWhiteSpace(candidate.Brand)
@@ -63,13 +80,13 @@ public sealed class ProductIdentityResolver(
             };
         }
 
-        var categoryIdentityMatch = FindCategoryIdentityMatch(sourceProduct, candidates);
+        var categoryIdentityMatch = FindCategoryIdentityMatch(sourceProduct, broaderCandidates);
         if (categoryIdentityMatch is not null)
         {
             return categoryIdentityMatch;
         }
 
-        var bestSimilarityMatch = candidates
+        var bestSimilarityMatch = broaderCandidates
             .Select(candidate => new
             {
                 Candidate = candidate,
@@ -89,12 +106,48 @@ public sealed class ProductIdentityResolver(
             };
         }
 
+        var strongConflictReason = GetStrongVariantConflictReason(sourceProduct, candidates);
+        if (strongConflictReason is not null)
+        {
+            return new ProductIdentityMatchResult
+            {
+                IsMatch = false,
+                Confidence = 0.00m,
+                MatchReason = strongConflictReason
+            };
+        }
+
         return new ProductIdentityMatchResult
         {
             IsMatch = false,
             Confidence = 0.00m,
             MatchReason = "No sufficiently strong product identity match found."
         };
+    }
+
+    private ProductIdentityMatchResult? FindManufacturerPartNumberMatch(SourceProduct sourceProduct, IReadOnlyCollection<CanonicalProduct> candidates)
+    {
+        if (!TryGetStrongDisambiguatorKeys(sourceProduct.CategoryKey, out _)
+            || !TryGetComparableValue(sourceProduct, "manufacturer_part_number", out var sourceManufacturerPartNumber))
+        {
+            return null;
+        }
+
+        var match = candidates.FirstOrDefault(candidate =>
+            string.Equals(candidate.CategoryKey, sourceProduct.CategoryKey, StringComparison.OrdinalIgnoreCase)
+            && TryGetComparableValue(candidate, "manufacturer_part_number", out var candidateManufacturerPartNumber)
+            && string.Equals(candidateManufacturerPartNumber, sourceManufacturerPartNumber, StringComparison.OrdinalIgnoreCase)
+            && PrimaryIdentitySignalsAreCompatible(sourceProduct, candidate));
+
+        return match is null
+            ? null
+            : new ProductIdentityMatchResult
+            {
+                CanonicalProductId = match.Id,
+                IsMatch = true,
+                Confidence = 0.98m,
+                MatchReason = "Exact manufacturer part number match."
+            };
     }
 
     private ProductIdentityMatchResult? FindCategoryIdentityMatch(SourceProduct sourceProduct, IReadOnlyCollection<CanonicalProduct> candidates)
@@ -136,6 +189,70 @@ public sealed class ProductIdentityResolver(
             Confidence = 0.93m,
             MatchReason = $"Exact match across {match.MatchCount} category identity attributes."
         };
+    }
+
+    private IReadOnlyCollection<CanonicalProduct> FilterCandidatesForBroaderMatching(SourceProduct sourceProduct, IReadOnlyCollection<CanonicalProduct> candidates)
+    {
+        if (!TryGetStrongDisambiguatorKeys(sourceProduct.CategoryKey, out _))
+        {
+            return candidates;
+        }
+
+        return candidates
+            .Where(candidate => !HasStrongVariantConflict(sourceProduct, candidate))
+            .ToArray();
+    }
+
+    private static bool PrimaryIdentitySignalsAreCompatible(SourceProduct sourceProduct, CanonicalProduct candidate)
+    {
+        return !HasComparableConflict(sourceProduct, candidate, "brand")
+            && !HasComparableConflict(sourceProduct, candidate, "model_number");
+    }
+
+    private static bool HasStrongVariantConflict(SourceProduct sourceProduct, CanonicalProduct candidate)
+    {
+        if (!TryGetStrongDisambiguatorKeys(sourceProduct.CategoryKey, out var disambiguatorKeys)
+            || !string.Equals(candidate.CategoryKey, sourceProduct.CategoryKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return disambiguatorKeys.Any(key => HasComparableConflict(sourceProduct, candidate, key));
+    }
+
+    private static string? GetStrongVariantConflictReason(SourceProduct sourceProduct, IReadOnlyCollection<CanonicalProduct> candidates)
+    {
+        if (!TryGetStrongDisambiguatorKeys(sourceProduct.CategoryKey, out _)
+            || !candidates.Any(candidate => HasStrongVariantConflict(sourceProduct, candidate)))
+        {
+            return null;
+        }
+
+        return sourceProduct.CategoryKey.ToLowerInvariant() switch
+        {
+            SmartphoneCategoryKey => "Strong smartphone variant conflict prevented a safe match.",
+            "tablet" => "Strong tablet variant conflict prevented a safe match.",
+            "headphones" => "Strong headphones variant conflict prevented a safe match.",
+            "speakers" => "Strong speakers variant conflict prevented a safe match.",
+            _ => "Strong category variant conflict prevented a safe match."
+        };
+    }
+
+    private static bool HasComparableConflict(SourceProduct sourceProduct, CanonicalProduct candidate, string key)
+    {
+        return TryGetComparableValue(sourceProduct, key, out var sourceValue)
+            && TryGetComparableValue(candidate, key, out var candidateValue)
+            && !string.Equals(sourceValue, candidateValue, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSmartphoneCategory(string categoryKey)
+    {
+        return string.Equals(categoryKey, SmartphoneCategoryKey, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryGetStrongDisambiguatorKeys(string categoryKey, out string[] keys)
+    {
+        return StrongDisambiguatorKeysByCategory.TryGetValue(categoryKey, out keys!);
     }
 
     private static int CountMatchingIdentityAttributes(SourceProduct sourceProduct, CanonicalProduct candidate, IEnumerable<string> identityKeys)
