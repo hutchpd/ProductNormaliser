@@ -5,6 +5,7 @@ using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.Discovery)]
 public sealed class DiscoveryRunMaintenanceServiceTests
 {
     [Test]

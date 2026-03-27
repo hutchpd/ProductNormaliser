@@ -9,6 +9,7 @@ using System.Text;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.Discovery)]
 public sealed class DiscoveryQueueServiceTests
 {
     [Test]

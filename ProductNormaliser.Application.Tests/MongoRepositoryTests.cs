@@ -8,6 +8,7 @@ using MongoDB.Bson;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.Persistence)]
 public sealed class MongoRepositoryTests
 {
     private CrawlJobRepository crawlJobRepository = default!;
@@ -199,6 +200,44 @@ public sealed class MongoRepositoryTests
             Assert.That(candidateIndexNames, Does.Contain("RunId_1_State_1_UpdatedUtc_-1"));
             Assert.That(candidateIndexNames, Does.Contain("RunId_1_ConfidenceScore_-1"));
             Assert.That(duplicateInsert, Throws.TypeOf<MongoWriteException>());
+        });
+    }
+
+    [Test]
+    public async Task EnsureIndexesAsync_IsRepeatableAndCreatesCriticalOperationalIndexes()
+    {
+        var context = MongoIntegrationTestFixture.Context;
+
+        await context.EnsureIndexesAsync();
+        await context.EnsureIndexesAsync();
+
+        var crawlQueueIndexNames = await GetIndexNamesAsync(context.CrawlQueueItems);
+        var discoveryQueueIndexNames = await GetIndexNamesAsync(context.DiscoveryQueueItems);
+        var discoveredUrlIndexNames = await GetIndexNamesAsync(context.DiscoveredUrls);
+        var sourceProductIndexNames = await GetIndexNamesAsync(context.SourceProducts);
+        var canonicalProductIndexNames = await GetIndexNamesAsync(context.CanonicalProducts);
+        var crawlLogIndexNames = await GetIndexNamesAsync(context.CrawlLogs);
+        var snapshotIndexNames = await GetIndexNamesAsync(context.SourceQualitySnapshots);
+        var changeEventIndexNames = await GetIndexNamesAsync(context.ProductChangeEvents);
+        var disagreementIndexNames = await GetIndexNamesAsync(context.SourceAttributeDisagreements);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(crawlQueueIndexNames, Does.Contain("Status_1_NextAttemptUtc_1_EnqueuedUtc_1"));
+            Assert.That(crawlQueueIndexNames, Does.Contain("JobId_1_Status_1"));
+            Assert.That(crawlQueueIndexNames, Does.Contain("InitiatingJobId_1"));
+            Assert.That(discoveryQueueIndexNames, Does.Contain("State_1_NextAttemptUtc_1_EnqueuedUtc_1"));
+            Assert.That(discoveryQueueIndexNames, Does.Contain("SourceId_1_CategoryKey_1_State_1"));
+            Assert.That(discoveredUrlIndexNames, Does.Contain("SourceId_1_CategoryKey_1_JobId_1"));
+            Assert.That(discoveredUrlIndexNames, Does.Contain("SourceId_1_CategoryKey_1_LastSeenUtc_-1"));
+            Assert.That(sourceProductIndexNames, Does.Contain("SourceName_1_CategoryKey_1_FetchedUtc_-1"));
+            Assert.That(canonicalProductIndexNames, Does.Contain("CategoryKey_1_Brand_1"));
+            Assert.That(canonicalProductIndexNames, Does.Contain("CategoryKey_1_UpdatedUtc_-1"));
+            Assert.That(crawlLogIndexNames, Does.Contain("SourceName_1_Url_1_TimestampUtc_-1"));
+            Assert.That(snapshotIndexNames, Does.Contain("CategoryKey_1_TimestampUtc_-1"));
+            Assert.That(changeEventIndexNames, Does.Contain("CategoryKey_1_TimestampUtc_-1"));
+            Assert.That(changeEventIndexNames, Does.Contain("SourceName_1_CategoryKey_1_TimestampUtc_-1"));
+            Assert.That(disagreementIndexNames, Does.Contain("CategoryKey_1_DisagreementRate_-1_SourceName_1"));
         });
     }
 
@@ -610,5 +649,12 @@ public sealed class MongoRepositoryTests
             CreatedUtc = new DateTime(2026, 03, 20, 10, 00, 00, DateTimeKind.Utc),
             UpdatedUtc = new DateTime(2026, 03, 20, 10, 00, 00, DateTimeKind.Utc)
         };
+    }
+
+    private static async Task<string[]> GetIndexNamesAsync<TDocument>(IMongoCollection<TDocument> collection)
+    {
+        return (await collection.Indexes.ListAsync()).ToList()
+            .Select(index => index["name"].AsString)
+            .ToArray();
     }
 }

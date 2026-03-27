@@ -4,6 +4,7 @@ using ProductNormaliser.Core.Normalisation;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.IdentityAndMerge)]
 public sealed class IdentityAndMergeTests
 {
     [Test]

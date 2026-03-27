@@ -5,6 +5,7 @@ using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.CrawlOrchestration)]
 public sealed class CrawlJobServiceTests
 {
     [Test]

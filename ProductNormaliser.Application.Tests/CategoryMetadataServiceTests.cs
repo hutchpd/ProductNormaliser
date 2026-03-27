@@ -1,8 +1,9 @@
 using ProductNormaliser.Application.Categories;
 using ProductNormaliser.Core.Models;
 
-namespace ProductNormaliser.Application.Tests;
+namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.CategorySchema)]
 public sealed class CategoryMetadataServiceTests
 {
     [Test]

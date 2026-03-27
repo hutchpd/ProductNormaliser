@@ -4,6 +4,24 @@ ProductNormaliser.Application.Tests is the current broad NUnit validation suite 
 
 This project is important because ProductNormaliser is not just a CRUD system. Its value depends on nuanced decision logic such as identity resolution, merge weighting, semantic change detection, source trust evolution, and adaptive crawl scheduling. Those behaviors need explicit regression coverage.
 
+## Boundary
+
+Belongs here now:
+
+- cross-cutting tests that exercise Application flows together with Infrastructure, Worker, or AdminApi dependencies
+- integration fixtures that rely on the shared Mongo2Go harness or broader backend wiring
+- transitional end-to-end coverage that would be risky to drop while narrower test projects are still being split out
+
+Should migrate outward later:
+
+- tests whose primary subject belongs to a single owning project and no longer needs this broad harness
+- Admin API read-model and projection tests that can live in ProductNormaliser.AdminApi.Tests
+- repository, extraction, and persistence tests that can live in ProductNormaliser.Infrastructure.Tests
+- worker orchestration and runtime tests that can live in ProductNormaliser.Worker.Tests
+- pure normalisation, schema, and domain-rule tests that can live in ProductNormaliser.Domain.Tests or a narrower application-focused suite
+
+When adding a new fixture, prefer the narrower owning test project first. Add it here only when the test genuinely spans multiple backend layers or the destination project does not exist yet. The current breakup tracker lives in [../docs/application-tests-breakup-tracker.md](../docs/application-tests-breakup-tracker.md).
+
 ## Responsibilities
 
 - validate schema-driven normalisation behavior
@@ -16,27 +34,29 @@ This project is important because ProductNormaliser is not just a CRUD system. I
 - validate admin API read models and observability responses
 - validate temporal intelligence, adaptive backoff, and disagreement tracking
 
-## Test categories in this project
+## Responsibility tags in this project
 
-Representative test areas include:
+Every fixture in this project now carries a single `Responsibility:*` NUnit category so the suite can be filtered and split intentionally instead of growing anonymously.
 
-- attribute alias and name normalisation
-- measurement parsing and conversion
-- TV attribute normalisation and schema coverage
-- category-aware metadata, completeness, and source-management validation
-- JSON-LD and HTML extraction
-- source-product building
-- source discovery profile defaults, discovery promotion, and discovery-progress accounting
-- source candidate probing, representative-page classification, heuristic-versus-classification scoring, and source recommendation behavior
-- Mongo repository integration, including the managed crawl-source registry
-- identity and merge scenarios
-- delta processing and semantic change detection
-- worker orchestration
-- admin observability and data-intelligence projections
-- temporal intelligence
-- adaptive backoff behavior
-- source disagreement analytics
-- golden-dataset accuracy, precision, recall, confidence calibration, and false-positive or false-negative tracking for the classification layer
+Current responsibility tags:
+
+- `Responsibility:Normalisation`
+- `Responsibility:CategorySchema`
+- `Responsibility:Extraction`
+- `Responsibility:Discovery`
+- `Responsibility:SourceManagement`
+- `Responsibility:Persistence`
+- `Responsibility:CrawlOrchestration`
+- `Responsibility:IdentityAndMerge`
+- `Responsibility:Observability`
+- `Responsibility:Intelligence`
+- `Responsibility:AIClassification`
+
+Run one responsibility slice with:
+
+```bash
+dotnet test ProductNormaliser.Application.Tests/ProductNormaliser.Application.Tests.csproj --filter "TestCategory=Responsibility:Discovery"
+```
 
 ## Tooling
 
@@ -85,7 +105,7 @@ dotnet build ProductNormaliser.Application.Tests/ProductNormaliser.Application.T
 
 ## Why this project still exists as a broad suite
 
-The repo now also contains Domain, AdminApi, and Web test projects, but the pre-existing end-to-end and integration-heavy test coverage has been preserved here to avoid breaking the validated backend during the structural split. Over time, tests can be redistributed into the narrower layer-specific projects as the new Application layer takes on more orchestration logic.
+The repo now also contains Domain, AdminApi, and Web test projects, but the pre-existing end-to-end and integration-heavy test coverage has been preserved here to avoid breaking the validated backend during the structural split. Over time, tests can be redistributed into the narrower layer-specific projects as the new Application layer takes on more orchestration logic. The responsibility tags and breakup tracker are there to keep that migration explicit.
 
 ## Role in the overall platform
 

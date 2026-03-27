@@ -5,6 +5,7 @@ using ProductNormaliser.Core.Schemas;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.CategorySchema)]
 public sealed class CategoryAttributeNormaliserRegistryTests
 {
     [Test]

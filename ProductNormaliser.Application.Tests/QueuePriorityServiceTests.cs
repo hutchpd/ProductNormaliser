@@ -4,6 +4,7 @@ using ProductNormaliser.Infrastructure.Mongo;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.CrawlOrchestration)]
 public sealed class QueuePriorityServiceTests
 {
     [SetUp]

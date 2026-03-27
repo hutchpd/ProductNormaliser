@@ -4,6 +4,7 @@ using ProductNormaliser.Infrastructure.StructuredData;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.AIClassification)]
 public sealed class PageClassificationEvaluatorTests
 {
     [Test]

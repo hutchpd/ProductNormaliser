@@ -10,6 +10,7 @@ using ProductNormaliser.Infrastructure.Mongo.Repositories;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.CrawlOrchestration)]
 public sealed class CrawlQueueServiceJobTests
 {
     [SetUp]

@@ -3,6 +3,7 @@ using ProductNormaliser.Infrastructure.AI;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.AIClassification)]
 public sealed class LlamaPageClassificationServiceTests
 {
     [Test]

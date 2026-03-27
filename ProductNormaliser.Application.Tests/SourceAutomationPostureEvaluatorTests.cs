@@ -3,6 +3,7 @@ using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.Intelligence)]
 public sealed class SourceAutomationPostureEvaluatorTests
 {
     [Test]

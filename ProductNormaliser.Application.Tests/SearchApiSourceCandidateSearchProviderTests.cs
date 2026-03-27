@@ -6,6 +6,7 @@ using ProductNormaliser.Infrastructure.Sources;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.Discovery)]
 public sealed class SearchApiSourceCandidateSearchProviderTests
 {
     [Test]

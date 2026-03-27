@@ -2,6 +2,7 @@ using ProductNormaliser.Core.Normalisation;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.Normalisation)]
 public sealed class MeasurementAndConversionTests
 {
     [TestCase("55 in", true, 55, "inch")]

@@ -6,6 +6,7 @@ using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.SourceManagement)]
 public sealed class SourceManagementServiceTests
 {
     [Test]

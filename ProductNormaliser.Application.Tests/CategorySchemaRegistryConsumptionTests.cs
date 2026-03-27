@@ -7,6 +7,7 @@ using ProductNormaliser.Infrastructure.Mongo.Repositories;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.CategorySchema)]
 public sealed class CategorySchemaRegistryConsumptionTests
 {
     [SetUp]

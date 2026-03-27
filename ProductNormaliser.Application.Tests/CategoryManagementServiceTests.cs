@@ -4,6 +4,7 @@ using ProductNormaliser.Core.Schemas;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.CategorySchema)]
 public sealed class CategoryManagementServiceTests
 {
     [Test]

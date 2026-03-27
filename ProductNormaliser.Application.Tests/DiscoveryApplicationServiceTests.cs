@@ -6,6 +6,7 @@ using ProductNormaliser.Infrastructure.Discovery;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.Discovery)]
 public sealed class DiscoveryApplicationServiceTests
 {
     [Test]

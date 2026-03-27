@@ -2,6 +2,7 @@ using ProductNormaliser.Core.Normalisation;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.Normalisation)]
 public sealed class AttributeAliasDictionaryTests
 {
     [TestCase("Screen Size", "screen_size_inch")]

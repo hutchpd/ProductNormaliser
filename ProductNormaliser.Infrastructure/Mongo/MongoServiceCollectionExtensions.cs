@@ -41,6 +41,7 @@ public static class MongoServiceCollectionExtensions
             var settings = serviceProvider.GetRequiredService<IOptions<MongoSettings>>().Value;
             return new MongoDbContext(mongoClient, settings.DatabaseName);
         });
+        services.AddHostedService<MongoIndexInitializationHostedService>();
 
         services.AddSingleton<RawPageRepository>();
         services.AddSingleton<AnalystNoteRepository>();

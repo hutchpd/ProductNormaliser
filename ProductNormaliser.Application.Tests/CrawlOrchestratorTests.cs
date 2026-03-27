@@ -9,6 +9,7 @@ using ProductNormaliser.Worker;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.CrawlOrchestration)]
 public sealed class CrawlOrchestratorTests
 {
     [Test]

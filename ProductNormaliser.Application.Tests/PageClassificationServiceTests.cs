@@ -2,6 +2,7 @@ using ProductNormaliser.Application.AI;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.AIClassification)]
 public sealed class PageClassificationServiceTests
 {
     [Test]

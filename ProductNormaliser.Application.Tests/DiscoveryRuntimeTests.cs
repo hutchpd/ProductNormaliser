@@ -11,6 +11,7 @@ using ProductNormaliser.Worker;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.Discovery)]
 public sealed class DiscoveryRuntimeTests
 {
     [Test]

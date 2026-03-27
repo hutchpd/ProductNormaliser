@@ -11,6 +11,7 @@ using ProductNormaliser.Infrastructure.StructuredData;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.Discovery)]
 public sealed class HttpSourceCandidateProbeServiceTests
 {
     [Test]

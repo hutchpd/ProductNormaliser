@@ -2,6 +2,7 @@ using ProductNormaliser.Infrastructure.StructuredData;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.Extraction)]
 public sealed class SourceProductBuilderTests
 {
     [Test]

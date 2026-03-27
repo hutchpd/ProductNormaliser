@@ -30,6 +30,10 @@ The `AddProductNormaliserMongo` extension method wires up:
 
 Mongo registration now also creates the collections and indexes needed for deterministic discovery, including bounded queue scans and deduplication across discovered URLs.
 
+Index creation is now an explicit runtime concern rather than a test-only convention. `AddProductNormaliserMongo` registers a startup hosted service that calls the shared Mongo index catalog on host startup, so Worker and Admin API instances converge the database onto the same named index set every time they boot.
+
+The catalog is intentionally aligned to repository and service access paths. Queue collections have dedicated scheduling indexes, source and canonical product collections cover identity and category matching, and the trust-history collections cover category and source time-series reads used by disagreement, trust, and change-event analysis.
+
 ### `Crawling`
 
 Contains the crawl and refresh mechanics:
@@ -136,6 +140,7 @@ This project references the shared solution layers and brings in:
 
 - MongoDB.Driver
 - Microsoft.Extensions configuration and dependency-injection abstractions
+- Microsoft.Extensions.Hosting.Abstractions for startup index initialization
 
 That is intentional: Domain stays focused on shared concepts and rules, while Infrastructure owns external dependencies.
 

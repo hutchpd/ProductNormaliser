@@ -3,6 +3,7 @@ using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.Normalisation)]
 public sealed class MonitorAttributeNormaliserTests
 {
     [Test]

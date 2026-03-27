@@ -6,6 +6,7 @@ using ProductNormaliser.Infrastructure.Mongo.Repositories;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.Intelligence)]
 public sealed class TemporalIntelligenceTests
 {
     [SetUp]

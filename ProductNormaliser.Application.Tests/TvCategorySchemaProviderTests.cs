@@ -3,6 +3,7 @@ using ProductNormaliser.Core.Schemas;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.CategorySchema)]
 public sealed class TvCategorySchemaProviderTests
 {
     private static readonly string[] RequiredKeys =

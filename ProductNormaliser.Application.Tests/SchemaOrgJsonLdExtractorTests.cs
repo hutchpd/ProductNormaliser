@@ -2,6 +2,7 @@ using ProductNormaliser.Infrastructure.StructuredData;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.Extraction)]
 public sealed class SchemaOrgJsonLdExtractorTests
 {
     private const string SourceUrl = "https://example.com/products/test-tv";

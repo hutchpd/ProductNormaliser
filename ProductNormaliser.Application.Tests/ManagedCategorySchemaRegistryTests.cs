@@ -3,8 +3,9 @@ using ProductNormaliser.Core.Models;
 using ProductNormaliser.Core.Schemas;
 using ProductNormaliser.Infrastructure.Schemas;
 
-namespace ProductNormaliser.Application.Tests;
+namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.CategorySchema)]
 public sealed class ManagedCategorySchemaRegistryTests
 {
     [Test]

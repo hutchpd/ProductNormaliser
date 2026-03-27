@@ -5,6 +5,7 @@ using ProductNormaliser.Infrastructure.Mongo.Repositories;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.Observability)]
 public sealed class DataIntelligenceTests
 {
     [SetUp]

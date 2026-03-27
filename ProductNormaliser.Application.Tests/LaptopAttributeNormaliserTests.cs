@@ -3,6 +3,7 @@ using ProductNormaliser.Core.Normalisation;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.Normalisation)]
 public sealed class LaptopAttributeNormaliserTests
 {
     [Test]

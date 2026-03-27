@@ -7,6 +7,7 @@ using ProductNormaliser.Worker;
 
 namespace ProductNormaliser.Tests;
 
+[Category(TestResponsibilities.Observability)]
 public sealed class AdminObservabilityTests
 {
     [SetUp]
