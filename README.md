@@ -173,6 +173,8 @@ Key settings:
 
 Admin API configuration lives in [ProductNormaliser.AdminApi/appsettings.json](ProductNormaliser.AdminApi/appsettings.json).
 
+Set the Admin API key under `ManagementApiSecurity:ApiKeys` in [ProductNormaliser.AdminApi/appsettings.json](ProductNormaliser.AdminApi/appsettings.json) and [ProductNormaliser.AdminApi/appsettings.Development.json](ProductNormaliser.AdminApi/appsettings.Development.json). Requests must send that secret in the `X-Management-Api-Key` header unless you have explicitly enabled the loopback-only development bypass.
+
 The optional classification layer is intentionally conservative. It is treated as one more signal in source evaluation and product-page validation, not as an autonomous decision-maker. If it is disabled, times out, or cannot load its local model, the platform continues with heuristics only.
 
 ## Running the worker
@@ -239,6 +241,8 @@ The admin API is a read-side service over the same MongoDB database.
 ```bash
 dotnet run --project ProductNormaliser.AdminApi
 ```
+
+The checked-in bootstrap management key values are suitable only for local development and tests. Replace them in configuration before using the Admin API anywhere else.
 
 The included HTTP scratch file suggests a local development base address of `http://localhost:5209`, although the final URL depends on your local ASP.NET Core launch configuration.
 

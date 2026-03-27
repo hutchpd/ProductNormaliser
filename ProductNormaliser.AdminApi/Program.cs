@@ -19,6 +19,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IManagementRequestOriginEvaluator, ManagementRequestOriginEvaluator>();
 builder.Services.AddAuthentication(ManagementSecurityConstants.AuthenticationScheme)
     .AddScheme<AuthenticationSchemeOptions, ManagementApiKeyAuthenticationHandler>(ManagementSecurityConstants.AuthenticationScheme, _ => { });
 builder.Services.AddAuthorization(options =>

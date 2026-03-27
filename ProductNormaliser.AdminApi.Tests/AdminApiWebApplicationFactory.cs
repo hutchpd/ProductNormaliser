@@ -1,40 +1,56 @@
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using ProductNormaliser.AdminApi.Contracts;
+using ProductNormaliser.AdminApi.Security;
 using ProductNormaliser.AdminApi.Services;
 using ProductNormaliser.Application.Sources;
 using ProductNormaliser.Core.Models;
 
 namespace ProductNormaliser.AdminApi.Tests;
 
-internal sealed class AdminApiWebApplicationFactory : WebApplicationFactory<Program>
+internal sealed class AdminApiWebApplicationFactory(
+    IReadOnlyDictionary<string, string?>? configurationOverrides = null,
+    bool? treatRequestAsLoopback = null)
+    : WebApplicationFactory<Program>
 {
+    internal const string ApiKeyHeaderName = ManagementSecurityConstants.ApiKeyHeaderName;
+    internal const string OperatorApiKey = "pn-admin-20260327-op-7b9e2d1f6a3c4d58";
+    internal const string ViewerApiKey = "pn-admin-20260327-view-2f6c8a1d4e7b9c30";
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
-        builder.ConfigureAppConfiguration((_, configBuilder) =>
+        if (configurationOverrides is not null && configurationOverrides.Count > 0)
         {
-            configBuilder.AddInMemoryCollection(new Dictionary<string, string?>
+            builder.ConfigureAppConfiguration((_, configBuilder) =>
             {
-                ["ManagementApiSecurity:ApiKeys:0:KeyId"] = "operator-key",
-                ["ManagementApiSecurity:ApiKeys:0:Secret"] = "operator-secret",
-                ["ManagementApiSecurity:ApiKeys:0:Role"] = "operator",
-                ["ManagementApiSecurity:ApiKeys:1:KeyId"] = "viewer-key",
-                ["ManagementApiSecurity:ApiKeys:1:Secret"] = "viewer-secret",
-                ["ManagementApiSecurity:ApiKeys:1:Role"] = "viewer"
+                configBuilder.AddInMemoryCollection(configurationOverrides);
             });
-        });
+        }
 
         builder.ConfigureServices(services =>
         {
+            if (treatRequestAsLoopback.HasValue)
+            {
+                services.RemoveAll<IManagementRequestOriginEvaluator>();
+                services.AddSingleton<IManagementRequestOriginEvaluator>(new StubManagementRequestOriginEvaluator(treatRequestAsLoopback.Value));
+            }
+
             services.RemoveAll<ISourceManagementService>();
             services.AddSingleton<ISourceManagementService>(new FakeSourceManagementService());
             services.RemoveAll<ISourceOperationalInsightsProvider>();
             services.AddSingleton<ISourceOperationalInsightsProvider>(new FakeSourceOperationalInsightsProvider());
         });
+    }
+
+    private sealed class StubManagementRequestOriginEvaluator(bool isLoopbackRequest) : IManagementRequestOriginEvaluator
+    {
+        public bool IsLoopbackRequest(HttpContext httpContext)
+            => isLoopbackRequest;
     }
 
     private sealed class FakeSourceManagementService : ISourceManagementService

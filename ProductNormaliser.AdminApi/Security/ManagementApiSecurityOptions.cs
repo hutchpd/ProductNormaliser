@@ -6,6 +6,9 @@ public sealed class ManagementApiSecurityOptions
 
     public string ApiKeyHeaderName { get; init; } = ManagementSecurityConstants.ApiKeyHeaderName;
 
+    public bool AllowDevelopmentLoopbackBypass { get; init; }
+        = false;
+
     public IReadOnlyList<ManagementApiKeyOptions> ApiKeys { get; init; } = [];
 }
 

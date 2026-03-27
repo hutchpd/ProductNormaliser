@@ -171,9 +171,13 @@ Observed operationally:
 
 ## Configuration
 
-Configuration is read from [appsettings.json](appsettings.json) and the environment.
+Configuration is read from [appsettings.json](appsettings.json), [appsettings.Development.json](appsettings.Development.json), and the environment.
 
-The default configuration currently includes logging levels and `AllowedHosts`.
+The Admin API key is configured under `ManagementApiSecurity`.
+
+- `ManagementApiSecurity:ApiKeyHeaderName` controls which header is inspected. The default is `X-Management-Api-Key`.
+- `ManagementApiSecurity:ApiKeys` contains the configured management keys. Set the `Secret` for the operator key here or override it with environment-specific configuration before exposing the API beyond your machine.
+- `ManagementApiSecurity:AllowDevelopmentLoopbackBypass` stays `false` by default. Only set it to `true` for explicit local loopback development when you intentionally want to skip the header on localhost requests.
 
 Because the API reads from MongoDB through shared infrastructure registration, it also needs the same `Mongo` settings used by the worker when running outside the existing local defaults.
 
@@ -186,6 +190,8 @@ From the repository root:
 ```bash
 dotnet run --project ProductNormaliser.AdminApi
 ```
+
+Send the configured operator key in the `X-Management-Api-Key` header. The checked-in bootstrap values live in [appsettings.json](appsettings.json) and [appsettings.Development.json](appsettings.Development.json); replace them in your own environment before using the API anywhere other than local development.
 
 OpenAPI is enabled in development.
 
@@ -203,7 +209,7 @@ The included HTTP scratch file suggests a local development base address of `htt
 ## Current scope and limitations
 
 - queue write flows are still not exposed as a public ingestion API
-- the API uses API-key authentication and operator or viewer roles for internal access, but it is not yet a fully hardened public security model
+- the API now requires a configured management API key for non-bypassed access, but it is still best treated as an internal operational surface rather than a public internet API
 - it is best treated as an operational admin surface, not a public internet API
 
 ## Build
