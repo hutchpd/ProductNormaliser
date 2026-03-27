@@ -23,6 +23,20 @@
     <h2 class="h4 mt-4">First-time local setup</h2>
     <ol>
         <li>
+            <div class="fw-semibold">Make the Web app and Admin API use the same management API key</div>
+            <p class="mb-2">
+                The Web app sends <code>AdminApi:ApiKey</code> from <code>ProductNormaliser.Web/appsettings.json</code> or
+                <code>ProductNormaliser.Web/appsettings.Development.json</code>. The Admin API accepts keys from
+                <code>ManagementApiSecurity:ApiKeys</code> in <code>ProductNormaliser.AdminApi/appsettings.json</code> or
+                <code>ProductNormaliser.AdminApi/appsettings.Development.json</code>.
+            </p>
+            <p class="mb-2">
+                Set <code>AdminApi:ApiKey</code> to the same <code>Secret</code> value as your operator key, then restart both apps.
+                The checked-in local defaults now already match; use this step when you rotate the key, override settings locally,
+                or intentionally enable the loopback-only bypass for local development.
+            </p>
+        </li>
+        <li>
             <div class="fw-semibold">Install MongoDB Community (or run it via Docker)</div>
             <ul>
                 <li>

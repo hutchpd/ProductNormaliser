@@ -175,6 +175,8 @@ Admin API configuration lives in [ProductNormaliser.AdminApi/appsettings.json](P
 
 Set the Admin API key under `ManagementApiSecurity:ApiKeys` in [ProductNormaliser.AdminApi/appsettings.json](ProductNormaliser.AdminApi/appsettings.json) and [ProductNormaliser.AdminApi/appsettings.Development.json](ProductNormaliser.AdminApi/appsettings.Development.json). Requests must send that secret in the `X-Management-Api-Key` header unless you have explicitly enabled the loopback-only development bypass.
 
+For local Web + Admin API startup, keep `AdminApi:ApiKey` in [ProductNormaliser.Web/appsettings.json](ProductNormaliser.Web/appsettings.json) or [ProductNormaliser.Web/appsettings.Development.json](ProductNormaliser.Web/appsettings.Development.json) aligned with the operator `Secret`. The checked-in local defaults now match for first run; if you override either side locally and they diverge, the Web app will receive `401 Unauthorized` until they match again or you intentionally enable the loopback-only bypass.
+
 The optional classification layer is intentionally conservative. It is treated as one more signal in source evaluation and product-page validation, not as an autonomous decision-maker. If it is disabled, times out, or cannot load its local model, the platform continues with heuristics only.
 
 ## Running the worker
