@@ -91,7 +91,7 @@ Adding a new category typically means:
 3. deciding identity heuristics and attribute reliability rules for that category
 4. registering metadata so the admin API and web dashboard can discover the category safely
 
-At the current maturity line, `tv`, `monitor`, `laptop`, and `smartphone` are the supported categories with the strongest schema, normalisation, and identity coverage. `tablet`, `headphones`, and `speakers` are enabled experimental categories with broader canonical field sets and category-specific normalisers, but they are still being hardened before promotion.
+At the current maturity line, `tv`, `monitor`, `laptop`, `smartphone`, `tablet`, `headphones`, and `speakers` are the supported categories with the strongest schema, normalisation, and identity coverage in the current rollout.
 
 ## How other projects use Domain
 

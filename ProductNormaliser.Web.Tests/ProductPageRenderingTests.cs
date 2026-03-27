@@ -81,7 +81,7 @@ public sealed class ProductPageRenderingTests
     }
 
     [Test]
-    public async Task ExplorerPage_RendersEnabledSupportedAndExperimentalCategoryOptions()
+    public async Task ExplorerPage_RendersEnabledSupportedCategoryOptions()
     {
         var fakeAdminApiClient = new FakeAdminApiClient
         {
@@ -90,10 +90,10 @@ public sealed class ProductPageRenderingTests
                 new CategoryMetadataDto { CategoryKey = "tv", DisplayName = "TVs", IsEnabled = true, CrawlSupportStatus = "Supported" },
                 new CategoryMetadataDto { CategoryKey = "monitor", DisplayName = "Monitors", IsEnabled = true, CrawlSupportStatus = "Supported" },
                 new CategoryMetadataDto { CategoryKey = "laptop", DisplayName = "Laptops", IsEnabled = true, CrawlSupportStatus = "Supported" },
-                new CategoryMetadataDto { CategoryKey = "tablet", DisplayName = "Tablets", IsEnabled = true, CrawlSupportStatus = "Experimental" },
+                new CategoryMetadataDto { CategoryKey = "tablet", DisplayName = "Tablets", IsEnabled = true, CrawlSupportStatus = "Supported" },
                 new CategoryMetadataDto { CategoryKey = "smartphone", DisplayName = "Smartphones", IsEnabled = true, CrawlSupportStatus = "Supported" },
-                new CategoryMetadataDto { CategoryKey = "headphones", DisplayName = "Headphones", IsEnabled = true, CrawlSupportStatus = "Experimental" },
-                new CategoryMetadataDto { CategoryKey = "speakers", DisplayName = "Speakers", IsEnabled = true, CrawlSupportStatus = "Experimental" },
+                new CategoryMetadataDto { CategoryKey = "headphones", DisplayName = "Headphones", IsEnabled = true, CrawlSupportStatus = "Supported" },
+                new CategoryMetadataDto { CategoryKey = "speakers", DisplayName = "Speakers", IsEnabled = true, CrawlSupportStatus = "Supported" },
                 new CategoryMetadataDto { CategoryKey = "refrigerator", DisplayName = "Refrigerators", IsEnabled = false, CrawlSupportStatus = "Planned" }
             ],
             ProductPage = new ProductListResponseDto { Page = 1, PageSize = 12, TotalCount = 0, TotalPages = 0 }
