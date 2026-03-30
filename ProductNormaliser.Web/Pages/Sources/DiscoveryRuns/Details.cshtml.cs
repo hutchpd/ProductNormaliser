@@ -86,6 +86,32 @@ public sealed class DetailsModel(
 
     public int LlmTimeoutCandidateCount => CandidateSummary.LlmTimeoutCandidateCount;
 
+    public int LlmMeasuredCandidateCount => CandidateSummary.LlmMeasuredCandidateCount;
+
+    public int LlmBudgetProbeCappedCandidateCount => CandidateSummary.LlmBudgetProbeCappedCandidateCount;
+
+    public long? AverageLlmBudgetMs => CandidateSummary.AverageLlmBudgetMs;
+
+    public decimal? AverageLlmBudgetUtilizationPercent => CandidateSummary.AverageLlmBudgetUtilizationPercent;
+
+    public bool HasLlmBudgetMeasurements => LlmMeasuredCandidateCount > 0;
+
+    public string ConfiguredLlmBudgetDisplay => Run?.LlmTimeoutBudgetMs is > 0
+        ? FormatDuration(Run.LlmTimeoutBudgetMs.Value)
+        : "n/a";
+
+    public string AverageLlmBudgetDisplay => AverageLlmBudgetMs is > 0
+        ? FormatDuration(AverageLlmBudgetMs.Value)
+        : "n/a";
+
+    public string AverageLlmBudgetUtilizationDisplay => AverageLlmBudgetUtilizationPercent is null
+        ? "n/a"
+        : $"{AverageLlmBudgetUtilizationPercent.Value:0.#}%";
+
+    public string WorstCaseSerialLlmLaneDisplay => Run?.LlmTimeoutBudgetMs is > 0
+        ? FormatDuration(Run.LlmTimeoutBudgetMs.Value * Math.Max(1, Run.MaxCandidates))
+        : "n/a";
+
     public IReadOnlyList<DiscoveryRunCandidateBlockerSummaryDto> AutoAcceptBlockers => CandidateSummary.AutoAcceptBlockers;
 
     public bool HasAutoAcceptBlockers => AutoAcceptBlockers.Count > 0;
@@ -277,6 +303,16 @@ public sealed class DetailsModel(
             : "Archived for reference";
     }
 
+    public string GetLlmBudgetProbeCapSummary()
+    {
+        if (LlmBudgetProbeCappedCandidateCount <= 0)
+        {
+            return "No measured candidates had their LLM budget reduced by earlier probe work.";
+        }
+
+        return $"{LlmBudgetProbeCappedCandidateCount} of {Math.Max(1, LlmMeasuredCandidateCount)} measured candidate(s) reached the LLM stage with a reduced budget because representative fetches had already consumed part of the end-to-end probe allowance.";
+    }
+
     private IReadOnlyList<DiscoveryRunActivityEntryModel> BuildActivityLogEntries()
     {
         if (Run is null)
@@ -397,6 +433,13 @@ public sealed class DetailsModel(
         var baselineUtc = run.StartedUtc ?? run.CreatedUtc;
         timestampUtc = baselineUtc.AddMilliseconds(searchElapsedMs);
         return true;
+    }
+
+    private static string FormatDuration(long durationMs)
+    {
+        return durationMs >= 1000
+            ? $"{durationMs / 1000d:0.#}s"
+            : $"{durationMs}ms";
     }
 
     private static bool IsSearchTimeoutDiagnostic(SourceCandidateDiscoveryDiagnosticDto diagnostic)

@@ -183,9 +183,20 @@
                     <div><dt>Completed</dt><dd>@Model.Run.LlmCompletedCount</dd></div>
                     <div><dt>Total elapsed</dt><dd>@Model.Run.LlmTotalElapsedMs ms</dd></div>
                     <div><dt>Average elapsed</dt><dd>@(Model.Run.LlmAverageElapsedMs?.ToString() ?? "n/a")</dd></div>
+                    <div><dt>Configured max budget</dt><dd>@Model.ConfiguredLlmBudgetDisplay</dd></div>
+                    <div><dt>Average effective budget</dt><dd>@Model.AverageLlmBudgetDisplay</dd></div>
+                    <div><dt>Average utilization</dt><dd>@Model.AverageLlmBudgetUtilizationDisplay</dd></div>
+                    <div><dt>Measured candidates</dt><dd>@Model.LlmMeasuredCandidateCount</dd></div>
+                    <div><dt>Probe-capped candidates</dt><dd>@Model.LlmBudgetProbeCappedCandidateCount</dd></div>
+                    <div><dt>Worst-case serial lane</dt><dd>@Model.WorstCaseSerialLlmLaneDisplay</dd></div>
                 </div>
 
                 <p class="empty-state mt-3">LLM verification intentionally runs serially or at very low concurrency so local inference stays predictable while the operator watches progress.</p>
+
+                @if (Model.HasLlmBudgetMeasurements)
+                {
+                    <p class="subtle-copy mt-3 mb-0">@Model.GetLlmBudgetProbeCapSummary()</p>
+                }
             </aside>
         </div>
 

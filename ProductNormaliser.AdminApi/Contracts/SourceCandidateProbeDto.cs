@@ -23,6 +23,8 @@ public sealed class SourceCandidateProbeDto
     public int ProbeAttemptCount { get; init; }
     public long ProbeElapsedMs { get; init; }
     public long? LlmElapsedMs { get; init; }
+    public long? LlmBudgetMs { get; init; }
+    public bool LlmBudgetLimitedByProbe { get; init; }
     public bool LlmTimedOut { get; init; }
     public bool StructuredProductEvidenceDetected { get; init; }
     public bool TechnicalAttributeEvidenceDetected { get; init; }

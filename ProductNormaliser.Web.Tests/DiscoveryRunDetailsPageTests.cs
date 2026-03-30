@@ -159,6 +159,54 @@ public sealed class DiscoveryRunDetailsPageTests
     }
 
     [Test]
+    public async Task OnGetAsync_ExposesRunLevelLlmBudgetAndUtilization()
+    {
+        var client = new FakeAdminApiClient
+        {
+            DiscoveryRun = CreateRun(status: "running", stage: "llm_verify", llmTimeoutBudgetMs: 3500),
+            DiscoveryRunCandidates =
+            [
+                CreateCandidate(
+                    "budgeted_1",
+                    "suggested",
+                    probe: new SourceCandidateProbeDto
+                    {
+                        LlmElapsedMs = 1750,
+                        LlmBudgetMs = 3500,
+                        LlmBudgetLimitedByProbe = false
+                    }),
+                CreateCandidate(
+                    "budgeted_2",
+                    "suggested",
+                    probe: new SourceCandidateProbeDto
+                    {
+                        LlmElapsedMs = 900,
+                        LlmBudgetMs = 1800,
+                        LlmBudgetLimitedByProbe = true
+                    })
+            ]
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel>.Instance)
+        {
+            RunId = "discovery_run_1"
+        };
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.ConfiguredLlmBudgetDisplay, Is.EqualTo("3.5s"));
+            Assert.That(model.AverageLlmBudgetDisplay, Is.EqualTo("2.7s"));
+            Assert.That(model.AverageLlmBudgetUtilizationDisplay, Is.EqualTo("50%"));
+            Assert.That(model.LlmMeasuredCandidateCount, Is.EqualTo(2));
+            Assert.That(model.LlmBudgetProbeCappedCandidateCount, Is.EqualTo(1));
+            Assert.That(model.WorstCaseSerialLlmLaneDisplay, Is.EqualTo("35s"));
+            Assert.That(model.GetLlmBudgetProbeCapSummary(), Does.Contain("1 of 2 measured candidate(s)"));
+        });
+    }
+
+    [Test]
     public async Task OnGetAsync_ExposesProcessorOnlyDecisionReasons_ForSuggestedCandidates()
     {
         var client = new FakeAdminApiClient
@@ -324,6 +372,7 @@ public sealed class DiscoveryRunDetailsPageTests
         string status,
         string stage,
         long? searchElapsedMs = null,
+        long? llmTimeoutBudgetMs = null,
         int searchResultCount = 4,
         int collapsedCandidateCount = 3,
         int probeCompletedCount = 2,
@@ -336,6 +385,7 @@ public sealed class DiscoveryRunDetailsPageTests
             Market = "UK",
             Locale = "en-GB",
             AutomationMode = "suggest_accept",
+            MaxCandidates = 10,
             Status = status,
             CurrentStage = stage,
             StatusMessage = "Working.",
@@ -348,6 +398,7 @@ public sealed class DiscoveryRunDetailsPageTests
             LlmCompletedCount = 2,
             LlmTotalElapsedMs = 440,
             LlmAverageElapsedMs = 220,
+            LlmTimeoutBudgetMs = llmTimeoutBudgetMs,
             SearchElapsedMs = searchElapsedMs,
             SuggestedCandidateCount = 1,
             AutoAcceptedCandidateCount = 1,

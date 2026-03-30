@@ -139,6 +139,10 @@ public sealed class DiscoveryRunsControllerTests
             Assert.That(dto.TotalCount, Is.EqualTo(1));
             Assert.That(dto.Items[0].CandidateKey, Is.EqualTo("safe_shop"));
             Assert.That(dto.Summary.ActiveCandidateCount, Is.EqualTo(1));
+            Assert.That(dto.Summary.LlmMeasuredCandidateCount, Is.EqualTo(1));
+            Assert.That(dto.Summary.LlmBudgetProbeCappedCandidateCount, Is.EqualTo(1));
+            Assert.That(dto.Summary.AverageLlmBudgetMs, Is.EqualTo(200));
+            Assert.That(dto.Summary.AverageLlmBudgetUtilizationPercent, Is.EqualTo(50m));
             Assert.That(dto.Summary.AutoAcceptBlockers.Any(blocker => blocker.Code == "duplicate_risk_high" && blocker.Count == 1), Is.True);
             Assert.That(service.LastCandidateQuery, Is.Not.Null);
             Assert.That(service.LastCandidateQuery!.StateFilter, Is.EqualTo(DiscoveryRunCandidateStateFilters.Active));
@@ -241,7 +245,12 @@ public sealed class DiscoveryRunsControllerTests
             RuntimeExtractionMessage = "Compatible.",
             MatchedCategoryKeys = ["tv"],
             AllowedByGovernance = true,
-            Probe = new DiscoveryRunCandidateProbe(),
+            Probe = new DiscoveryRunCandidateProbe
+            {
+                LlmElapsedMs = 100,
+                LlmBudgetMs = 200,
+                LlmBudgetLimitedByProbe = true
+            },
             AutomationAssessment = new DiscoveryRunCandidateAutomationAssessment(),
             CreatedUtc = DateTime.UtcNow,
             UpdatedUtc = DateTime.UtcNow
@@ -293,11 +302,15 @@ public sealed class DiscoveryRunsControllerTests
                     RunCandidateCount = RestoredCandidate is null ? 0 : 1,
                     ActiveCandidateCount = RestoredCandidate is null ? 0 : 1,
                     ArchivedCandidateCount = 0,
+                    LlmMeasuredCandidateCount = RestoredCandidate is null ? 0 : 1,
+                    LlmBudgetProbeCappedCandidateCount = RestoredCandidate is null ? 0 : 1,
                     ProbeTimeoutCandidateCount = 0,
                     RepresentativePageFetchFailureCandidateCount = 0,
                     RepresentativeCategoryFetchFailureCount = 0,
                     RepresentativeProductFetchFailureCount = 0,
                     LlmTimeoutCandidateCount = 0,
+                    AverageLlmBudgetMs = RestoredCandidate is null ? null : 200,
+                    AverageLlmBudgetUtilizationPercent = RestoredCandidate is null ? null : 50m,
                     AutoAcceptBlockers =
                     [
                         new DiscoveryRunCandidateBlockerSummary

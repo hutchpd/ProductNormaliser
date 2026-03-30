@@ -87,20 +87,23 @@ public sealed class LlamaPageClassificationService : IPageClassificationService,
             return CreateNeutralResult(MapStatusReason(initialStatus.Code), initialStatus.Code, initialStatus.Message);
         }
 
+        CancellationTokenSource? timeoutCts = null;
+        var effectiveCancellationToken = cancellationToken;
+        int? effectiveTimeoutMs = null;
+
+        if (!cancellationToken.CanBeCanceled)
+        {
+            effectiveTimeoutMs = Math.Max(1, options.TimeoutMs);
+            timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(effectiveTimeoutMs.Value));
+            effectiveCancellationToken = timeoutCts.Token;
+        }
+
         try
         {
             var normalizedCategory = NormalizeCategory(category);
             var prompt = BuildPrompt(content, normalizedCategory, options.MaxContentLength);
-            var inferenceTask = inferenceRunner(prompt, cancellationToken);
-            var completedTask = await Task.WhenAny(inferenceTask, Task.Delay(Math.Max(1, options.TimeoutMs), cancellationToken));
-            if (completedTask != inferenceTask)
-            {
-                logger.LogWarning("LLM page classification timed out after {TimeoutMs}ms. Continuing without LLM page classification for this request.", options.TimeoutMs);
-                MarkActive("LLM validation is enabled and active.");
-                return CreateNeutralResult("LLM timeout", LlmStatusCodes.Active, GetStatus().Message);
-            }
-
-            var output = await inferenceTask;
+            var output = await inferenceRunner(prompt, effectiveCancellationToken);
             var isYes = YesPattern.IsMatch(output ?? string.Empty);
             var confidence = isYes ? 0.8d : 0.2d;
             if (confidence < options.ConfidenceThreshold)
@@ -122,6 +125,16 @@ public sealed class LlamaPageClassificationService : IPageClassificationService,
                 Reason = isYes ? "LLM accepted representative product page." : "LLM rejected representative product page."
             };
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException) when (effectiveTimeoutMs is not null)
+        {
+            logger.LogWarning("LLM page classification timed out after {TimeoutMs}ms. Continuing without LLM page classification for this request.", effectiveTimeoutMs.Value);
+            MarkActive("LLM validation is enabled and active.");
+            return CreateNeutralResult("LLM timeout", LlmStatusCodes.Active, GetStatus().Message);
+        }
         catch (FileNotFoundException exception)
         {
             logger.LogWarning(exception, "The configured GGUF model could not be found. Continuing without LLM page classification.");
@@ -142,6 +155,10 @@ public sealed class LlamaPageClassificationService : IPageClassificationService,
             SetStatus(LlmStatusCodes.RuntimeFailed, "LLM validation is configured, but inference failed during this run. Discovery uses heuristics only.");
             var status = GetStatus();
             return CreateNeutralResult("LLM runtime failed", status.Code, status.Message);
+        }
+        finally
+        {
+            timeoutCts?.Dispose();
         }
     }
 

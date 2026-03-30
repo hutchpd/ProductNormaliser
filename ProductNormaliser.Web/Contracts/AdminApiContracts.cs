@@ -411,11 +411,15 @@ public sealed class DiscoveryRunCandidateRunSummaryDto
     public int RunCandidateCount { get; init; }
     public int ActiveCandidateCount { get; init; }
     public int ArchivedCandidateCount { get; init; }
+    public int LlmMeasuredCandidateCount { get; init; }
+    public int LlmBudgetProbeCappedCandidateCount { get; init; }
     public int ProbeTimeoutCandidateCount { get; init; }
     public int RepresentativePageFetchFailureCandidateCount { get; init; }
     public int RepresentativeCategoryFetchFailureCount { get; init; }
     public int RepresentativeProductFetchFailureCount { get; init; }
     public int LlmTimeoutCandidateCount { get; init; }
+    public long? AverageLlmBudgetMs { get; init; }
+    public decimal? AverageLlmBudgetUtilizationPercent { get; init; }
     public IReadOnlyList<DiscoveryRunCandidateBlockerSummaryDto> AutoAcceptBlockers { get; init; } = [];
 }
 
@@ -597,6 +601,8 @@ public sealed class SourceCandidateProbeDto
     public int ProbeAttemptCount { get; init; }
     public long ProbeElapsedMs { get; init; }
     public long? LlmElapsedMs { get; init; }
+    public long? LlmBudgetMs { get; init; }
+    public bool LlmBudgetLimitedByProbe { get; init; }
     public bool LlmTimedOut { get; init; }
     public bool StructuredProductEvidenceDetected { get; init; }
     public bool TechnicalAttributeEvidenceDetected { get; init; }

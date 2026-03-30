@@ -273,6 +273,26 @@ internal static class AdminApiContractValidator
             throw new InvalidOperationException("discoveryRunCandidatePage.totalPages must be zero or greater.");
         }
 
+        if (payload.Summary.LlmMeasuredCandidateCount < 0)
+        {
+            throw new InvalidOperationException("discoveryRunCandidatePage.summary.llmMeasuredCandidateCount must be zero or greater.");
+        }
+
+        if (payload.Summary.LlmBudgetProbeCappedCandidateCount < 0)
+        {
+            throw new InvalidOperationException("discoveryRunCandidatePage.summary.llmBudgetProbeCappedCandidateCount must be zero or greater.");
+        }
+
+        if (payload.Summary.AverageLlmBudgetMs < 0)
+        {
+            throw new InvalidOperationException("discoveryRunCandidatePage.summary.averageLlmBudgetMs must be zero or greater when provided.");
+        }
+
+        if (payload.Summary.AverageLlmBudgetUtilizationPercent < 0)
+        {
+            throw new InvalidOperationException("discoveryRunCandidatePage.summary.averageLlmBudgetUtilizationPercent must be zero or greater when provided.");
+        }
+
         ValidateItems(payload.Summary.AutoAcceptBlockers, "discoveryRunCandidatePage.summary.autoAcceptBlockers", (blocker, path) =>
         {
             if (string.IsNullOrWhiteSpace(blocker.Code))
@@ -569,6 +589,12 @@ internal static class AdminApiContractValidator
     private static void ValidateSourceCandidateProbe(SourceCandidateProbeDto payload, string path)
     {
         ArgumentNullException.ThrowIfNull(payload);
+
+        if (payload.LlmBudgetMs < 0)
+        {
+            throw new InvalidOperationException($"{path}.llmBudgetMs must be zero or greater when provided.");
+        }
+
         ValidateStringItems(payload.SitemapUrls, $"{path}.sitemapUrls");
         ValidateStringItems(payload.CategoryPageHints, $"{path}.categoryPageHints");
         ValidateStringItems(payload.LikelyListingUrlPatterns, $"{path}.likelyListingUrlPatterns");

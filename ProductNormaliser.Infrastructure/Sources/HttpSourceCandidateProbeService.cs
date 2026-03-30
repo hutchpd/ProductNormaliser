@@ -84,12 +84,13 @@ public sealed partial class HttpSourceCandidateProbeService(
         CancellationToken cancellationToken)
     {
         var attemptStopwatch = Stopwatch.StartNew();
+        var probeBudgetMs = Math.Max(1L, Math.Max(1, discoveryRunOperationsOptions.ProbeTimeoutSeconds) * 1000L);
 
         var normalizedAutomationMode = SourceAutomationModes.Normalize(automationMode);
         var collectAutomationEvidence = normalizedAutomationMode is SourceAutomationModes.SuggestAccept or SourceAutomationModes.AutoAcceptAndSeed;
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, discoveryRunOperationsOptions.ProbeTimeoutSeconds)));
+        timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(probeBudgetMs));
 
         var homePageTask = TryFetchTextAsync(candidate.BaseUrl, timeoutCts.Token);
         var robotsTask = TryFetchTextAsync(new Uri(new Uri(candidate.BaseUrl, UriKind.Absolute), "/robots.txt").ToString(), timeoutCts.Token);
@@ -143,9 +144,17 @@ public sealed partial class HttpSourceCandidateProbeService(
             .Select(value => value.Trim())
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault() ?? "product";
-        using var llmTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        llmTimeoutCts.CancelAfter(TimeSpan.FromMilliseconds(Math.Max(1, discoveryRunOperationsOptions.LlmVerificationTimeoutMs)));
-        var timedClassification = await TryClassifyRepresentativeProductPageAsync(representativeProductPageHtml, requestedCategory, llmTimeoutCts.Token, cancellationToken);
+        var effectiveLlmBudgetMs = GetEffectiveLlmBudgetMs(probeBudgetMs, attemptStopwatch.ElapsedMilliseconds, out var llmBudgetLimitedByProbe);
+        using var llmTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token);
+        llmTimeoutCts.CancelAfter(TimeSpan.FromMilliseconds(effectiveLlmBudgetMs));
+        var timedClassification = await TryClassifyRepresentativeProductPageAsync(
+            representativeProductPageHtml,
+            requestedCategory,
+            llmTimeoutCts.Token,
+            timeoutCts.Token,
+            cancellationToken,
+            effectiveLlmBudgetMs,
+            llmBudgetLimitedByProbe);
         var llmResult = timedClassification.Result;
         var llmNeutral = llmResult is not null && IsNeutralLlmResult(llmResult);
         var llmAcceptedRepresentativeProductPage = llmResult is not null
@@ -219,6 +228,8 @@ public sealed partial class HttpSourceCandidateProbeService(
             LlmConfidenceScore = llmResult is null ? null : decimal.Round((decimal)llmResult.Confidence * 100m, 2, MidpointRounding.AwayFromZero),
             LlmTimedOut = llmTimedOut,
             LlmReason = llmResult?.Reason,
+            LlmBudgetMs = timedClassification.BudgetMs > 0 ? timedClassification.BudgetMs : null,
+            LlmBudgetLimitedByProbe = timedClassification.BudgetLimitedByProbe,
             ProbeAttemptCount = attemptNumber,
             ProbeElapsedMs = attemptStopwatch.ElapsedMilliseconds,
             LlmElapsedMs = timedClassification.ElapsedMs > 0 ? timedClassification.ElapsedMs : null,
@@ -594,11 +605,18 @@ public sealed partial class HttpSourceCandidateProbeService(
         return extractabilityScore;
     }
 
-    private async Task<TimedPageClassificationResult> TryClassifyRepresentativeProductPageAsync(string? representativeProductPageHtml, string category, CancellationToken llmCancellationToken, CancellationToken outerCancellationToken)
+    private async Task<TimedPageClassificationResult> TryClassifyRepresentativeProductPageAsync(
+        string? representativeProductPageHtml,
+        string category,
+        CancellationToken llmCancellationToken,
+        CancellationToken probeBudgetCancellationToken,
+        CancellationToken requestCancellationToken,
+        long effectiveLlmBudgetMs,
+        bool llmBudgetLimitedByProbe)
     {
         if (string.IsNullOrWhiteSpace(representativeProductPageHtml))
         {
-            return new TimedPageClassificationResult(null, 0);
+            return new TimedPageClassificationResult(null, 0, 0, false);
         }
 
         var stopwatch = Stopwatch.StartNew();
@@ -613,27 +631,42 @@ public sealed partial class HttpSourceCandidateProbeService(
                 LlmStatus = LlmStatusCodes.Disabled,
                 LlmStatusMessage = "LLM validation is disabled for this environment. Set Llm:Enabled=true and configure a local GGUF model to enable it. Discovery uses heuristics only.",
                 Reason = "LLM disabled"
-            }, stopwatch.ElapsedMilliseconds);
+            }, stopwatch.ElapsedMilliseconds, 0, false);
         }
 
         try
         {
             return new TimedPageClassificationResult(
                 await pageClassifier.ClassifyAsync(representativeProductPageHtml, category, llmCancellationToken),
-                stopwatch.ElapsedMilliseconds);
+                stopwatch.ElapsedMilliseconds,
+                effectiveLlmBudgetMs,
+                llmBudgetLimitedByProbe);
         }
-        catch (OperationCanceledException) when (!outerCancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (requestCancellationToken.IsCancellationRequested)
         {
-            logger.LogWarning("Representative product-page classification timed out after {TimeoutMs}ms for category {Category} during candidate probing.", discoveryRunOperationsOptions.LlmVerificationTimeoutMs, category);
+            throw;
+        }
+        catch (OperationCanceledException) when (probeBudgetCancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            logger.LogWarning(
+                "Representative product-page classification timed out after {TimeoutMs}ms for category {Category} during candidate probing. Configured LLM budget={ConfiguredBudgetMs}ms, budgetLimitedByProbe={BudgetLimitedByProbe}.",
+                effectiveLlmBudgetMs,
+                category,
+                Math.Max(1, discoveryRunOperationsOptions.LlmVerificationTimeoutMs),
+                llmBudgetLimitedByProbe);
             return new TimedPageClassificationResult(new PageClassificationResult
             {
                 IsProductPage = false,
                 HasSpecifications = false,
                 Confidence = 0d,
                 LlmStatus = LlmStatusCodes.Active,
-                LlmStatusMessage = GetStatusMessage(),
+                LlmStatusMessage = GetStatusMessage(effectiveLlmBudgetMs, llmBudgetLimitedByProbe),
                 Reason = "LLM timeout"
-            }, stopwatch.ElapsedMilliseconds);
+            }, stopwatch.ElapsedMilliseconds, effectiveLlmBudgetMs, llmBudgetLimitedByProbe);
         }
         catch (Exception exception)
         {
@@ -646,15 +679,29 @@ public sealed partial class HttpSourceCandidateProbeService(
                 LlmStatus = LlmStatusCodes.RuntimeFailed,
                 LlmStatusMessage = "LLM validation is configured, but inference failed during this run. Discovery uses heuristics only.",
                 Reason = "LLM runtime failed"
-            }, stopwatch.ElapsedMilliseconds);
+            }, stopwatch.ElapsedMilliseconds, effectiveLlmBudgetMs, llmBudgetLimitedByProbe);
         }
     }
 
-    private string GetStatusMessage()
+    private string GetStatusMessage(long effectiveLlmBudgetMs, bool llmBudgetLimitedByProbe)
     {
         return llmOptions.Enabled
-            ? $"LLM verification timed out after {discoveryRunOperationsOptions.LlmVerificationTimeoutMs}ms. Discovery used heuristics only for this candidate."
+            ? llmBudgetLimitedByProbe
+                ? $"LLM verification timed out after {effectiveLlmBudgetMs}ms. Discovery used heuristics only for this candidate because representative-page fetches had already consumed part of the end-to-end probe budget."
+                : $"LLM verification timed out after {effectiveLlmBudgetMs}ms. Discovery used heuristics only for this candidate."
             : "LLM validation is disabled for this environment. Set Llm:Enabled=true and configure a local GGUF model to enable it. Discovery uses heuristics only.";
+    }
+
+    private long GetEffectiveLlmBudgetMs(long probeBudgetMs, long elapsedMs, out bool llmBudgetLimitedByProbe)
+    {
+        var configuredLlmBudgetMs = Math.Max(1L, discoveryRunOperationsOptions.LlmVerificationTimeoutMs);
+        var remainingProbeBudgetMs = Math.Max(1L, probeBudgetMs - Math.Max(0L, elapsedMs));
+        var probeCappedLlmBudgetMs = remainingProbeBudgetMs <= 1L
+            ? 1L
+            : remainingProbeBudgetMs - 1L;
+        var effectiveBudgetMs = Math.Min(configuredLlmBudgetMs, probeCappedLlmBudgetMs);
+        llmBudgetLimitedByProbe = effectiveBudgetMs < configuredLlmBudgetMs;
+        return Math.Max(1L, effectiveBudgetMs);
     }
 
     private static TimeSpan GetRetryDelay(int attempt, int baseDelayMs)
@@ -880,7 +927,7 @@ public sealed partial class HttpSourceCandidateProbeService(
 
     private sealed record FetchedPageSample(string Url, string? Html);
 
-    private sealed record TimedPageClassificationResult(PageClassificationResult? Result, long ElapsedMs);
+    private sealed record TimedPageClassificationResult(PageClassificationResult? Result, long ElapsedMs, long BudgetMs, bool BudgetLimitedByProbe);
 
     private sealed record ProductSampleEvidence(
         string? Url,

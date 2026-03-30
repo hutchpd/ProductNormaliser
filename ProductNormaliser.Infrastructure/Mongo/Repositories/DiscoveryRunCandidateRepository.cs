@@ -81,6 +81,22 @@ public sealed class DiscoveryRunCandidateRepository(MongoDbContext context)
     {
         var representativeCategoryFetchFailureCount = candidates.Count(candidate => candidate.Probe.RepresentativeCategoryPageFetchFailed);
         var representativeProductFetchFailureCount = candidates.Count(candidate => candidate.Probe.RepresentativeProductPageFetchFailed);
+        var llmMeasuredCandidates = candidates
+            .Where(candidate => candidate.Probe.LlmElapsedMs is > 0)
+            .ToArray();
+        var llmBudgetedCandidates = candidates
+            .Where(candidate => candidate.Probe.LlmBudgetMs is > 0)
+            .ToArray();
+        var averageLlmBudgetMs = llmBudgetedCandidates.Length == 0
+            ? null
+            : (long?)Math.Round(llmBudgetedCandidates.Average(candidate => candidate.Probe.LlmBudgetMs ?? 0L), MidpointRounding.AwayFromZero);
+        var averageLlmBudgetUtilizationPercent = llmMeasuredCandidates.Length == 0
+            ? (decimal?)null
+            : decimal.Round(
+                (decimal)llmMeasuredCandidates.Average(candidate =>
+                    (candidate.Probe.LlmElapsedMs ?? 0L) / (double)Math.Max(1L, candidate.Probe.LlmBudgetMs ?? 0L)) * 100m,
+                1,
+                MidpointRounding.AwayFromZero);
         var autoAcceptBlockers = BuildAutoAcceptBlockers(candidates);
 
         return new DiscoveryRunCandidateRunSummary
@@ -88,11 +104,15 @@ public sealed class DiscoveryRunCandidateRepository(MongoDbContext context)
             RunCandidateCount = candidates.Count,
             ActiveCandidateCount = candidates.Count(candidate => IsInActiveQueue(candidate.State)),
             ArchivedCandidateCount = candidates.Count(candidate => IsInArchivedQueue(candidate.State)),
+            LlmMeasuredCandidateCount = llmMeasuredCandidates.Length,
+            LlmBudgetProbeCappedCandidateCount = candidates.Count(candidate => candidate.Probe.LlmBudgetLimitedByProbe),
             ProbeTimeoutCandidateCount = candidates.Count(candidate => candidate.Probe.ProbeTimedOut),
             RepresentativePageFetchFailureCandidateCount = candidates.Count(candidate => candidate.Probe.RepresentativeCategoryPageFetchFailed || candidate.Probe.RepresentativeProductPageFetchFailed),
             RepresentativeCategoryFetchFailureCount = representativeCategoryFetchFailureCount,
             RepresentativeProductFetchFailureCount = representativeProductFetchFailureCount,
             LlmTimeoutCandidateCount = candidates.Count(candidate => candidate.Probe.LlmTimedOut),
+            AverageLlmBudgetMs = averageLlmBudgetMs,
+            AverageLlmBudgetUtilizationPercent = averageLlmBudgetUtilizationPercent,
             AutoAcceptBlockers = autoAcceptBlockers
         };
     }

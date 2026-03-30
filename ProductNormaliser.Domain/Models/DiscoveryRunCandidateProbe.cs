@@ -38,6 +38,8 @@ public sealed class DiscoveryRunCandidateProbe
     public decimal? LlmConfidenceScore { get; set; }
     public bool LlmTimedOut { get; set; }
     public string? LlmReason { get; set; }
+    public long? LlmBudgetMs { get; set; }
+    public bool LlmBudgetLimitedByProbe { get; set; }
     public int ProbeAttemptCount { get; set; }
     public long ProbeElapsedMs { get; set; }
     public long? LlmElapsedMs { get; set; }

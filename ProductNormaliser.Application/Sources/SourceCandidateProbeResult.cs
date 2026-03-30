@@ -38,6 +38,8 @@ public sealed class SourceCandidateProbeResult
     public decimal? LlmConfidenceScore { get; init; }
     public bool LlmTimedOut { get; init; }
     public string? LlmReason { get; init; }
+    public long? LlmBudgetMs { get; init; }
+    public bool LlmBudgetLimitedByProbe { get; init; }
     public int ProbeAttemptCount { get; init; }
     public long ProbeElapsedMs { get; init; }
     public long? LlmElapsedMs { get; init; }

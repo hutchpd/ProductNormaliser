@@ -33,6 +33,8 @@ public sealed class DiscoveryRunProcessorTests
             Assert.That(collector.GetMeasurements("productnormaliser.discovery.search.duration").Count, Is.EqualTo(1));
             Assert.That(collector.GetMeasurements("productnormaliser.discovery.probe.duration").Count, Is.EqualTo(2));
             Assert.That(collector.GetMeasurements("productnormaliser.discovery.llm.duration").Count, Is.EqualTo(2));
+            Assert.That(collector.GetMeasurements("productnormaliser.discovery.llm.budget").Count, Is.EqualTo(2));
+            Assert.That(collector.GetMeasurements("productnormaliser.discovery.llm.budget_utilization").Count, Is.EqualTo(2));
             Assert.That(collector.GetMeasurements("productnormaliser.discovery.candidates.processed").Count, Is.EqualTo(2));
             Assert.That(collector.GetMeasurements("productnormaliser.discovery.candidate_throughput_per_minute"), Is.Not.Empty);
             Assert.That(collector.GetMeasurements("productnormaliser.discovery.acceptance_rate"), Is.Not.Empty);
@@ -101,6 +103,32 @@ public sealed class DiscoveryRunProcessorTests
             Assert.That(candidates[0].State, Is.EqualTo(DiscoveryRunCandidateStates.AutoAccepted));
             Assert.That(candidates[0].AcceptedSourceId, Is.EqualTo("safe_shop"));
             Assert.That(sourceManagement.Registrations.Select(item => item.SourceId), Is.EqualTo(new[] { "safe_shop" }));
+        });
+    }
+
+    [Test]
+    public async Task ProcessNextAsync_ExplainsProbeAndSerialLlmBudgetPrecedence()
+    {
+        var run = CreateQueuedRun(SourceAutomationModes.AutoAcceptAndSeed, llmStatus: "active");
+        var runStore = new FakeDiscoveryRunStore(run);
+        var candidateStore = new FakeDiscoveryRunCandidateStore();
+        var processor = CreateProcessor(
+            runStore,
+            candidateStore,
+            new FakeCrawlSourceStore(),
+            new RecordingSourceManagementService(),
+            new FixedSearchProvider(CreateSearchCandidate()),
+            new FixedProbeService(CreateStrongProbeResult()));
+
+        await processor.ProcessNextAsync(CancellationToken.None);
+        var storedRun = await runStore.GetAsync(run.RunId, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(storedRun, Is.Not.Null);
+            Assert.That(storedRun!.Diagnostics.Single(diagnostic => diagnostic.Code == "probe_budget").Message, Does.Contain("end-to-end per candidate"));
+            Assert.That(storedRun.Diagnostics.Single(diagnostic => diagnostic.Code == "llm_budget").Message, Does.Contain("capped by the remaining probe budget"));
+            Assert.That(storedRun.Diagnostics.Single(diagnostic => diagnostic.Code == "llm_budget").Message, Does.Contain("serially with concurrency 1"));
         });
     }
 
@@ -521,6 +549,7 @@ public sealed class DiscoveryRunProcessorTests
             TechnicalAttributeEvidenceDetected = true,
             LlmAcceptedRepresentativeProductPage = true,
             LlmConfidenceScore = 96m,
+            LlmBudgetMs = 3500,
             ProbeElapsedMs = 120,
             LlmElapsedMs = 250
         };

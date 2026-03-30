@@ -73,6 +73,8 @@ internal static class DiscoveryRunMapper
                 LlmConfidenceScore = candidate.Probe.LlmConfidenceScore,
                 LlmTimedOut = candidate.Probe.LlmTimedOut,
                 LlmReason = candidate.Probe.LlmReason,
+                LlmBudgetMs = candidate.Probe.LlmBudgetMs,
+                LlmBudgetLimitedByProbe = candidate.Probe.LlmBudgetLimitedByProbe,
                 ProbeAttemptCount = candidate.Probe.ProbeAttemptCount,
                 ProbeElapsedMs = candidate.Probe.ProbeElapsedMs,
                 LlmElapsedMs = candidate.Probe.LlmElapsedMs,

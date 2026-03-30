@@ -831,11 +831,23 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
                 RunCandidateCount = allItems.Length,
                 ActiveCandidateCount = allItems.Count(candidate => !IsArchivedCandidate(candidate.State)),
                 ArchivedCandidateCount = allItems.Count(candidate => IsArchivedCandidate(candidate.State)),
+                LlmMeasuredCandidateCount = allItems.Count(candidate => candidate.Probe.LlmElapsedMs is > 0),
+                LlmBudgetProbeCappedCandidateCount = allItems.Count(candidate => candidate.Probe.LlmBudgetLimitedByProbe),
                 ProbeTimeoutCandidateCount = allItems.Count(candidate => candidate.Probe.ProbeTimedOut),
                 RepresentativePageFetchFailureCandidateCount = allItems.Count(candidate => candidate.Probe.RepresentativeCategoryPageFetchFailed || candidate.Probe.RepresentativeProductPageFetchFailed),
                 RepresentativeCategoryFetchFailureCount = allItems.Count(candidate => candidate.Probe.RepresentativeCategoryPageFetchFailed),
                 RepresentativeProductFetchFailureCount = allItems.Count(candidate => candidate.Probe.RepresentativeProductPageFetchFailed),
                 LlmTimeoutCandidateCount = allItems.Count(candidate => candidate.Probe.LlmTimedOut),
+                AverageLlmBudgetMs = allItems.Any(candidate => candidate.Probe.LlmBudgetMs is > 0)
+                    ? (long?)Math.Round(allItems.Where(candidate => candidate.Probe.LlmBudgetMs is > 0).Average(candidate => candidate.Probe.LlmBudgetMs ?? 0L), MidpointRounding.AwayFromZero)
+                    : null,
+                AverageLlmBudgetUtilizationPercent = allItems.Any(candidate => candidate.Probe.LlmElapsedMs is > 0 && candidate.Probe.LlmBudgetMs is > 0)
+                    ? decimal.Round(
+                        (decimal)allItems.Where(candidate => candidate.Probe.LlmElapsedMs is > 0 && candidate.Probe.LlmBudgetMs is > 0)
+                            .Average(candidate => (candidate.Probe.LlmElapsedMs ?? 0L) / (double)Math.Max(1L, candidate.Probe.LlmBudgetMs ?? 0L)) * 100m,
+                        1,
+                        MidpointRounding.AwayFromZero)
+                    : null,
                 AutoAcceptBlockers = BuildAutoAcceptBlockers(allItems)
             }
         };

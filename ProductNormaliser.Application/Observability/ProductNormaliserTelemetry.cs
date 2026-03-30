@@ -106,6 +106,16 @@ public static class ProductNormaliserTelemetry
         unit: "ms",
         description: "LLM verification latency per candidate.");
 
+    public static readonly Histogram<double> DiscoveryLlmBudgetMs = Meter.CreateHistogram<double>(
+        "productnormaliser.discovery.llm.budget",
+        unit: "ms",
+        description: "Effective LLM verification budget per candidate after applying the remaining end-to-end probe budget.");
+
+    public static readonly Histogram<double> DiscoveryLlmBudgetUtilization = Meter.CreateHistogram<double>(
+        "productnormaliser.discovery.llm.budget_utilization",
+        unit: "ratio",
+        description: "Observed LLM verification duration divided by the effective per-candidate LLM budget.");
+
     public static readonly Histogram<int> DiscoveryLlmQueueDepth = Meter.CreateHistogram<int>(
         "productnormaliser.discovery.llm.queue_depth",
         unit: "{candidate}",

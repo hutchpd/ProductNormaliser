@@ -87,6 +87,8 @@ public sealed class SourceCandidateDiscoveryController(ISourceCandidateDiscovery
                         ProbeAttemptCount = candidate.Probe.ProbeAttemptCount,
                         ProbeElapsedMs = candidate.Probe.ProbeElapsedMs,
                         LlmElapsedMs = candidate.Probe.LlmElapsedMs,
+                        LlmBudgetMs = candidate.Probe.LlmBudgetMs,
+                        LlmBudgetLimitedByProbe = candidate.Probe.LlmBudgetLimitedByProbe,
                         StructuredProductEvidenceDetected = candidate.Probe.StructuredProductEvidenceDetected,
                         TechnicalAttributeEvidenceDetected = candidate.Probe.TechnicalAttributeEvidenceDetected,
                         NonCatalogContentHeavy = candidate.Probe.NonCatalogContentHeavy,

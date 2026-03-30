@@ -235,14 +235,15 @@ internal sealed class SourceCandidateDiscoveryEvaluator(SourceOnboardingAutomati
                             || string.Equals(NormalizeNeutralLlmReason(candidate.Probe.LlmReason), group.Key, StringComparison.OrdinalIgnoreCase))
                         .ToArray();
                     var timeoutAverageMs = GetAverageDurationMs(timeoutCandidates.Select(candidate => candidate.Probe.LlmElapsedMs));
+                    var probeLimitedTimeoutCount = timeoutCandidates.Count(candidate => candidate.Probe.LlmBudgetLimitedByProbe);
                     diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
                     {
                         Code = "llm_timeout",
                         Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
                         Title = "LLM validation timed out",
                         Message = timeoutAverageMs is null
-                            ? $"Representative product-page classification timed out for {count} candidate(s). Search and page probing still completed, but those hosts were scored with heuristics only."
-                            : $"Representative product-page classification timed out for {count} candidate(s) after about {FormatDuration(timeoutAverageMs.Value)} per candidate. Search and page probing still completed, but those hosts were scored with heuristics only."
+                            ? $"Representative product-page classification timed out for {count} candidate(s). Search and page probing still completed, but those hosts were scored with heuristics only.{BuildProbeBudgetCapSuffix(probeLimitedTimeoutCount)}"
+                            : $"Representative product-page classification timed out for {count} candidate(s) after about {FormatDuration(timeoutAverageMs.Value)} per candidate. Search and page probing still completed, but those hosts were scored with heuristics only.{BuildProbeBudgetCapSuffix(probeLimitedTimeoutCount)}"
                     });
                     break;
 
@@ -275,12 +276,16 @@ internal sealed class SourceCandidateDiscoveryEvaluator(SourceOnboardingAutomati
         {
             var totalElapsedMs = llmMeasuredCandidates.Sum(candidate => candidate.Probe.LlmElapsedMs ?? 0);
             var averageElapsedMs = (long)Math.Round(totalElapsedMs / (double)llmMeasuredCandidates.Length, MidpointRounding.AwayFromZero);
+            var averageBudgetMs = GetAverageDurationMs(llmMeasuredCandidates.Select(candidate => candidate.Probe.LlmBudgetMs));
+            var probeLimitedCount = llmMeasuredCandidates.Count(candidate => candidate.Probe.LlmBudgetLimitedByProbe);
             diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
             {
                 Code = "llm_throughput",
                 Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
                 Title = "Local LLM verification throughput",
-                Message = $"Representative product-page validation processed {llmMeasuredCandidates.Length} candidate(s) in {FormatDuration(totalElapsedMs)} total, averaging {FormatDuration(averageElapsedMs)} per candidate. Local verification runs serially so the model can keep up."
+                Message = averageBudgetMs is null
+                    ? $"Representative product-page validation processed {llmMeasuredCandidates.Length} candidate(s) in {FormatDuration(totalElapsedMs)} total, averaging {FormatDuration(averageElapsedMs)} per candidate. Local verification runs serially so the model can keep up.{BuildProbeBudgetCapSuffix(probeLimitedCount)}"
+                    : $"Representative product-page validation processed {llmMeasuredCandidates.Length} candidate(s) in {FormatDuration(totalElapsedMs)} total, averaging {FormatDuration(averageElapsedMs)} per candidate against an effective budget of about {FormatDuration(averageBudgetMs.Value)}. Local verification runs serially so the model can keep up.{BuildProbeBudgetCapSuffix(probeLimitedCount)}"
             });
         }
 
@@ -386,6 +391,13 @@ internal sealed class SourceCandidateDiscoveryEvaluator(SourceOnboardingAutomati
             "LLM disabled" => "LLM disabled",
             _ => null
         };
+    }
+
+    private static string BuildProbeBudgetCapSuffix(int probeLimitedCount)
+    {
+        return probeLimitedCount <= 0
+            ? string.Empty
+            : $" For {probeLimitedCount} candidate(s), the LLM budget had already been reduced by earlier probe work.";
     }
 
     private static IReadOnlyList<SourceCandidateReason> BuildReasons(SourceCandidateSearchResult searchResult, SourceCandidateProbeResult probe, IReadOnlyCollection<CrawlSource> duplicateSources, string? governanceWarning)

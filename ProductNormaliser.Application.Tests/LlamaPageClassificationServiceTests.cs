@@ -95,6 +95,28 @@ public sealed class LlamaPageClassificationServiceTests
     }
 
     [Test]
+    public async Task ClassifyAsync_UsesCallerBudgetWhenCancellationTokenIsSupplied()
+    {
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+        var service = new LlamaPageClassificationService(
+            new LlmOptions { ModelPath = "models/test.gguf", TimeoutMs = 25 },
+            async (_, cancellationToken) =>
+            {
+                await Task.Delay(60, cancellationToken);
+                return "YES";
+            });
+
+        var result = await service.ClassifyAsync("content", "tv", timeoutCts.Token);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsProductPage, Is.True);
+            Assert.That(result.LlmStatus, Is.EqualTo(LlmStatusCodes.Active));
+            Assert.That(result.Reason, Does.Contain("accepted"));
+        });
+    }
+
+    [Test]
     public async Task ClassifyAsync_ReturnsUnconfiguredWhenConfiguredModelIsMissing()
     {
         var service = new LlamaPageClassificationService(new LlmOptions

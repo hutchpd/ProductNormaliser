@@ -330,6 +330,18 @@ public sealed class DiscoveryRunProcessor(
                     run.LlmTotalElapsedMs += probe.LlmElapsedMs.Value;
                     run.LlmAverageElapsedMs = (long)Math.Round(run.LlmTotalElapsedMs / (double)run.LlmCompletedCount, MidpointRounding.AwayFromZero);
                     ProductNormaliserTelemetry.DiscoveryLlmDurationMs.Record(probe.LlmElapsedMs.Value, new TagList { { "automation_mode", run.AutomationMode } });
+                    if (probe.LlmBudgetMs is > 0)
+                    {
+                        var llmTags = new TagList
+                        {
+                            { "automation_mode", run.AutomationMode },
+                            { "budget_limited_by_probe", probe.LlmBudgetLimitedByProbe }
+                        };
+                        ProductNormaliserTelemetry.DiscoveryLlmBudgetMs.Record(probe.LlmBudgetMs.Value, llmTags);
+                        ProductNormaliserTelemetry.DiscoveryLlmBudgetUtilization.Record(
+                            probe.LlmElapsedMs.Value / (double)Math.Max(1L, probe.LlmBudgetMs.Value),
+                            llmTags);
+                    }
                 }
 
                 run.LlmQueueDepth = Math.Max(0, collapsedCandidates.Count - (index + 1));
@@ -652,15 +664,22 @@ public sealed class DiscoveryRunProcessor(
             Code = "probe_budget",
             Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
             Title = "Probe budget",
-            Message = $"Probe-fetch budget is {run.ProbeTimeoutBudgetMs}ms per candidate."
+            Message = $"Probe budget is {run.ProbeTimeoutBudgetMs}ms end-to-end per candidate, covering representative fetches and any local LLM verification."
         });
         AppendUniqueDiagnostic(run.Diagnostics, new DiscoveryRunDiagnostic
         {
             Code = "llm_budget",
             Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
             Title = "LLM budget",
-            Message = $"LLM verification budget is {run.LlmTimeoutBudgetMs}ms per candidate."
+            Message = $"LLM verification budget is up to {run.LlmTimeoutBudgetMs}ms per candidate, but it is capped by the remaining probe budget. Verification currently runs serially with concurrency 1, so a run capped at {run.MaxCandidates} candidate(s) can spend up to {FormatDuration(Math.Max(1L, run.LlmTimeoutBudgetMs ?? 0L) * Math.Max(1, run.MaxCandidates))} in the LLM lane when every candidate reaches the limit."
         });
+    }
+
+    private static string FormatDuration(long durationMs)
+    {
+        return durationMs >= 1000
+            ? $"{durationMs / 1000d:0.#}s"
+            : $"{durationMs}ms";
     }
 
     private static string CreateHistoricalSuppressionMessage(DiscoveryRunCandidateDisposition disposition)
