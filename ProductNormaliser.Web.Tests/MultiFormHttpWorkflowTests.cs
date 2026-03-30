@@ -104,6 +104,53 @@ public sealed class MultiFormHttpWorkflowTests
     }
 
     [Test]
+    public async Task SourceDetails_DiscoveryForm_PostsSuccessfully_WhenAllowedHostsIsEmpty()
+    {
+        var source = CreateSource("ao_uk", "AO UK", ["tv"]);
+        var fakeAdminApiClient = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            Source = source,
+            Sources = [source]
+        };
+
+        await using var factory = new ProductWebApplicationFactory(fakeAdminApiClient);
+        using var client = await factory.CreateOperatorClientAsync();
+
+        var pageHtml = await client.GetStringAsync("/Sources/Details/ao_uk");
+        var requestVerificationToken = ExtractRequestVerificationToken(pageHtml);
+
+        var response = await client.PostAsync("/Sources/Details/ao_uk?handler=Discovery", new FormUrlEncodedContent(
+        [
+            new KeyValuePair<string, string>("__RequestVerificationToken", requestVerificationToken),
+            new KeyValuePair<string, string>("Discovery.CategoryEntryPages", "tv=/tv, /oled"),
+            new KeyValuePair<string, string>("Discovery.SitemapHints", "/sitemap.xml"),
+            new KeyValuePair<string, string>("Discovery.AllowedHosts", string.Empty),
+            new KeyValuePair<string, string>("Discovery.AllowedPathPrefixes", "/tv\n/product"),
+            new KeyValuePair<string, string>("Discovery.ExcludedPathPrefixes", "/support"),
+            new KeyValuePair<string, string>("Discovery.ProductUrlPatterns", "/product/\n/p/"),
+            new KeyValuePair<string, string>("Discovery.ListingUrlPatterns", "/category/\n/department/"),
+            new KeyValuePair<string, string>("Discovery.MaxDiscoveryDepth", "4"),
+            new KeyValuePair<string, string>("Discovery.MaxUrlsPerRun", "800"),
+            new KeyValuePair<string, string>("Discovery.MaxRetryCount", "3"),
+            new KeyValuePair<string, string>("Discovery.RetryBackoffBaseMs", "1000"),
+            new KeyValuePair<string, string>("Discovery.RetryBackoffMaxMs", "30000")
+        ]));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
+            Assert.That(response.Headers.Location, Is.Not.Null);
+            Assert.That(response.Headers.Location!.ToString(), Does.Contain("/Sources/Details/ao_uk"));
+            Assert.That(fakeAdminApiClient.LastUpdatedSourceId, Is.EqualTo("ao_uk"));
+            Assert.That(fakeAdminApiClient.LastUpdatedSourceRequest, Is.Not.Null);
+            Assert.That(fakeAdminApiClient.LastUpdatedSourceRequest!.DiscoveryProfile, Is.Not.Null);
+            Assert.That(fakeAdminApiClient.LastUpdatedSourceRequest.DiscoveryProfile!.AllowedHosts, Is.Empty);
+            Assert.That(fakeAdminApiClient.LastUpdatedSourceRequest.DiscoveryProfile.CategoryEntryPages["tv"], Is.EqualTo(new[] { "/tv", "/oled" }));
+        });
+    }
+
+    [Test]
     public async Task OperatorLanding_SaveCategorySchema_PostsSuccessfully_WhenQuickCrawlFormIsEmpty()
     {
         var fakeAdminApiClient = new FakeAdminApiClient

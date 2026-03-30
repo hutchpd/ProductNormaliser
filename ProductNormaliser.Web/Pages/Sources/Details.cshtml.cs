@@ -462,7 +462,7 @@ public sealed class DetailsModel(
         return true;
     }
 
-    private static IReadOnlyList<string> ParseLineList(string value)
+    private static IReadOnlyList<string> ParseLineList(string? value)
     {
         return SplitLines(value)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -551,25 +551,25 @@ public sealed class DetailsModel(
     public sealed class DiscoveryProfileInput
     {
         [Display(Name = "Category entry pages")]
-        public string CategoryEntryPages { get; set; } = string.Empty;
+        public string? CategoryEntryPages { get; set; }
 
         [Display(Name = "Sitemap hints")]
-        public string SitemapHints { get; set; } = string.Empty;
+        public string? SitemapHints { get; set; }
 
         [Display(Name = "Allowed path prefixes")]
-        public string AllowedPathPrefixes { get; set; } = string.Empty;
+        public string? AllowedPathPrefixes { get; set; }
 
         [Display(Name = "Allowed hosts")]
-        public string AllowedHosts { get; set; } = string.Empty;
+        public string? AllowedHosts { get; set; }
 
         [Display(Name = "Excluded path prefixes")]
-        public string ExcludedPathPrefixes { get; set; } = string.Empty;
+        public string? ExcludedPathPrefixes { get; set; }
 
         [Display(Name = "Product URL patterns")]
-        public string ProductUrlPatterns { get; set; } = string.Empty;
+        public string? ProductUrlPatterns { get; set; }
 
         [Display(Name = "Listing URL patterns")]
-        public string ListingUrlPatterns { get; set; } = string.Empty;
+        public string? ListingUrlPatterns { get; set; }
 
         [Range(0, int.MaxValue)]
         [Display(Name = "Maximum discovery depth")]
