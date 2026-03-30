@@ -386,6 +386,38 @@ public sealed class DiscoveryRunPageDto
     public int TotalPages { get; init; }
 }
 
+public sealed class DiscoveryRunCandidateQueryDto
+{
+    public string? StateFilter { get; init; }
+    public string? Sort { get; init; }
+    public int Page { get; init; } = 1;
+    public int PageSize { get; init; } = 12;
+}
+
+public sealed class DiscoveryRunCandidatePageDto
+{
+    public IReadOnlyList<DiscoveryRunCandidateDto> Items { get; init; } = [];
+    public string StateFilter { get; init; } = string.Empty;
+    public string Sort { get; init; } = string.Empty;
+    public int Page { get; init; }
+    public int PageSize { get; init; }
+    public long TotalCount { get; init; }
+    public int TotalPages { get; init; }
+    public DiscoveryRunCandidateRunSummaryDto Summary { get; init; } = new();
+}
+
+public sealed class DiscoveryRunCandidateRunSummaryDto
+{
+    public int RunCandidateCount { get; init; }
+    public int ActiveCandidateCount { get; init; }
+    public int ArchivedCandidateCount { get; init; }
+    public int ProbeTimeoutCandidateCount { get; init; }
+    public int RepresentativePageFetchFailureCandidateCount { get; init; }
+    public int RepresentativeCategoryFetchFailureCount { get; init; }
+    public int RepresentativeProductFetchFailureCount { get; init; }
+    public int LlmTimeoutCandidateCount { get; init; }
+}
+
 public sealed class DiscoveryRunCandidateDto
 {
     public string CandidateKey { get; init; } = string.Empty;

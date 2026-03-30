@@ -249,6 +249,33 @@ internal static class AdminApiContractValidator
         ValidateItems(payload.Items, "discoveryRunPage.items", ValidateDiscoveryRun);
     }
 
+    public static void ValidateDiscoveryRunCandidatePage(DiscoveryRunCandidatePageDto payload)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+
+        if (payload.Page <= 0)
+        {
+            throw new InvalidOperationException("discoveryRunCandidatePage.page must be a positive integer.");
+        }
+
+        if (payload.PageSize <= 0)
+        {
+            throw new InvalidOperationException("discoveryRunCandidatePage.pageSize must be a positive integer.");
+        }
+
+        if (payload.TotalCount < 0)
+        {
+            throw new InvalidOperationException("discoveryRunCandidatePage.totalCount must be zero or greater.");
+        }
+
+        if (payload.TotalPages < 0)
+        {
+            throw new InvalidOperationException("discoveryRunCandidatePage.totalPages must be zero or greater.");
+        }
+
+        ValidateItems(payload.Items, "discoveryRunCandidatePage.items", ValidateDiscoveryRunCandidate);
+    }
+
     public static void ValidateDiscoveryRunCandidates(IReadOnlyList<DiscoveryRunCandidateDto> payload)
     {
         ValidateItems(payload, "discoveryRun.candidates", ValidateDiscoveryRunCandidate);

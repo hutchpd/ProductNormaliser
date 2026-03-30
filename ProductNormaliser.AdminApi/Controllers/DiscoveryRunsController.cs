@@ -65,9 +65,9 @@ public sealed class DiscoveryRunsController(IDiscoveryRunService discoveryRunSer
     }
 
     [HttpGet("{runId}/candidates")]
-    [ProducesResponseType(typeof(Contracts.DiscoveryRunCandidateDto[]), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Contracts.DiscoveryRunCandidatePageDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetCandidates(string runId, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetCandidates(string runId, [FromQuery] Contracts.DiscoveryRunCandidateQueryDto? query, CancellationToken cancellationToken = default)
     {
         var run = await discoveryRunService.GetAsync(runId, cancellationToken);
         if (run is null)
@@ -75,8 +75,35 @@ public sealed class DiscoveryRunsController(IDiscoveryRunService discoveryRunSer
             return NotFound();
         }
 
-        var candidates = await discoveryRunService.ListCandidatesAsync(runId, cancellationToken);
-        return Ok(candidates.Select(Map).ToArray());
+        var candidates = await discoveryRunService.QueryCandidatesAsync(runId, new DiscoveryRunCandidateQuery
+        {
+            StateFilter = query?.StateFilter,
+            Sort = query?.Sort,
+            Page = query?.Page ?? 1,
+            PageSize = query?.PageSize ?? 12
+        }, cancellationToken);
+
+        return Ok(new Contracts.DiscoveryRunCandidatePageDto
+        {
+            Items = candidates.Items.Select(Map).ToArray(),
+            StateFilter = candidates.StateFilter,
+            Sort = candidates.Sort,
+            Page = candidates.Page,
+            PageSize = candidates.PageSize,
+            TotalCount = candidates.TotalCount,
+            TotalPages = candidates.TotalPages,
+            Summary = new Contracts.DiscoveryRunCandidateRunSummaryDto
+            {
+                RunCandidateCount = candidates.Summary.RunCandidateCount,
+                ActiveCandidateCount = candidates.Summary.ActiveCandidateCount,
+                ArchivedCandidateCount = candidates.Summary.ArchivedCandidateCount,
+                ProbeTimeoutCandidateCount = candidates.Summary.ProbeTimeoutCandidateCount,
+                RepresentativePageFetchFailureCandidateCount = candidates.Summary.RepresentativePageFetchFailureCandidateCount,
+                RepresentativeCategoryFetchFailureCount = candidates.Summary.RepresentativeCategoryFetchFailureCount,
+                RepresentativeProductFetchFailureCount = candidates.Summary.RepresentativeProductFetchFailureCount,
+                LlmTimeoutCandidateCount = candidates.Summary.LlmTimeoutCandidateCount
+            }
+        });
     }
 
     [HttpPost("{runId}/pause")]

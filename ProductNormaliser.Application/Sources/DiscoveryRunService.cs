@@ -111,6 +111,22 @@ public sealed class DiscoveryRunService(
         return await discoveryRunCandidateStore.ListByRunAsync(NormalizeRequired(runId, nameof(runId)), cancellationToken);
     }
 
+    public Task<DiscoveryRunCandidatePage> QueryCandidatesAsync(string runId, DiscoveryRunCandidateQuery query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        return discoveryRunCandidateStore.QueryByRunAsync(
+            NormalizeRequired(runId, nameof(runId)),
+            new DiscoveryRunCandidateQuery
+            {
+                StateFilter = NormalizeCandidateStateFilter(query.StateFilter),
+                Sort = NormalizeCandidateSort(query.Sort),
+                Page = Math.Max(1, query.Page),
+                PageSize = Math.Clamp(query.PageSize <= 0 ? 12 : query.PageSize, 1, 100)
+            },
+            cancellationToken);
+    }
+
     public async Task<DiscoveryRun?> PauseAsync(string runId, CancellationToken cancellationToken = default)
     {
         var run = await discoveryRunStore.GetAsync(NormalizeRequired(runId, nameof(runId)), cancellationToken);
@@ -534,5 +550,34 @@ public sealed class DiscoveryRunService(
         return string.IsNullOrWhiteSpace(value)
             ? throw new ArgumentException("A value is required.", paramName)
             : value.Trim();
+    }
+
+    private static string NormalizeCandidateStateFilter(string? value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value)
+            ? DiscoveryRunCandidateStateFilters.All
+            : value.Trim().ToLowerInvariant();
+
+        return normalized switch
+        {
+            DiscoveryRunCandidateStateFilters.All => DiscoveryRunCandidateStateFilters.All,
+            DiscoveryRunCandidateStateFilters.Active => DiscoveryRunCandidateStateFilters.Active,
+            DiscoveryRunCandidateStateFilters.Archived => DiscoveryRunCandidateStateFilters.Archived,
+            _ => normalized
+        };
+    }
+
+    private static string NormalizeCandidateSort(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? DiscoveryRunCandidateSortModes.ReviewPriority
+            : value.Trim().ToLowerInvariant() switch
+            {
+                DiscoveryRunCandidateSortModes.ReviewPriority => DiscoveryRunCandidateSortModes.ReviewPriority,
+                DiscoveryRunCandidateSortModes.ConfidenceDesc => DiscoveryRunCandidateSortModes.ConfidenceDesc,
+                DiscoveryRunCandidateSortModes.DuplicateRiskAsc => DiscoveryRunCandidateSortModes.DuplicateRiskAsc,
+                DiscoveryRunCandidateSortModes.UpdatedDesc => DiscoveryRunCandidateSortModes.UpdatedDesc,
+                _ => DiscoveryRunCandidateSortModes.ReviewPriority
+            };
     }
 }

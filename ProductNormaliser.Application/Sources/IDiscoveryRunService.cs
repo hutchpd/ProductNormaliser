@@ -12,6 +12,8 @@ public interface IDiscoveryRunService
 
     Task<IReadOnlyList<DiscoveryRunCandidate>> ListCandidatesAsync(string runId, CancellationToken cancellationToken = default);
 
+    Task<DiscoveryRunCandidatePage> QueryCandidatesAsync(string runId, DiscoveryRunCandidateQuery query, CancellationToken cancellationToken = default);
+
     Task<DiscoveryRun?> PauseAsync(string runId, CancellationToken cancellationToken = default);
 
     Task<DiscoveryRun?> ResumeAsync(string runId, CancellationToken cancellationToken = default);

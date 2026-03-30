@@ -451,7 +451,7 @@ public sealed class ProductExplorerPageTests
         public Task<DiscoveryRunDto> CreateDiscoveryRunAsync(CreateDiscoveryRunRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<DiscoveryRunPageDto> GetDiscoveryRunsAsync(string? status = null, int page = 1, int pageSize = 10, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<DiscoveryRunDto?> GetDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<IReadOnlyList<DiscoveryRunCandidateDto>> GetDiscoveryRunCandidatesAsync(string runId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<DiscoveryRunCandidatePageDto> GetDiscoveryRunCandidatesAsync(string runId, DiscoveryRunCandidateQueryDto? query = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<DiscoveryRunDto> PauseDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<DiscoveryRunDto> ResumeDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<DiscoveryRunDto> StopDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default) => throw new NotImplementedException();

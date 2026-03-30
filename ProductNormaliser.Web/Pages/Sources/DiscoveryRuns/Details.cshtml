@@ -132,6 +132,12 @@
                     {
                         <form method="post" asp-page-handler="Pause" class="inline-form">
                             <input type="hidden" asp-for="RunId" />
+                            <input type="hidden" asp-for="CandidatePage" />
+                            <input type="hidden" asp-for="CandidatePageSize" />
+                            <input type="hidden" asp-for="CandidateSort" />
+                            <input type="hidden" asp-for="ArchivedPage" />
+                            <input type="hidden" asp-for="ArchivedPageSize" />
+                            <input type="hidden" asp-for="ArchivedSort" />
                             <button type="submit" class="btn btn-outline-dark">Pause run</button>
                         </form>
                     }
@@ -139,6 +145,12 @@
                     {
                         <form method="post" asp-page-handler="Resume" class="inline-form">
                             <input type="hidden" asp-for="RunId" />
+                            <input type="hidden" asp-for="CandidatePage" />
+                            <input type="hidden" asp-for="CandidatePageSize" />
+                            <input type="hidden" asp-for="CandidateSort" />
+                            <input type="hidden" asp-for="ArchivedPage" />
+                            <input type="hidden" asp-for="ArchivedPageSize" />
+                            <input type="hidden" asp-for="ArchivedSort" />
                             <button type="submit" class="btn btn-outline-dark">Resume run</button>
                         </form>
                     }
@@ -146,6 +158,12 @@
                     {
                         <form method="post" asp-page-handler="Stop" class="inline-form">
                             <input type="hidden" asp-for="RunId" />
+                            <input type="hidden" asp-for="CandidatePage" />
+                            <input type="hidden" asp-for="CandidatePageSize" />
+                            <input type="hidden" asp-for="CandidateSort" />
+                            <input type="hidden" asp-for="ArchivedPage" />
+                            <input type="hidden" asp-for="ArchivedPageSize" />
+                            <input type="hidden" asp-for="ArchivedSort" />
                             <button type="submit" class="btn btn-outline-danger">Stop run</button>
                         </form>
                     }
@@ -211,7 +229,7 @@
                     <div>
                         <p class="eyebrow">Run Activity</p>
                         <h2>Activity log</h2>
-                        <p class="subtle-copy">Search scope, diagnostics, and archived-candidate decisions are listed here in reverse chronological order. Snapshot entries use the latest persisted run update when the backend does not persist an exact event time.</p>
+                        <p class="subtle-copy">Search scope, diagnostics, and archived-candidate decisions from the current archive page are listed here in reverse chronological order. Snapshot entries use the latest persisted run update when the backend does not persist an exact event time.</p>
                     </div>
                 </div>
 
@@ -247,7 +265,7 @@
                 <div class="panel-heading">
                     <div>
                         <p class="eyebrow">Rejected Hosts</p>
-                        <h2>Archived and rejected candidates</h2>
+                        <h2>Archived and rejected candidates (@Model.ArchivedCandidatePage.TotalCount)</h2>
                         <p class="subtle-copy">If a persisted candidate was dismissed or archived but you still want to review it, add it back to the active queue here.</p>
                     </div>
                 </div>
@@ -300,6 +318,12 @@
                             {
                                 <form method="post" asp-page-handler="RestoreCandidate" class="inline-form mt-2">
                                     <input type="hidden" asp-for="RunId" />
+                                    <input type="hidden" asp-for="CandidatePage" />
+                                    <input type="hidden" asp-for="CandidatePageSize" />
+                                    <input type="hidden" asp-for="CandidateSort" />
+                                    <input type="hidden" asp-for="ArchivedPage" />
+                                    <input type="hidden" asp-for="ArchivedPageSize" />
+                                    <input type="hidden" asp-for="ArchivedSort" />
                                     <input type="hidden" name="candidateKey" value="@candidate.CandidateKey" />
                                     <input type="hidden" name="expectedRevision" value="@candidate.Revision" />
                                     <button type="submit" class="btn btn-outline-dark">@Model.GetArchiveActionLabel(candidate)</button>
@@ -308,6 +332,23 @@
                         </article>
                     }
                     </div>
+
+                    @if (Model.HasArchivedCandidatePages)
+                    {
+                        <div class="pager-shell">
+                            <div class="pager-meta">Page @Model.ArchivedCandidatePage.Page of @Model.ArchivedCandidatePage.TotalPages</div>
+                            <div class="pager-links">
+                                @if (Model.ArchivedCandidatePage.Page > 1)
+                                {
+                                    <a class="btn btn-outline-dark" asp-page="/Sources/DiscoveryRuns/Details" asp-route-runId="@Model.RunId" asp-route-CandidatePage="@Model.CandidatePage" asp-route-CandidatePageSize="@Model.CandidatePageSize" asp-route-CandidateSort="@Model.CandidateSort" asp-route-ArchivedPage="@(Model.ArchivedCandidatePage.Page - 1)" asp-route-ArchivedPageSize="@Model.ArchivedPageSize" asp-route-ArchivedSort="@Model.ArchivedSort">Previous archived</a>
+                                }
+                                @if (Model.ArchivedCandidatePage.Page < Model.ArchivedCandidatePage.TotalPages)
+                                {
+                                    <a class="btn btn-outline-dark" asp-page="/Sources/DiscoveryRuns/Details" asp-route-runId="@Model.RunId" asp-route-CandidatePage="@Model.CandidatePage" asp-route-CandidatePageSize="@Model.CandidatePageSize" asp-route-CandidateSort="@Model.CandidateSort" asp-route-ArchivedPage="@(Model.ArchivedCandidatePage.Page + 1)" asp-route-ArchivedPageSize="@Model.ArchivedPageSize" asp-route-ArchivedSort="@Model.ArchivedSort">Next archived</a>
+                                }
+                            </div>
+                        </div>
+                    }
                 }
             </aside>
         </div>
@@ -316,9 +357,41 @@
             <div class="panel-heading">
                 <div>
                     <p class="eyebrow">Candidates</p>
-                    <h2>Suggested and published hosts</h2>
+                    <h2>Suggested and published hosts (@Model.ActiveCandidatePage.TotalCount)</h2>
+                    <p class="subtle-copy">The default ranking keeps the strongest review targets first: suggested candidates before lower-priority states, then higher confidence, lower duplicate risk, and cleaner automation posture.</p>
                 </div>
             </div>
+
+            <form method="get" class="source-form">
+                <input type="hidden" asp-for="RunId" />
+                <input type="hidden" name="CandidatePage" value="1" />
+                <input type="hidden" asp-for="ArchivedPage" />
+                <input type="hidden" asp-for="ArchivedPageSize" />
+                <input type="hidden" asp-for="ArchivedSort" />
+                <div class="detail-grid mt-3">
+                    <div>
+                        <label asp-for="CandidateSort" class="form-label">Sort active candidates</label>
+                        <select asp-for="CandidateSort" class="form-select">
+                            <option value="review_priority">Review priority</option>
+                            <option value="confidence_desc">Highest confidence</option>
+                            <option value="duplicate_risk_asc">Lowest duplicate risk</option>
+                            <option value="updated_desc">Most recently updated</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label asp-for="CandidatePageSize" class="form-label">Page size</label>
+                        <select asp-for="CandidatePageSize" class="form-select">
+                            <option value="8">8</option>
+                            <option value="12">12</option>
+                            <option value="24">24</option>
+                            <option value="48">48</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="actions-bar inline-actions mt-3">
+                    <button type="submit" class="btn btn-outline-dark">Apply ranking</button>
+                </div>
+            </form>
 
             @if (Model.ActiveCandidates.Count == 0)
             {
@@ -350,6 +423,12 @@
                             {
                                 <form method="post" asp-page-handler="AcceptCandidate" class="inline-form">
                                     <input type="hidden" asp-for="RunId" />
+                                    <input type="hidden" asp-for="CandidatePage" />
+                                    <input type="hidden" asp-for="CandidatePageSize" />
+                                    <input type="hidden" asp-for="CandidateSort" />
+                                    <input type="hidden" asp-for="ArchivedPage" />
+                                    <input type="hidden" asp-for="ArchivedPageSize" />
+                                    <input type="hidden" asp-for="ArchivedSort" />
                                     <input type="hidden" name="candidateKey" value="@candidate.CandidateKey" />
                                     <input type="hidden" name="expectedRevision" value="@candidate.Revision" />
                                     <button type="submit" class="btn btn-dark">Accept candidate</button>
@@ -359,6 +438,12 @@
                             {
                                 <form method="post" asp-page-handler="DismissCandidate" class="inline-form">
                                     <input type="hidden" asp-for="RunId" />
+                                    <input type="hidden" asp-for="CandidatePage" />
+                                    <input type="hidden" asp-for="CandidatePageSize" />
+                                    <input type="hidden" asp-for="CandidateSort" />
+                                    <input type="hidden" asp-for="ArchivedPage" />
+                                    <input type="hidden" asp-for="ArchivedPageSize" />
+                                    <input type="hidden" asp-for="ArchivedSort" />
                                     <input type="hidden" name="candidateKey" value="@candidate.CandidateKey" />
                                     <input type="hidden" name="expectedRevision" value="@candidate.Revision" />
                                     <button type="submit" class="btn btn-outline-dark">Dismiss</button>
@@ -368,6 +453,23 @@
                     </article>
                 }
                 </div>
+
+                @if (Model.HasActiveCandidatePages)
+                {
+                    <div class="pager-shell">
+                        <div class="pager-meta">Page @Model.ActiveCandidatePage.Page of @Model.ActiveCandidatePage.TotalPages</div>
+                        <div class="pager-links">
+                            @if (Model.ActiveCandidatePage.Page > 1)
+                            {
+                                <a class="btn btn-outline-dark" asp-page="/Sources/DiscoveryRuns/Details" asp-route-runId="@Model.RunId" asp-route-CandidatePage="@(Model.ActiveCandidatePage.Page - 1)" asp-route-CandidatePageSize="@Model.CandidatePageSize" asp-route-CandidateSort="@Model.CandidateSort" asp-route-ArchivedPage="@Model.ArchivedPage" asp-route-ArchivedPageSize="@Model.ArchivedPageSize" asp-route-ArchivedSort="@Model.ArchivedSort">Previous</a>
+                            }
+                            @if (Model.ActiveCandidatePage.Page < Model.ActiveCandidatePage.TotalPages)
+                            {
+                                <a class="btn btn-outline-dark" asp-page="/Sources/DiscoveryRuns/Details" asp-route-runId="@Model.RunId" asp-route-CandidatePage="@(Model.ActiveCandidatePage.Page + 1)" asp-route-CandidatePageSize="@Model.CandidatePageSize" asp-route-CandidateSort="@Model.CandidateSort" asp-route-ArchivedPage="@Model.ArchivedPage" asp-route-ArchivedPageSize="@Model.ArchivedPageSize" asp-route-ArchivedSort="@Model.ArchivedSort">Next</a>
+                            }
+                        </div>
+                    </div>
+                }
             }
             </section>
         }

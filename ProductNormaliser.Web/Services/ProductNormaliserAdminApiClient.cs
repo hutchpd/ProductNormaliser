@@ -169,9 +169,17 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
         return GetOptionalAsync<DiscoveryRunDto>($"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}", AdminApiContractValidator.ValidateDiscoveryRun, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<DiscoveryRunCandidateDto>> GetDiscoveryRunCandidatesAsync(string runId, CancellationToken cancellationToken = default)
+    public Task<DiscoveryRunCandidatePageDto> GetDiscoveryRunCandidatesAsync(string runId, DiscoveryRunCandidateQueryDto? query = null, CancellationToken cancellationToken = default)
     {
-        return await GetRequiredAsync<DiscoveryRunCandidateDto[]>($"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}/candidates", AdminApiContractValidator.ValidateDiscoveryRunCandidates, cancellationToken);
+        var relativeUri = BuildRelativeUri($"api/sources/discovery-runs/{Uri.EscapeDataString(runId)}/candidates", new Dictionary<string, string?>
+        {
+            ["stateFilter"] = query?.StateFilter,
+            ["sort"] = query?.Sort,
+            ["page"] = (query?.Page ?? 1).ToString(CultureInfo.InvariantCulture),
+            ["pageSize"] = (query?.PageSize ?? 12).ToString(CultureInfo.InvariantCulture)
+        });
+
+        return GetRequiredAsync<DiscoveryRunCandidatePageDto>(relativeUri, AdminApiContractValidator.ValidateDiscoveryRunCandidatePage, cancellationToken);
     }
 
     public Task<DiscoveryRunDto> PauseDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default)

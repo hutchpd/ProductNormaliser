@@ -66,6 +66,10 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public string? LastRequestedDiscoveryRunStatus { get; private set; }
     public int? LastRequestedDiscoveryRunPageNumber { get; private set; }
     public int? LastRequestedDiscoveryRunPageSize { get; private set; }
+    public string? LastRequestedDiscoveryRunCandidateStateFilter { get; private set; }
+    public string? LastRequestedDiscoveryRunCandidateSort { get; private set; }
+    public int? LastRequestedDiscoveryRunCandidatePageNumber { get; private set; }
+    public int? LastRequestedDiscoveryRunCandidatePageSize { get; private set; }
     public string? LastPausedDiscoveryRunId { get; private set; }
     public string? LastResumedDiscoveryRunId { get; private set; }
     public string? LastStoppedDiscoveryRunId { get; private set; }
@@ -477,15 +481,19 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         });
     }
 
-    public Task<IReadOnlyList<DiscoveryRunCandidateDto>> GetDiscoveryRunCandidatesAsync(string runId, CancellationToken cancellationToken = default)
+    public Task<DiscoveryRunCandidatePageDto> GetDiscoveryRunCandidatesAsync(string runId, DiscoveryRunCandidateQueryDto? query = null, CancellationToken cancellationToken = default)
     {
         LastRequestedDiscoveryRunId = runId;
+        LastRequestedDiscoveryRunCandidateStateFilter = query?.StateFilter;
+        LastRequestedDiscoveryRunCandidateSort = query?.Sort;
+        LastRequestedDiscoveryRunCandidatePageNumber = query?.Page;
+        LastRequestedDiscoveryRunCandidatePageSize = query?.PageSize;
         if (DiscoveryRunException is not null)
         {
-            return Task.FromException<IReadOnlyList<DiscoveryRunCandidateDto>>(DiscoveryRunException);
+            return Task.FromException<DiscoveryRunCandidatePageDto>(DiscoveryRunException);
         }
 
-        return Task.FromResult(DiscoveryRunCandidates);
+        return Task.FromResult(BuildDiscoveryRunCandidatePage(query));
     }
 
     public Task<DiscoveryRunDto> PauseDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default)
@@ -765,6 +773,96 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             .Select(item => string.Equals(item.CandidateKey, candidateKey, StringComparison.OrdinalIgnoreCase) ? updated : item)
             .ToArray();
         return Task.FromResult(updated);
+    }
+
+    private DiscoveryRunCandidatePageDto BuildDiscoveryRunCandidatePage(DiscoveryRunCandidateQueryDto? query)
+    {
+        var stateFilter = string.IsNullOrWhiteSpace(query?.StateFilter) ? "all" : query!.StateFilter!.Trim().ToLowerInvariant();
+        var sort = string.IsNullOrWhiteSpace(query?.Sort) ? "review_priority" : query!.Sort!.Trim().ToLowerInvariant();
+        var pageSize = Math.Clamp(query?.PageSize ?? 12, 1, 100);
+        var page = Math.Max(1, query?.Page ?? 1);
+        var allItems = DiscoveryRunCandidates.ToArray();
+        var filteredItems = stateFilter switch
+        {
+            "active" => allItems.Where(candidate => !IsArchivedCandidate(candidate.State)),
+            "archived" => allItems.Where(candidate => IsArchivedCandidate(candidate.State)),
+            "all" => allItems.AsEnumerable(),
+            _ => allItems.Where(candidate => string.Equals(candidate.State, stateFilter, StringComparison.OrdinalIgnoreCase))
+        };
+
+        var orderedItems = sort switch
+        {
+            "confidence_desc" => filteredItems
+                .OrderByDescending(candidate => candidate.ConfidenceScore)
+                .ThenBy(candidate => candidate.DuplicateRiskScore)
+                .ThenBy(candidate => candidate.DisplayName, StringComparer.OrdinalIgnoreCase),
+            "duplicate_risk_asc" => filteredItems
+                .OrderBy(candidate => candidate.DuplicateRiskScore)
+                .ThenByDescending(candidate => candidate.ConfidenceScore)
+                .ThenBy(candidate => candidate.DisplayName, StringComparer.OrdinalIgnoreCase),
+            "updated_desc" => filteredItems
+                .OrderByDescending(candidate => candidate.ArchivedUtc ?? DateTime.MinValue)
+                .ThenBy(candidate => candidate.DisplayName, StringComparer.OrdinalIgnoreCase),
+            _ => filteredItems
+                .OrderBy(GetReviewPriorityRank)
+                .ThenByDescending(candidate => candidate.ConfidenceScore)
+                .ThenBy(candidate => candidate.DuplicateRiskScore)
+                .ThenBy(candidate => candidate.DisplayName, StringComparer.OrdinalIgnoreCase)
+        };
+
+        var totalCount = orderedItems.LongCount();
+        var totalPages = totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)pageSize);
+        if (totalPages > 0 && page > totalPages)
+        {
+            page = totalPages;
+        }
+
+        return new DiscoveryRunCandidatePageDto
+        {
+            Items = orderedItems.Skip((page - 1) * pageSize).Take(pageSize).ToArray(),
+            StateFilter = stateFilter,
+            Sort = sort,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = totalPages,
+            Summary = new DiscoveryRunCandidateRunSummaryDto
+            {
+                RunCandidateCount = allItems.Length,
+                ActiveCandidateCount = allItems.Count(candidate => !IsArchivedCandidate(candidate.State)),
+                ArchivedCandidateCount = allItems.Count(candidate => IsArchivedCandidate(candidate.State)),
+                ProbeTimeoutCandidateCount = allItems.Count(candidate => candidate.Probe.ProbeTimedOut),
+                RepresentativePageFetchFailureCandidateCount = allItems.Count(candidate => candidate.Probe.RepresentativeCategoryPageFetchFailed || candidate.Probe.RepresentativeProductPageFetchFailed),
+                RepresentativeCategoryFetchFailureCount = allItems.Count(candidate => candidate.Probe.RepresentativeCategoryPageFetchFailed),
+                RepresentativeProductFetchFailureCount = allItems.Count(candidate => candidate.Probe.RepresentativeProductPageFetchFailed),
+                LlmTimeoutCandidateCount = allItems.Count(candidate => candidate.Probe.LlmTimedOut)
+            }
+        };
+    }
+
+    private static bool IsArchivedCandidate(string state)
+    {
+        return string.Equals(state, "dismissed", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(state, "archived", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(state, "superseded", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int GetReviewPriorityRank(DiscoveryRunCandidateDto candidate)
+    {
+        return candidate.State switch
+        {
+            "suggested" => 0,
+            "failed" => 1,
+            "manually_accepted" => 2,
+            "auto_accepted" => 2,
+            "pending" => 3,
+            "probing" => 3,
+            "awaiting_llm" => 3,
+            "dismissed" => 4,
+            "archived" => 4,
+            "superseded" => 4,
+            _ => 5
+        };
     }
 
     private void UpsertSource(SourceDto source)

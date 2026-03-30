@@ -12,6 +12,10 @@ public sealed class DetailsModel(
 {
     private const string SnapshotTimestampKind = "Snapshot";
     private const string ExactTimestampKind = "Recorded";
+    private const string ReviewPrioritySort = "review_priority";
+    private const string UpdatedDescSort = "updated_desc";
+    private const int DefaultCandidatePageSize = 12;
+    private const int DefaultArchivedPageSize = 8;
 
     [BindProperty(SupportsGet = true, Name = "runId")]
     public string RunId { get; set; } = string.Empty;
@@ -23,7 +27,29 @@ public sealed class DetailsModel(
 
     public DiscoveryRunDto? Run { get; private set; }
 
-    public IReadOnlyList<DiscoveryRunCandidateDto> Candidates { get; private set; } = [];
+    [BindProperty(SupportsGet = true)]
+    public int CandidatePage { get; set; } = 1;
+
+    [BindProperty(SupportsGet = true)]
+    public int CandidatePageSize { get; set; } = DefaultCandidatePageSize;
+
+    [BindProperty(SupportsGet = true)]
+    public string CandidateSort { get; set; } = ReviewPrioritySort;
+
+    [BindProperty(SupportsGet = true)]
+    public int ArchivedPage { get; set; } = 1;
+
+    [BindProperty(SupportsGet = true)]
+    public int ArchivedPageSize { get; set; } = DefaultArchivedPageSize;
+
+    [BindProperty(SupportsGet = true)]
+    public string ArchivedSort { get; set; } = UpdatedDescSort;
+
+    public DiscoveryRunCandidatePageDto ActiveCandidatePage { get; private set; } = new();
+
+    public DiscoveryRunCandidatePageDto ArchivedCandidatePage { get; private set; } = new();
+
+    public IReadOnlyList<DiscoveryRunCandidateDto> Candidates => ActiveCandidates.Concat(ArchivedCandidates).ToArray();
 
     public bool ShouldAutoRefresh => Run is not null && DiscoveryRunPresentation.IsActiveStatus(Run.Status);
 
@@ -31,29 +57,38 @@ public sealed class DetailsModel(
 
     public int ProgressPercent => Run is null ? 0 : DiscoveryRunPresentation.GetProgressPercent(Run);
 
-    public IReadOnlyList<DiscoveryRunCandidateDto> ActiveCandidates => Candidates
-        .Where(candidate => !string.Equals(candidate.State, "dismissed", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(candidate.State, "archived", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(candidate.State, "superseded", StringComparison.OrdinalIgnoreCase))
-        .ToArray();
+    public IReadOnlyList<DiscoveryRunCandidateDto> ActiveCandidates => ActiveCandidatePage.Items;
 
-    public IReadOnlyList<DiscoveryRunCandidateDto> ArchivedCandidates => Candidates
-        .Where(candidate => string.Equals(candidate.State, "dismissed", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(candidate.State, "archived", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(candidate.State, "superseded", StringComparison.OrdinalIgnoreCase))
-        .ToArray();
+    public IReadOnlyList<DiscoveryRunCandidateDto> ArchivedCandidates => ArchivedCandidatePage.Items;
+
+    public DiscoveryRunCandidateRunSummaryDto CandidateSummary
+    {
+        get
+        {
+            if (ActiveCandidatePage.Summary.RunCandidateCount > 0)
+            {
+                return ActiveCandidatePage.Summary;
+            }
+
+            return ArchivedCandidatePage.Summary;
+        }
+    }
 
     public int SearchTimeoutCount => Run?.Diagnostics.Count(IsSearchTimeoutDiagnostic) ?? 0;
 
-    public int ProbeTimeoutCandidateCount => Candidates.Count(candidate => candidate.Probe.ProbeTimedOut);
+    public int ProbeTimeoutCandidateCount => CandidateSummary.ProbeTimeoutCandidateCount;
 
-    public int RepresentativePageFetchFailureCandidateCount => Candidates.Count(candidate => candidate.Probe.RepresentativeCategoryPageFetchFailed || candidate.Probe.RepresentativeProductPageFetchFailed);
+    public int RepresentativePageFetchFailureCandidateCount => CandidateSummary.RepresentativePageFetchFailureCandidateCount;
 
-    public int RepresentativeCategoryFetchFailureCount => Candidates.Count(candidate => candidate.Probe.RepresentativeCategoryPageFetchFailed);
+    public int RepresentativeCategoryFetchFailureCount => CandidateSummary.RepresentativeCategoryFetchFailureCount;
 
-    public int RepresentativeProductFetchFailureCount => Candidates.Count(candidate => candidate.Probe.RepresentativeProductPageFetchFailed);
+    public int RepresentativeProductFetchFailureCount => CandidateSummary.RepresentativeProductFetchFailureCount;
 
-    public int LlmTimeoutCandidateCount => Candidates.Count(candidate => candidate.Probe.LlmTimedOut);
+    public int LlmTimeoutCandidateCount => CandidateSummary.LlmTimeoutCandidateCount;
+
+    public bool HasActiveCandidatePages => ActiveCandidatePage.TotalPages > 1;
+
+    public bool HasArchivedCandidatePages => ArchivedCandidatePage.TotalPages > 1;
 
     public IReadOnlyList<DiscoveryRunActivityEntryModel> ActivityLogEntries => BuildActivityLogEntries();
 
@@ -376,7 +411,7 @@ public sealed class DetailsModel(
         {
             var run = await action();
             StatusMessage = $"{message} '{run.RunId}'.";
-            return RedirectToPage(new { runId = run.RunId });
+            return RedirectToPage(new { runId = run.RunId, CandidatePage, CandidatePageSize, CandidateSort, ArchivedPage, ArchivedPageSize, ArchivedSort });
         }
         catch (AdminApiException exception)
         {
@@ -393,7 +428,7 @@ public sealed class DetailsModel(
         {
             await action();
             StatusMessage = message;
-            return RedirectToPage(new { runId = RunId });
+            return RedirectToPage(new { runId = RunId, CandidatePage, CandidatePageSize, CandidateSort, ArchivedPage, ArchivedPageSize, ArchivedSort });
         }
         catch (AdminApiException exception)
         {
@@ -412,7 +447,8 @@ public sealed class DetailsModel(
             {
                 ErrorMessage = "A discovery run id is required.";
                 Run = null;
-                Candidates = [];
+                ActiveCandidatePage = new DiscoveryRunCandidatePageDto();
+                ArchivedCandidatePage = new DiscoveryRunCandidatePageDto();
                 return;
             }
 
@@ -420,18 +456,53 @@ public sealed class DetailsModel(
             if (Run is null)
             {
                 ErrorMessage = $"Discovery run '{RunId}' was not found.";
-                Candidates = [];
+                ActiveCandidatePage = new DiscoveryRunCandidatePageDto();
+                ArchivedCandidatePage = new DiscoveryRunCandidatePageDto();
                 return;
             }
 
-            Candidates = await adminApiClient.GetDiscoveryRunCandidatesAsync(RunId, cancellationToken);
+            await LoadCandidatePagesAsync(cancellationToken);
         }
         catch (AdminApiException exception)
         {
             logger.LogWarning(exception, "Failed to load discovery run {RunId}.", RunId);
             ErrorMessage = exception.Message;
             Run = null;
-            Candidates = [];
+            ActiveCandidatePage = new DiscoveryRunCandidatePageDto();
+            ArchivedCandidatePage = new DiscoveryRunCandidatePageDto();
         }
+    }
+
+    private async Task LoadCandidatePagesAsync(CancellationToken cancellationToken)
+    {
+        ActiveCandidatePage = await adminApiClient.GetDiscoveryRunCandidatesAsync(
+            RunId,
+            new DiscoveryRunCandidateQueryDto
+            {
+                StateFilter = "active",
+                Sort = CandidateSort,
+                Page = CandidatePage,
+                PageSize = CandidatePageSize
+            },
+            cancellationToken);
+
+        CandidateSort = ActiveCandidatePage.Sort;
+        CandidatePage = ActiveCandidatePage.Page;
+        CandidatePageSize = ActiveCandidatePage.PageSize;
+
+        ArchivedCandidatePage = await adminApiClient.GetDiscoveryRunCandidatesAsync(
+            RunId,
+            new DiscoveryRunCandidateQueryDto
+            {
+                StateFilter = "archived",
+                Sort = ArchivedSort,
+                Page = ArchivedPage,
+                PageSize = ArchivedPageSize
+            },
+            cancellationToken);
+
+        ArchivedSort = ArchivedCandidatePage.Sort;
+        ArchivedPage = ArchivedCandidatePage.Page;
+        ArchivedPageSize = ArchivedCandidatePage.PageSize;
     }
 }

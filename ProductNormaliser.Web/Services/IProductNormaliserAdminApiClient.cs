@@ -56,7 +56,7 @@ public interface IProductNormaliserAdminApiClient
 
     Task<DiscoveryRunDto?> GetDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<DiscoveryRunCandidateDto>> GetDiscoveryRunCandidatesAsync(string runId, CancellationToken cancellationToken = default);
+    Task<DiscoveryRunCandidatePageDto> GetDiscoveryRunCandidatesAsync(string runId, DiscoveryRunCandidateQueryDto? query = null, CancellationToken cancellationToken = default);
 
     Task<DiscoveryRunDto> PauseDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default);
 

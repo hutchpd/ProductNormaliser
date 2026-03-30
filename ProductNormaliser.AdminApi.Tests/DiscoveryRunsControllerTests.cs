@@ -100,9 +100,51 @@ public sealed class DiscoveryRunsControllerTests
     {
         var controller = new DiscoveryRunsController(new FakeDiscoveryRunService());
 
-        var result = await controller.GetCandidates("missing", CancellationToken.None);
+        var result = await controller.GetCandidates("missing", null, CancellationToken.None);
 
         Assert.That(result, Is.TypeOf<NotFoundResult>());
+    }
+
+    [Test]
+    public async Task GetCandidates_ReturnsPagedContractsAndPassesQueryToService()
+    {
+        var service = new FakeDiscoveryRunService
+        {
+            CreatedRun = CreateRun("discovery_run_1", DiscoveryRunStatuses.Running),
+            RestoredCandidate = CreateCandidate("safe_shop", DiscoveryRunCandidateStates.Suggested)
+        };
+        var controller = new DiscoveryRunsController(service);
+
+        var result = await controller.GetCandidates(
+            "discovery_run_1",
+            new DiscoveryRunCandidateQueryDto
+            {
+                StateFilter = DiscoveryRunCandidateStateFilters.Active,
+                Sort = DiscoveryRunCandidateSortModes.ReviewPriority,
+                Page = 2,
+                PageSize = 25
+            },
+            CancellationToken.None);
+
+        Assert.That(result, Is.TypeOf<OkObjectResult>());
+        var ok = (OkObjectResult)result;
+        var dto = ok.Value as DiscoveryRunCandidatePageDto;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(dto, Is.Not.Null);
+            Assert.That(dto!.Items, Has.Count.EqualTo(1));
+            Assert.That(dto.Page, Is.EqualTo(2));
+            Assert.That(dto.PageSize, Is.EqualTo(25));
+            Assert.That(dto.TotalCount, Is.EqualTo(1));
+            Assert.That(dto.Items[0].CandidateKey, Is.EqualTo("safe_shop"));
+            Assert.That(dto.Summary.ActiveCandidateCount, Is.EqualTo(1));
+            Assert.That(service.LastCandidateQuery, Is.Not.Null);
+            Assert.That(service.LastCandidateQuery!.StateFilter, Is.EqualTo(DiscoveryRunCandidateStateFilters.Active));
+            Assert.That(service.LastCandidateQuery.Sort, Is.EqualTo(DiscoveryRunCandidateSortModes.ReviewPriority));
+            Assert.That(service.LastCandidateQuery.Page, Is.EqualTo(2));
+            Assert.That(service.LastCandidateQuery.PageSize, Is.EqualTo(25));
+        });
     }
 
     [Test]
@@ -211,6 +253,7 @@ public sealed class DiscoveryRunsControllerTests
         public InvalidOperationException? PauseException { get; set; }
         public DiscoveryRunCandidate? RestoredCandidate { get; set; }
         public DiscoveryRunQuery? LastListQuery { get; private set; }
+        public DiscoveryRunCandidateQuery? LastCandidateQuery { get; private set; }
         public int? LastRestoreExpectedRevision { get; private set; }
 
         public Task<DiscoveryRun> CreateAsync(ProductNormaliser.Application.Sources.CreateDiscoveryRunRequest request, CancellationToken cancellationToken = default)
@@ -233,6 +276,30 @@ public sealed class DiscoveryRunsControllerTests
 
         public Task<IReadOnlyList<DiscoveryRunCandidate>> ListCandidatesAsync(string runId, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<DiscoveryRunCandidate>>(RestoredCandidate is null ? [] : [RestoredCandidate]);
+
+        public Task<DiscoveryRunCandidatePage> QueryCandidatesAsync(string runId, DiscoveryRunCandidateQuery query, CancellationToken cancellationToken = default)
+        {
+            LastCandidateQuery = query;
+
+            return Task.FromResult(new DiscoveryRunCandidatePage
+            {
+                Items = RestoredCandidate is null ? [] : [RestoredCandidate],
+                Page = query.Page,
+                PageSize = query.PageSize,
+                TotalCount = RestoredCandidate is null ? 0 : 1,
+                Summary = new DiscoveryRunCandidateRunSummary
+                {
+                    RunCandidateCount = RestoredCandidate is null ? 0 : 1,
+                    ActiveCandidateCount = RestoredCandidate is null ? 0 : 1,
+                    ArchivedCandidateCount = 0,
+                    ProbeTimeoutCandidateCount = 0,
+                    RepresentativePageFetchFailureCandidateCount = 0,
+                    RepresentativeCategoryFetchFailureCount = 0,
+                    RepresentativeProductFetchFailureCount = 0,
+                    LlmTimeoutCandidateCount = 0
+                }
+            });
+        }
 
         public Task<DiscoveryRun?> PauseAsync(string runId, CancellationToken cancellationToken = default)
             => PauseException is null ? Task.FromResult(CreatedRun) : Task.FromException<DiscoveryRun?>(PauseException);
