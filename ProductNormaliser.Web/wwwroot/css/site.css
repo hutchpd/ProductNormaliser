@@ -489,6 +489,32 @@ h3,
   line-height: 1.02;
 }
 
+.run-id-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.25rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(20, 32, 51, 0.24) transparent;
+}
+
+.run-id-scroll h1,
+.run-id-scroll h2 {
+  width: max-content;
+  min-width: 100%;
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.run-id-scroll.compact h2 {
+  font-size: clamp(1.5rem, 2vw, 2rem);
+  line-height: 1.08;
+}
+
+.discovery-run-hero {
+  align-items: start;
+}
+
 .hero-copy {
   max-width: 62rem;
   color: var(--muted);
@@ -595,6 +621,70 @@ h3,
   gap: 0.65rem;
   flex-wrap: wrap;
   margin-bottom: 1rem;
+}
+
+.activity-log-shell {
+  display: grid;
+  gap: 0.9rem;
+  max-height: 32rem;
+  overflow-y: auto;
+  padding-right: 0.3rem;
+}
+
+.activity-log-entry {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.95rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(20, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.activity-log-entry p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.activity-log-entry.success {
+  border-color: rgba(15, 118, 110, 0.18);
+  background: rgba(15, 118, 110, 0.08);
+}
+
+.activity-log-entry.warning {
+  border-color: rgba(217, 119, 6, 0.18);
+  background: rgba(217, 119, 6, 0.08);
+}
+
+.activity-log-entry.danger {
+  border-color: rgba(180, 35, 24, 0.18);
+  background: rgba(180, 35, 24, 0.08);
+}
+
+.activity-log-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 1rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.compact-breakdown-grid {
+  gap: 1rem;
+}
+
+.candidate-reason-list {
+  margin: 0.75rem 0 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted);
+}
+
+.candidate-reason-list li::marker {
+  color: var(--teal);
 }
 
 .chip,

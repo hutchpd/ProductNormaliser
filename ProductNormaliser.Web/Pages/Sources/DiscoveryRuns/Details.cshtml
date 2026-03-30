@@ -5,7 +5,41 @@
 }
 
 <section class="dashboard-shell">
-    <partial name="_PageHero" model="Model.Hero" />
+    @if (Model.Run is null)
+    {
+        <partial name="_PageHero" model="Model.Hero" />
+    }
+    else
+    {
+        <div class="hero-panel discovery-run-hero">
+            <div>
+                <p class="eyebrow">Discovery Run</p>
+                <div class="run-id-scroll" title="@Model.Run.RunId">
+                    <h1 class="mono">@Model.Run.RunId</h1>
+                </div>
+                <p class="hero-copy">This page follows the persisted background discovery run, including stage progress, serial local verification throughput, candidate decisions, and the latest run activity.</p>
+            </div>
+
+            <div class="hero-metrics">
+                <article>
+                    <span>Stage</span>
+                    <strong>@ProductNormaliser.Web.Models.DiscoveryRunPresentation.GetStageLabel(Model.Run.CurrentStage)</strong>
+                </article>
+                <article>
+                    <span>Progress</span>
+                    <strong>@Model.ProgressPercent%</strong>
+                </article>
+                <article>
+                    <span>Suggested</span>
+                    <strong>@Model.Run.SuggestedCandidateCount</strong>
+                </article>
+                <article>
+                    <span>Published</span>
+                    <strong>@Model.Run.PublishedCandidateCount</strong>
+                </article>
+            </div>
+        </div>
+    }
 
     @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
@@ -40,7 +74,9 @@
                 <div class="panel-heading">
                     <div>
                         <p class="eyebrow">Overall Status</p>
-                        <h2>@Model.Run.RunId</h2>
+                        <div class="run-id-scroll compact" title="@Model.Run.RunId">
+                            <h2 class="mono">@Model.Run.RunId</h2>
+                        </div>
                     </div>
                     <partial name="_StatusBadge" model="Model.StatusBadge" />
                 </div>
@@ -135,6 +171,113 @@
             </aside>
         </div>
 
+        <div class="split-layout discovery-run-insights-layout">
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Run Activity</p>
+                        <h2>Activity log</h2>
+                        <p class="subtle-copy">Search scope, diagnostics, and archived-candidate decisions are listed here in reverse chronological order. Snapshot entries use the latest persisted run update when the backend does not persist an exact event time.</p>
+                    </div>
+                </div>
+
+                @if (Model.ActivityLogEntries.Count == 0)
+                {
+                    <div class="empty-panel">
+                        <p class="empty-state">No run activity is available yet.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="activity-log-shell" role="log" aria-live="polite">
+                    @foreach (var entry in Model.ActivityLogEntries)
+                    {
+                        <article class="@Model.GetActivityEntryClass(entry)">
+                            <div class="activity-log-meta">
+                                <span class="mono">@entry.TimestampUtc.ToString("u")</span>
+                                <span>@entry.TimestampKind</span>
+                            </div>
+                            <strong>@entry.Title</strong>
+                            <p>@entry.Message</p>
+                            @if (!string.IsNullOrWhiteSpace(entry.Code))
+                            {
+                                <span class="chip mono">@entry.Code</span>
+                            }
+                        </article>
+                    }
+                    </div>
+                }
+            </section>
+
+            <aside class="panel panel-muted">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Rejected Hosts</p>
+                        <h2>Archived and rejected candidates</h2>
+                        <p class="subtle-copy">If a persisted candidate was dismissed or archived but you still want to review it, add it back to the active queue here.</p>
+                    </div>
+                </div>
+
+                @if (Model.ArchivedCandidates.Count == 0)
+                {
+                    <div class="empty-panel">
+                        <p class="empty-state">No archived candidates are available for this run yet.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="job-breakdown-grid compact-breakdown-grid">
+                    @foreach (var candidate in Model.ArchivedCandidates)
+                    {
+                        <article>
+                            <div class="panel-heading compact-panel-heading">
+                                <div>
+                                    <strong>@candidate.DisplayName</strong>
+                                    <div class="subtle-copy mono">@candidate.Host</div>
+                                </div>
+                                <span class="badge @Model.GetCandidateStatusTone(candidate)">@candidate.State</span>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(candidate.ArchiveReason))
+                            {
+                                <div class="subtle-copy">Archive reason: @candidate.ArchiveReason</div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(candidate.StateMessage))
+                            {
+                                <div class="subtle-copy">@candidate.StateMessage</div>
+                            }
+                            @if (candidate.ArchivedUtc is not null)
+                            {
+                                <div class="subtle-copy mono">Archived @candidate.ArchivedUtc.Value.ToString("u")</div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(candidate.SupersededByCandidateKey))
+                            {
+                                <div class="subtle-copy">Superseded by @candidate.SupersededByCandidateKey</div>
+                            }
+                            @if (Model.GetCandidateReasonSummary(candidate).Count > 0)
+                            {
+                                <ul class="candidate-reason-list">
+                                @foreach (var reason in Model.GetCandidateReasonSummary(candidate))
+                                {
+                                    <li>@reason</li>
+                                }
+                                </ul>
+                            }
+                            @if (Model.CanRestoreCandidate(candidate))
+                            {
+                                <form method="post" asp-page-handler="RestoreCandidate" class="inline-form mt-2">
+                                    <input type="hidden" asp-for="RunId" />
+                                    <input type="hidden" name="candidateKey" value="@candidate.CandidateKey" />
+                                    <input type="hidden" name="expectedRevision" value="@candidate.Revision" />
+                                    <button type="submit" class="btn btn-outline-dark">@Model.GetArchiveActionLabel(candidate)</button>
+                                </form>
+                            }
+                        </article>
+                    }
+                    </div>
+                }
+            </aside>
+        </div>
+
         <section class="panel">
             <div class="panel-heading">
                 <div>
@@ -192,48 +335,6 @@
                 }
                 </div>
             }
-        </section>
-
-        @if (Model.ArchivedCandidates.Count > 0)
-        {
-            <section class="panel panel-muted">
-                <div class="panel-heading">
-                    <div>
-                        <p class="eyebrow">Archived</p>
-                        <h2>Dismissed candidates</h2>
-                    </div>
-                </div>
-
-                <div class="job-breakdown-grid">
-                @foreach (var candidate in Model.ArchivedCandidates)
-                {
-                    <article>
-                        <strong>@candidate.DisplayName</strong>
-                        <div class="subtle-copy">@candidate.StateMessage</div>
-                        @if (!string.IsNullOrWhiteSpace(candidate.ArchiveReason))
-                        {
-                            <div class="subtle-copy">Archive reason: @candidate.ArchiveReason</div>
-                        }
-                        @if (candidate.ArchivedUtc is not null)
-                        {
-                            <div class="subtle-copy">Archived @candidate.ArchivedUtc.Value.ToString("u")</div>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(candidate.SupersededByCandidateKey))
-                        {
-                            <div class="subtle-copy">Superseded by @candidate.SupersededByCandidateKey</div>
-                        }
-                        @if (Model.CanRestoreCandidate(candidate))
-                        {
-                            <form method="post" asp-page-handler="RestoreCandidate" class="inline-form mt-2">
-                                <input type="hidden" asp-for="RunId" />
-                                <input type="hidden" name="candidateKey" value="@candidate.CandidateKey" />
-                                <input type="hidden" name="expectedRevision" value="@candidate.Revision" />
-                                <button type="submit" class="btn btn-outline-dark">Restore candidate</button>
-                            </form>
-                        }
-                    </article>
-                }
-                </div>
             </section>
         }
     }

@@ -367,6 +367,8 @@ public sealed class SourceManagementRenderingTests
             Assert.That(html, Does.Contain("Dismiss"));
             Assert.That(html, Does.Contain("LLM status"));
             Assert.That(html, Does.Contain("discovery_run_currys"));
+            Assert.That(html, Does.Contain("Activity log"));
+            Assert.That(html, Does.Contain("Archived and rejected candidates"));
             Assert.That(html, Does.Not.Contain("<button type=\"submit\" class=\"btn btn-dark\">Accept candidate</button>"));
         });
     }

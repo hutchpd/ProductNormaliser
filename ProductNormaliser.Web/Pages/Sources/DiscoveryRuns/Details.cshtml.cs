@@ -10,6 +10,9 @@ public sealed class DetailsModel(
     IProductNormaliserAdminApiClient adminApiClient,
     ILogger<DetailsModel> logger) : PageModel
 {
+    private const string SnapshotTimestampKind = "Snapshot";
+    private const string ExactTimestampKind = "Recorded";
+
     [BindProperty(SupportsGet = true, Name = "runId")]
     public string RunId { get; set; } = string.Empty;
 
@@ -39,6 +42,8 @@ public sealed class DetailsModel(
             || string.Equals(candidate.State, "archived", StringComparison.OrdinalIgnoreCase)
             || string.Equals(candidate.State, "superseded", StringComparison.OrdinalIgnoreCase))
         .ToArray();
+
+    public IReadOnlyList<DiscoveryRunActivityEntryModel> ActivityLogEntries => BuildActivityLogEntries();
 
     public PageHeroModel Hero => Run is null
         ? new PageHeroModel
@@ -136,6 +141,214 @@ public sealed class DetailsModel(
     {
         return string.Equals(candidate.State, "dismissed", StringComparison.OrdinalIgnoreCase)
             || string.Equals(candidate.State, "archived", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public string GetActivityEntryClass(DiscoveryRunActivityEntryModel entry)
+    {
+        return entry.Tone switch
+        {
+            "error" => "activity-log-entry danger",
+            "warning" => "activity-log-entry warning",
+            "success" => "activity-log-entry success",
+            _ => "activity-log-entry info"
+        };
+    }
+
+    public IReadOnlyList<string> GetCandidateReasonSummary(DiscoveryRunCandidateDto candidate)
+    {
+        return new[]
+            {
+                candidate.ArchiveReason,
+                candidate.StateMessage
+            }
+            .OfType<string>()
+            .Concat(candidate.Reasons
+            .Select(reason => reason.Message)
+            .Concat(candidate.AutomationAssessment.BlockingReasons))
+            .Where(message => !string.IsNullOrWhiteSpace(message))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(4)
+            .ToArray();
+    }
+
+    public string GetArchiveActionLabel(DiscoveryRunCandidateDto candidate)
+    {
+        return CanRestoreCandidate(candidate)
+            ? "Add back to review queue"
+            : "Archived for reference";
+    }
+
+    private IReadOnlyList<DiscoveryRunActivityEntryModel> BuildActivityLogEntries()
+    {
+        if (Run is null)
+        {
+            return [];
+        }
+
+        var entries = new List<DiscoveryRunActivityEntryModel>
+        {
+            new()
+            {
+                TimestampUtc = Run.CreatedUtc,
+                TimestampKind = ExactTimestampKind,
+                Tone = "info",
+                Title = "Discovery requested",
+                Message = BuildDiscoveryRequestSummary(Run)
+            }
+        };
+
+        if (Run.StartedUtc is { } startedUtc)
+        {
+            entries.Add(new DiscoveryRunActivityEntryModel
+            {
+                TimestampUtc = startedUtc,
+                TimestampKind = ExactTimestampKind,
+                Tone = "info",
+                Title = "Worker picked up the run",
+                Message = $"Background processing started in the {ProductNormaliser.Web.Models.DiscoveryRunPresentation.GetStageLabel(Run.CurrentStage).ToLowerInvariant()} stage."
+            });
+        }
+
+        if (TryGetSearchCompletedUtc(Run, out var searchCompletedUtc))
+        {
+            entries.Add(new DiscoveryRunActivityEntryModel
+            {
+                TimestampUtc = searchCompletedUtc,
+                TimestampKind = ExactTimestampKind,
+                Tone = "success",
+                Title = "Search completed",
+                Message = $"Search returned {Run.SearchResultCount} raw result{(Run.SearchResultCount == 1 ? string.Empty : "s")} and collapsed them into {Run.CollapsedCandidateCount} candidate slot{(Run.CollapsedCandidateCount == 1 ? string.Empty : "s")}."
+            });
+        }
+        else if (Run.SearchResultCount > 0 || Run.CollapsedCandidateCount > 0)
+        {
+            entries.Add(new DiscoveryRunActivityEntryModel
+            {
+                TimestampUtc = Run.UpdatedUtc,
+                TimestampKind = SnapshotTimestampKind,
+                Tone = "info",
+                Title = "Search snapshot updated",
+                Message = $"The latest run snapshot shows {Run.SearchResultCount} raw result{(Run.SearchResultCount == 1 ? string.Empty : "s")} and {Run.CollapsedCandidateCount} collapsed candidate slot{(Run.CollapsedCandidateCount == 1 ? string.Empty : "s")}."
+            });
+        }
+
+        if (Run.ProbeCompletedCount > 0)
+        {
+            entries.Add(new DiscoveryRunActivityEntryModel
+            {
+                TimestampUtc = Run.UpdatedUtc,
+                TimestampKind = SnapshotTimestampKind,
+                Tone = "info",
+                Title = "Representative probing updated",
+                Message = $"{Run.ProbeCompletedCount} candidate slot{(Run.ProbeCompletedCount == 1 ? string.Empty : "s")} have representative page probe results in the current snapshot."
+            });
+        }
+
+        if (Run.LlmQueueDepth > 0 || Run.LlmCompletedCount > 0)
+        {
+            entries.Add(new DiscoveryRunActivityEntryModel
+            {
+                TimestampUtc = Run.UpdatedUtc,
+                TimestampKind = SnapshotTimestampKind,
+                Tone = "info",
+                Title = "Verification lane updated",
+                Message = $"The local verification queue currently shows {Run.LlmQueueDepth} waiting and {Run.LlmCompletedCount} completed."
+            });
+        }
+
+        foreach (var diagnostic in Run.Diagnostics)
+        {
+            entries.Add(new DiscoveryRunActivityEntryModel
+            {
+                TimestampUtc = Run.UpdatedUtc,
+                TimestampKind = SnapshotTimestampKind,
+                Tone = diagnostic.Severity,
+                Title = diagnostic.Title,
+                Message = diagnostic.Message,
+                Code = diagnostic.Code
+            });
+        }
+
+        foreach (var candidate in ArchivedCandidates)
+        {
+            entries.Add(new DiscoveryRunActivityEntryModel
+            {
+                TimestampUtc = candidate.ArchivedUtc ?? Run.UpdatedUtc,
+                TimestampKind = candidate.ArchivedUtc is null ? SnapshotTimestampKind : ExactTimestampKind,
+                Tone = string.Equals(candidate.State, "superseded", StringComparison.OrdinalIgnoreCase) ? "info" : "warning",
+                Title = BuildArchivedCandidateTitle(candidate),
+                Message = BuildArchivedCandidateSummary(candidate)
+            });
+        }
+
+        return entries
+            .OrderByDescending(entry => entry.TimestampUtc)
+            .ThenBy(entry => entry.TimestampKind, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool TryGetSearchCompletedUtc(DiscoveryRunDto run, out DateTime timestampUtc)
+    {
+        if (run.SearchElapsedMs is not { } searchElapsedMs)
+        {
+            timestampUtc = default;
+            return false;
+        }
+
+        var baselineUtc = run.StartedUtc ?? run.CreatedUtc;
+        timestampUtc = baselineUtc.AddMilliseconds(searchElapsedMs);
+        return true;
+    }
+
+    private static string BuildDiscoveryRequestSummary(DiscoveryRunDto run)
+    {
+        var market = string.IsNullOrWhiteSpace(run.Market) ? "any market" : run.Market;
+        var locale = string.IsNullOrWhiteSpace(run.Locale) ? "any locale" : run.Locale;
+        var brandHints = run.BrandHints.Count == 0
+            ? "no brand hints"
+            : $"brand hints: {string.Join(", ", run.BrandHints)}";
+
+        return $"Queued search for {string.Join(", ", run.RequestedCategoryKeys)} in {market} / {locale} with up to {run.MaxCandidates} candidates and {brandHints}.";
+    }
+
+    private static string BuildArchivedCandidateTitle(DiscoveryRunCandidateDto candidate)
+    {
+        return candidate.State switch
+        {
+            "dismissed" => $"Dismissed {candidate.DisplayName}",
+            "superseded" => $"Superseded {candidate.DisplayName}",
+            _ => $"Archived {candidate.DisplayName}"
+        };
+    }
+
+    private static string BuildArchivedCandidateSummary(DiscoveryRunCandidateDto candidate)
+    {
+        var reasons = new[]
+            {
+                candidate.ArchiveReason,
+                candidate.StateMessage
+            }
+            .Concat(candidate.AutomationAssessment.BlockingReasons)
+            .Concat(candidate.Reasons.Select(reason => reason.Message))
+            .Where(message => !string.IsNullOrWhiteSpace(message))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var suffix = reasons.Length == 0
+            ? "No specific archive reason was persisted for this snapshot."
+            : string.Join(" ", reasons.Take(3));
+
+        return $"{candidate.Host} was moved out of the active queue. {suffix}";
+    }
+
+    public sealed class DiscoveryRunActivityEntryModel
+    {
+        public DateTime TimestampUtc { get; init; }
+        public string TimestampKind { get; init; } = SnapshotTimestampKind;
+        public string Tone { get; init; } = "info";
+        public string Title { get; init; } = string.Empty;
+        public string Message { get; init; } = string.Empty;
+        public string? Code { get; init; }
     }
 
     private async Task<IActionResult> RunMutationAsync(Func<Task<DiscoveryRunDto>> action, string message)
