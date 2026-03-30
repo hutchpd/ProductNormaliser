@@ -59,6 +59,15 @@ public sealed class DiscoveryRunProcessor(
             return false;
         }
 
+        logger.LogInformation(
+            "Claimed discovery run {RunId} for categories [{Categories}] market={Market} locale={Locale} automation={AutomationMode} maxCandidates={MaxCandidates}",
+            run.RunId,
+            string.Join(", ", run.RequestedCategoryKeys),
+            run.Market ?? "any",
+            run.Locale ?? "any",
+            run.AutomationMode,
+            run.MaxCandidates);
+
         var utcNow = DateTime.UtcNow;
         var scopeFingerprint = DiscoveryRunScopePolicy.CreateFingerprint(run);
         run.Status = DiscoveryRunStatuses.Running;
@@ -120,6 +129,13 @@ public sealed class DiscoveryRunProcessor(
             EnsureBudgetDiagnostics(run);
             await TouchRunAsync(run, cancellationToken);
 
+            logger.LogInformation(
+                "Discovery run {RunId} search finished with {SearchResultCount} raw results and {DiagnosticCount} diagnostic(s) in {ElapsedMs}ms",
+                run.RunId,
+                run.SearchResultCount,
+                run.Diagnostics.Count,
+                run.SearchElapsedMs);
+
             if (await TryRespectOperatorControlsAsync(run.RunId, cancellationToken))
             {
                 return true;
@@ -129,6 +145,11 @@ public sealed class DiscoveryRunProcessor(
             var collapsedCandidates = evaluator.CollapseEquivalentCandidates(searchResponse.Candidates);
             run.CollapsedCandidateCount = collapsedCandidates.Count;
             await TouchRunAsync(run, cancellationToken);
+
+            logger.LogInformation(
+                "Discovery run {RunId} collapsed search results into {CollapsedCandidateCount} candidate slot(s)",
+                run.RunId,
+                run.CollapsedCandidateCount);
 
             foreach (var searchCandidate in collapsedCandidates)
             {
@@ -370,6 +391,14 @@ public sealed class DiscoveryRunProcessor(
             run.LastHeartbeatUtc = run.CompletedUtc.Value;
             await discoveryRunStore.UpsertAsync(run, cancellationToken);
             EmitRunTelemetry(run);
+
+            logger.LogInformation(
+                "Completed discovery run {RunId} with status={Status}, suggested={SuggestedCandidateCount}, autoAccepted={AutoAcceptedCandidateCount}, published={PublishedCandidateCount}",
+                run.RunId,
+                run.Status,
+                run.SuggestedCandidateCount,
+                run.AutoAcceptedCandidateCount,
+                run.PublishedCandidateCount);
         }
         catch (OperationCanceledException)
         {

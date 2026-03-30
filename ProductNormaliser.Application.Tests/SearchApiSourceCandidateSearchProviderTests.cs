@@ -44,12 +44,15 @@ public sealed class SearchApiSourceCandidateSearchProviderTests
         {
             BaseAddress = new Uri("https://api.search.brave.com")
         };
-        var provider = new SearchApiSourceCandidateSearchProvider(httpClient, Options.Create(new SourceCandidateDiscoveryOptions
-        {
+        var provider = new SearchApiSourceCandidateSearchProvider(
+          httpClient,
+          Options.Create(new SourceCandidateDiscoveryOptions
+          {
             SearchTimeoutSeconds = 5,
-          MaxSearchQueries = 2,
-          SearchApiKey = "test-key"
-        }));
+            MaxSearchQueries = 2,
+            SearchApiKey = "test-key"
+          }),
+          Options.Create(new DiscoveryRunOperationsOptions()));
 
         var result = await provider.SearchAsync(new DiscoverSourceCandidatesRequest
         {
@@ -86,11 +89,14 @@ public sealed class SearchApiSourceCandidateSearchProviderTests
         {
           BaseAddress = new Uri("https://api.search.brave.com")
         };
-        var provider = new SearchApiSourceCandidateSearchProvider(httpClient, Options.Create(new SourceCandidateDiscoveryOptions
-        {
-          SearchTimeoutSeconds = 5,
-          MaxSearchQueries = 2
-        }));
+        var provider = new SearchApiSourceCandidateSearchProvider(
+            httpClient,
+            Options.Create(new SourceCandidateDiscoveryOptions
+            {
+                SearchTimeoutSeconds = 5,
+                MaxSearchQueries = 2
+            }),
+            Options.Create(new DiscoveryRunOperationsOptions()));
 
         var result = await provider.SearchAsync(new DiscoverSourceCandidatesRequest
         {
@@ -116,12 +122,15 @@ public sealed class SearchApiSourceCandidateSearchProviderTests
         {
           BaseAddress = new Uri("https://api.search.brave.com")
         };
-        var provider = new SearchApiSourceCandidateSearchProvider(httpClient, Options.Create(new SourceCandidateDiscoveryOptions
-        {
-          SearchTimeoutSeconds = 5,
-          MaxSearchQueries = 2,
-          SearchApiKey = "test-key"
-        }));
+        var provider = new SearchApiSourceCandidateSearchProvider(
+            httpClient,
+            Options.Create(new SourceCandidateDiscoveryOptions
+            {
+                SearchTimeoutSeconds = 5,
+                MaxSearchQueries = 2,
+                SearchApiKey = "test-key"
+            }),
+            Options.Create(new DiscoveryRunOperationsOptions()));
 
         var result = await provider.SearchAsync(new DiscoverSourceCandidatesRequest
         {
@@ -147,12 +156,15 @@ public sealed class SearchApiSourceCandidateSearchProviderTests
         {
           BaseAddress = new Uri("https://api.search.brave.com")
         };
-        var provider = new SearchApiSourceCandidateSearchProvider(httpClient, Options.Create(new SourceCandidateDiscoveryOptions
-        {
-          SearchTimeoutSeconds = 5,
-          MaxSearchQueries = 2,
-          SearchApiKey = "test-key"
-        }));
+        var provider = new SearchApiSourceCandidateSearchProvider(
+            httpClient,
+            Options.Create(new SourceCandidateDiscoveryOptions
+            {
+                SearchTimeoutSeconds = 5,
+                MaxSearchQueries = 2,
+                SearchApiKey = "test-key"
+            }),
+            Options.Create(new DiscoveryRunOperationsOptions()));
 
         var result = await provider.SearchAsync(new DiscoverSourceCandidatesRequest
         {

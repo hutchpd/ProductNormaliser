@@ -1754,6 +1754,7 @@ h3,
 .job-card {
   display: grid;
   gap: 1rem;
+  min-width: 0;
   padding: 1rem;
   border-radius: 1rem;
   border: 1px solid rgba(20, 32, 51, 0.08);
@@ -1770,6 +1771,26 @@ h3,
   justify-content: space-between;
   align-items: start;
   gap: 0.75rem;
+}
+
+.job-card-header > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.job-card-header strong {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.job-card .actions-bar {
+  flex-wrap: wrap;
+}
+
+.job-card .actions-bar .btn {
+  max-width: 100%;
 }
 
 .job-meta-grid {

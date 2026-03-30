@@ -45,7 +45,7 @@ The worker reads configuration from [appsettings.json](appsettings.json) and the
 Current default settings include:
 
 - MongoDB connection string: `mongodb://127.0.0.1:27017`
-- MongoDB database: `product_normaliser`
+- MongoDB database: `ProductNormaliser`
 - crawl user agent: `ProductNormaliserBot/1.0`
 - default host delay: 1000 ms
 - transient retry count: 2

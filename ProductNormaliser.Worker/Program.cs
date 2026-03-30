@@ -57,7 +57,7 @@ builder.Services.AddHttpClient<ISourceCandidateSearchProvider, SearchApiSourceCa
 	}
 });
 builder.Services.AddHttpClient<IHttpFetcher, HttpFetcher>();
-builder.Services.AddHttpClient<IRobotsPolicyService, RobotsPolicyService>();
+builder.Services.AddSingleton<IRobotsPolicyService, RobotsPolicyService>();
 builder.Services.AddHostedService<CrawlWorker>();
 builder.Services.AddHostedService<DiscoveryWorker>();
 builder.Services.AddHostedService<DiscoveryRunWorker>();

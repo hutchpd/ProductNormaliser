@@ -14,11 +14,6 @@ public sealed class SearchApiSourceCandidateSearchProvider(
     private readonly SourceCandidateDiscoveryOptions options = options.Value;
     private readonly DiscoveryRunOperationsOptions operationsOptions = operationsOptions.Value;
 
-    public SearchApiSourceCandidateSearchProvider(HttpClient httpClient, IOptions<SourceCandidateDiscoveryOptions> options)
-        : this(httpClient, options, Options.Create(new DiscoveryRunOperationsOptions()))
-    {
-    }
-
     public async Task<SourceCandidateSearchResponse> SearchAsync(DiscoverSourceCandidatesRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
