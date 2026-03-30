@@ -4,6 +4,8 @@ public sealed class DiscoveryRunCandidateProbe
 {
     public bool HomePageReachable { get; set; }
     public bool RobotsTxtReachable { get; set; }
+    public bool ProbeTimedOut { get; set; }
+    public bool ProbeFailed { get; set; }
     public bool SitemapDetected { get; set; }
     public IReadOnlyList<string> SitemapUrls { get; set; } = [];
     public decimal CrawlabilityScore { get; set; }
@@ -13,8 +15,10 @@ public sealed class DiscoveryRunCandidateProbe
     public decimal CatalogLikelihoodScore { get; set; }
     public string? RepresentativeCategoryPageUrl { get; set; }
     public bool RepresentativeCategoryPageReachable { get; set; }
+    public bool RepresentativeCategoryPageFetchFailed { get; set; }
     public string? RepresentativeProductPageUrl { get; set; }
     public bool RepresentativeProductPageReachable { get; set; }
+    public bool RepresentativeProductPageFetchFailed { get; set; }
     public bool RuntimeExtractionCompatible { get; set; }
     public int RepresentativeRuntimeProductCount { get; set; }
     public int AutomationCategorySampleCount { get; set; }
@@ -32,6 +36,7 @@ public sealed class DiscoveryRunCandidateProbe
     public bool LlmDetectedSpecifications { get; set; }
     public string? LlmDetectedCategory { get; set; }
     public decimal? LlmConfidenceScore { get; set; }
+    public bool LlmTimedOut { get; set; }
     public string? LlmReason { get; set; }
     public int ProbeAttemptCount { get; set; }
     public long ProbeElapsedMs { get; set; }

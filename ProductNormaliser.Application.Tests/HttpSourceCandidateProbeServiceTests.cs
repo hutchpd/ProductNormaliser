@@ -403,6 +403,72 @@ public sealed class HttpSourceCandidateProbeServiceTests
     }
 
     [Test]
+    public async Task ProbeAsync_FlagsRepresentativeProductFetchFailure_WhenChosenProductPageCannotBeFetched()
+    {
+        var fetcher = new FakeHttpFetcher(new Dictionary<string, FetchResult>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["https://candidate.example/"] = new FetchResult
+            {
+                Url = "https://candidate.example/",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "<html><body><a href=\"/tv/\">TV</a><a href=\"/product/oled-123\">OLED</a></body></html>",
+                FetchedUtc = DateTime.UtcNow
+            },
+            ["https://candidate.example/robots.txt"] = new FetchResult
+            {
+                Url = "https://candidate.example/robots.txt",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "User-agent: *",
+                FetchedUtc = DateTime.UtcNow
+            },
+            ["https://candidate.example/tv/"] = new FetchResult
+            {
+                Url = "https://candidate.example/tv/",
+                IsSuccess = true,
+                StatusCode = 200,
+                Html = "<html><body><a href=\"/product/oled-123\">OLED</a></body></html>",
+                FetchedUtc = DateTime.UtcNow
+            },
+            ["https://candidate.example/product/oled-123"] = new FetchResult
+            {
+                Url = "https://candidate.example/product/oled-123",
+                IsSuccess = false,
+                StatusCode = 404,
+                FailureReason = "not found",
+                FetchedUtc = DateTime.UtcNow
+            }
+        });
+        var service = new HttpSourceCandidateProbeService(
+            fetcher,
+            new SchemaOrgJsonLdExtractor(),
+            new NoOpPageClassificationService(),
+            Options.Create(new SourceCandidateDiscoveryOptions { ProbeTimeoutSeconds = 5 }),
+            Options.Create(new SourceOnboardingAutomationOptions()),
+            Options.Create(new LlmOptions()),
+            NullLogger<HttpSourceCandidateProbeService>.Instance);
+
+        var result = await service.ProbeAsync(new SourceCandidateSearchResult
+        {
+            CandidateKey = "candidate_example",
+            DisplayName = "Candidate Example",
+            BaseUrl = "https://candidate.example/",
+            Host = "candidate.example",
+            CandidateType = "retailer"
+        }, ["tv"], SourceAutomationModes.OperatorAssisted);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.RepresentativeCategoryPageReachable, Is.True);
+            Assert.That(result.RepresentativeCategoryPageFetchFailed, Is.False);
+            Assert.That(result.RepresentativeProductPageReachable, Is.False);
+            Assert.That(result.RepresentativeProductPageFetchFailed, Is.True);
+            Assert.That(result.RuntimeExtractionCompatible, Is.False);
+        });
+    }
+
+    [Test]
     public async Task ProbeAsync_DoesNotCallLlm_WhenLlmIsDisabled()
     {
         var fetcher = CreateRepresentativeProductFetcher();
@@ -561,6 +627,7 @@ public sealed class HttpSourceCandidateProbeServiceTests
         {
             Assert.That(result.RepresentativeProductPageReachable, Is.True);
             Assert.That(result.LlmReason, Is.EqualTo("LLM timeout"));
+            Assert.That(result.LlmTimedOut, Is.True);
             Assert.That(result.LlmAcceptedRepresentativeProductPage, Is.False);
             Assert.That(result.LlmRejectedRepresentativeProductPage, Is.False);
             Assert.That(result.ExtractabilityScore, Is.EqualTo(100m));

@@ -238,26 +238,19 @@ public sealed class DiscoveryRunProcessor(
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
-                    probe = new SourceCandidateProbeResult();
-                    AppendUniqueDiagnostic(run.Diagnostics, new DiscoveryRunDiagnostic
+                    probe = new SourceCandidateProbeResult
                     {
-                        Code = "probe_timeout",
-                        Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
-                        Title = "Candidate probing timed out",
-                        Message = $"Probing exceeded the configured probe budget of {run.ProbeTimeoutBudgetMs}ms for '{searchCandidate.DisplayName}'. The worker continued with reduced confidence for this candidate."
-                    });
+                        ProbeTimedOut = true,
+                        ProbeElapsedMs = run.ProbeTimeoutBudgetMs ?? 0L
+                    };
                 }
                 catch (Exception exception)
                 {
                     logger.LogWarning(exception, "Candidate probing failed for discovery run {RunId} candidate {CandidateKey}", run.RunId, candidateKey);
-                    probe = new SourceCandidateProbeResult();
-                    AppendUniqueDiagnostic(run.Diagnostics, new DiscoveryRunDiagnostic
+                    probe = new SourceCandidateProbeResult
                     {
-                        Code = "probe_failed",
-                        Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
-                        Title = "Candidate probing failed",
-                        Message = $"Probing failed for '{searchCandidate.DisplayName}'. The worker continued with reduced confidence for this candidate."
-                    });
+                        ProbeFailed = true
+                    };
                 }
 
                 run.ProbeTotalElapsedMs += probe.ProbeElapsedMs;

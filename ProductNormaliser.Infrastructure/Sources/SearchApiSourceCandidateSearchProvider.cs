@@ -51,63 +51,82 @@ public sealed class SearchApiSourceCandidateSearchProvider(
             });
         }
 
-        foreach (var query in BuildQueries(request).Take(Math.Max(1, options.MaxSearchQueries)))
+        try
         {
-            var queryResponse = await SearchQueryAsync(query, request, timeoutCts.Token);
-            MergeDiagnostics(diagnostics, queryResponse.Diagnostics);
-
-            foreach (var candidate in queryResponse.Candidates)
+            foreach (var query in BuildQueries(request).Take(Math.Max(1, options.MaxSearchQueries)))
             {
-                var candidateKey = BuildCandidateGroupingKey(candidate);
-                if (candidatesByHost.TryGetValue(candidateKey, out var existing))
+                var queryResponse = await SearchQueryAsync(query, request, timeoutCts.Token);
+                MergeDiagnostics(diagnostics, queryResponse.Diagnostics);
+
+                foreach (var candidate in queryResponse.Candidates)
                 {
-                    candidatesByHost[candidateKey] = new SourceCandidateSearchResult
+                    var candidateKey = BuildCandidateGroupingKey(candidate);
+                    if (candidatesByHost.TryGetValue(candidateKey, out var existing))
                     {
-                        CandidateKey = existing.CandidateKey,
-                        DisplayName = existing.DisplayName.Length >= candidate.DisplayName.Length ? existing.DisplayName : candidate.DisplayName,
-                        BaseUrl = existing.BaseUrl,
-                        Host = existing.Host,
-                        CandidateType = string.Equals(existing.CandidateType, "manufacturer", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(candidate.CandidateType, "manufacturer", StringComparison.OrdinalIgnoreCase)
-                            ? "manufacturer"
-                            : "retailer",
-                        AllowedMarkets = existing.AllowedMarkets
-                            .Concat(candidate.AllowedMarkets)
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
-                            .ToArray(),
-                        PreferredLocale = string.Equals(existing.PreferredLocale, request.Locale, StringComparison.OrdinalIgnoreCase)
-                            ? existing.PreferredLocale
-                            : candidate.PreferredLocale,
-                        MarketEvidence = MergeEvidence(existing.MarketEvidence, candidate.MarketEvidence),
-                        LocaleEvidence = MergeEvidence(existing.LocaleEvidence, candidate.LocaleEvidence),
-                        MatchedCategoryKeys = existing.MatchedCategoryKeys
-                            .Concat(candidate.MatchedCategoryKeys)
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
-                            .ToArray(),
-                        MatchedBrandHints = existing.MatchedBrandHints
-                            .Concat(candidate.MatchedBrandHints)
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
-                            .ToArray(),
-                        SearchReasons = existing.SearchReasons
-                            .Concat(candidate.SearchReasons)
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
-                            .ToArray()
-                    };
+                        candidatesByHost[candidateKey] = new SourceCandidateSearchResult
+                        {
+                            CandidateKey = existing.CandidateKey,
+                            DisplayName = existing.DisplayName.Length >= candidate.DisplayName.Length ? existing.DisplayName : candidate.DisplayName,
+                            BaseUrl = existing.BaseUrl,
+                            Host = existing.Host,
+                            CandidateType = string.Equals(existing.CandidateType, "manufacturer", StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(candidate.CandidateType, "manufacturer", StringComparison.OrdinalIgnoreCase)
+                                ? "manufacturer"
+                                : "retailer",
+                            AllowedMarkets = existing.AllowedMarkets
+                                .Concat(candidate.AllowedMarkets)
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                                .ToArray(),
+                            PreferredLocale = string.Equals(existing.PreferredLocale, request.Locale, StringComparison.OrdinalIgnoreCase)
+                                ? existing.PreferredLocale
+                                : candidate.PreferredLocale,
+                            MarketEvidence = MergeEvidence(existing.MarketEvidence, candidate.MarketEvidence),
+                            LocaleEvidence = MergeEvidence(existing.LocaleEvidence, candidate.LocaleEvidence),
+                            MatchedCategoryKeys = existing.MatchedCategoryKeys
+                                .Concat(candidate.MatchedCategoryKeys)
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                                .ToArray(),
+                            MatchedBrandHints = existing.MatchedBrandHints
+                                .Concat(candidate.MatchedBrandHints)
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                                .ToArray(),
+                            SearchReasons = existing.SearchReasons
+                                .Concat(candidate.SearchReasons)
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                                .ToArray()
+                        };
+                    }
+                    else
+                    {
+                        candidatesByHost[candidateKey] = candidate;
+                    }
                 }
-                else
-                {
-                    candidatesByHost[candidateKey] = candidate;
-                }
-            }
 
-            if (queryResponse.Diagnostics.Any(IsBlockingDiagnostic))
-            {
-                break;
+                if (queryResponse.Diagnostics.Any(IsBlockingDiagnostic))
+                {
+                    break;
+                }
             }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new SourceCandidateSearchResponse
+            {
+                Diagnostics =
+                [
+                    new SourceCandidateDiscoveryDiagnostic
+                    {
+                        Code = "search_timeout",
+                        Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
+                        Title = "Search provider timed out",
+                        Message = $"Search provider lookup exceeded the configured search-stage budget of {Math.Max(1, operationsOptions.SearchTimeoutSeconds)}s before discovery finished issuing provider queries."
+                    }
+                ]
+            };
         }
 
         if (candidatesByHost.Count == 0 && diagnostics.All(diagnostic => !IsBlockingDiagnostic(diagnostic)))

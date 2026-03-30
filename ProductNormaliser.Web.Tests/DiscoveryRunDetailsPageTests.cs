@@ -94,6 +94,71 @@ public sealed class DiscoveryRunDetailsPageTests
     }
 
     [Test]
+    public async Task OnGetAsync_ComputesTimeoutAndFetchFailureBreakdown()
+    {
+        var client = new FakeAdminApiClient
+        {
+            DiscoveryRun = CreateRun(
+                status: "completed",
+                stage: "publish",
+                diagnostics:
+                [
+                    new SourceCandidateDiscoveryDiagnosticDto
+                    {
+                        Code = "search_timeout",
+                        Severity = "warning",
+                        Title = "Search provider timed out",
+                        Message = "Search provider lookup exceeded the configured budget."
+                    }
+                ]),
+            DiscoveryRunCandidates =
+            [
+                CreateCandidate(
+                    "probe_timeout_candidate",
+                    "failed",
+                    probe: new SourceCandidateProbeDto
+                    {
+                        ProbeTimedOut = true,
+                        ProbeElapsedMs = 15000
+                    }),
+                CreateCandidate(
+                    "fetch_failed_candidate",
+                    "suggested",
+                    probe: new SourceCandidateProbeDto
+                    {
+                        RepresentativeCategoryPageFetchFailed = true,
+                        RepresentativeProductPageFetchFailed = true
+                    }),
+                CreateCandidate(
+                    "llm_timeout_candidate",
+                    "suggested",
+                    probe: new SourceCandidateProbeDto
+                    {
+                        LlmTimedOut = true,
+                        LlmElapsedMs = 3500
+                    })
+            ]
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel>.Instance)
+        {
+            RunId = "discovery_run_1"
+        };
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.SearchTimeoutCount, Is.EqualTo(1));
+            Assert.That(model.ProbeTimeoutCandidateCount, Is.EqualTo(1));
+            Assert.That(model.RepresentativePageFetchFailureCandidateCount, Is.EqualTo(1));
+            Assert.That(model.RepresentativeCategoryFetchFailureCount, Is.EqualTo(1));
+            Assert.That(model.RepresentativeProductFetchFailureCount, Is.EqualTo(1));
+            Assert.That(model.LlmTimeoutCandidateCount, Is.EqualTo(1));
+        });
+    }
+
+    [Test]
     public async Task OnPostPauseAsync_CallsApiAndRedirectsBackToRun()
     {
         var client = new FakeAdminApiClient
@@ -266,7 +331,8 @@ public sealed class DiscoveryRunDetailsPageTests
         string? supersededByCandidateKey = null,
         DateTime? archivedUtc = null,
         string? stateMessage = null,
-        string? archiveReason = null)
+        string? archiveReason = null,
+        SourceCandidateProbeDto? probe = null)
     {
         return new DiscoveryRunCandidateDto
         {
@@ -294,7 +360,7 @@ public sealed class DiscoveryRunDetailsPageTests
             RuntimeExtractionMessage = "Compatible.",
             MatchedCategoryKeys = ["tv"],
             AllowedByGovernance = true,
-            Probe = new SourceCandidateProbeDto(),
+            Probe = probe ?? new SourceCandidateProbeDto(),
             AutomationAssessment = new SourceCandidateAutomationAssessmentDto(),
             Reasons = []
         };

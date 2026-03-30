@@ -171,6 +171,40 @@
             </aside>
         </div>
 
+        <section class="panel panel-muted">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Timeouts And Fallbacks</p>
+                    <h2>What actually timed out</h2>
+                    <p class="subtle-copy">Search timeout means the provider query stage overran its run budget. Probe timeout means the full per-candidate representative-page probe overran. Representative fetch failure means a page was chosen but could not be fetched. LLM timeout only affects representative product-page classification.</p>
+                </div>
+            </div>
+
+            <div class="detail-grid">
+                <div>
+                    <dt>Search stage timeouts</dt>
+                    <dd>@Model.SearchTimeoutCount run-level timeout(s)</dd>
+                </div>
+                <div>
+                    <dt>Candidate probe timeouts</dt>
+                    <dd>@Model.ProbeTimeoutCandidateCount candidate(s)</dd>
+                </div>
+                <div>
+                    <dt>Representative fetch failures</dt>
+                    <dd>@Model.RepresentativePageFetchFailureCandidateCount candidate(s)</dd>
+                </div>
+                <div>
+                    <dt>LLM verification timeouts</dt>
+                    <dd>@Model.LlmTimeoutCandidateCount candidate(s)</dd>
+                </div>
+            </div>
+
+            @if (Model.RepresentativePageFetchFailureCandidateCount > 0)
+            {
+                <p class="subtle-copy mt-3 mb-0">Representative fetch failures include @Model.RepresentativeCategoryFetchFailureCount category page failure(s) and @Model.RepresentativeProductFetchFailureCount product page failure(s).</p>
+            }
+        </section>
+
         <div class="split-layout discovery-run-insights-layout">
             <section class="panel">
                 <div class="panel-heading">

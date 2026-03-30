@@ -109,6 +109,8 @@ public sealed partial class HttpSourceCandidateProbeService(
             : [];
         var representativeCategoryPageHtml = FindFetchedHtml(categorySamples, ToAbsoluteUrl(candidate.BaseUrl, representativeCategoryPageUrl))
             ?? await TryFetchRepresentativeAsync(candidate.BaseUrl, representativeCategoryPageUrl, timeoutCts.Token);
+        var representativeCategoryPageFetchFailed = !string.IsNullOrWhiteSpace(representativeCategoryPageUrl)
+            && representativeCategoryPageHtml is null;
         var representativeProductPageUrl = ExtractRepresentativeProductPageUrl(candidate.BaseUrl, homePageHtml, representativeCategoryPageHtml);
         var productSampleUrls = collectAutomationEvidence
             ? SelectSampleUrls(
@@ -122,6 +124,8 @@ public sealed partial class HttpSourceCandidateProbeService(
             : [];
         var representativeProductPageHtml = FindFetchedHtml(productSamples, representativeProductPageUrl)
             ?? await TryFetchRepresentativeAsync(candidate.BaseUrl, representativeProductPageUrl, timeoutCts.Token);
+        var representativeProductPageFetchFailed = !string.IsNullOrWhiteSpace(representativeProductPageUrl)
+            && representativeProductPageHtml is null;
         var likelyListingUrlPatterns = InferListingUrlPatterns(categoryPageHints);
         var likelyProductUrlPatterns = InferProductUrlPatterns(string.Join(
             '\n',
@@ -153,6 +157,7 @@ public sealed partial class HttpSourceCandidateProbeService(
             && !llmNeutral
             && !llmResult.IsProductPage;
         var llmDisagreedWithHeuristics = llmResult is not null && llmAcceptedRepresentativeProductPage != heuristicProductEvidenceDetected;
+        var llmTimedOut = string.Equals(llmResult?.Reason, "LLM timeout", StringComparison.OrdinalIgnoreCase);
         var catalogLikelihoodScore = ScoreCatalogLikelihood(homePageHtml, representativeCategoryPageHtml, representativeProductPageUrl);
         var categoryRelevanceScore = ScoreCategoryRelevance(categoryKeys, homePageHtml, representativeCategoryPageHtml, categoryPageHints);
         var crawlabilityScore = ScoreCrawlability(homePageHtml, robotsText, sitemapUrls.Count > 0, representativeCategoryPageHtml, representativeProductPageHtml);
@@ -191,8 +196,10 @@ public sealed partial class HttpSourceCandidateProbeService(
             CatalogLikelihoodScore = catalogLikelihoodScore,
             RepresentativeCategoryPageUrl = representativeCategoryPageUrl,
             RepresentativeCategoryPageReachable = representativeCategoryPageHtml is not null,
+            RepresentativeCategoryPageFetchFailed = representativeCategoryPageFetchFailed,
             RepresentativeProductPageUrl = representativeProductPageUrl,
             RepresentativeProductPageReachable = representativeProductPageHtml is not null,
+            RepresentativeProductPageFetchFailed = representativeProductPageFetchFailed,
             RuntimeExtractionCompatible = runtimeExtractionCompatible,
             RepresentativeRuntimeProductCount = representativeRuntimeProductCount,
             AutomationCategorySampleCount = categorySamples.Count,
@@ -210,6 +217,7 @@ public sealed partial class HttpSourceCandidateProbeService(
             LlmDetectedSpecifications = llmResult?.HasSpecifications == true,
             LlmDetectedCategory = llmResult?.DetectedCategory,
             LlmConfidenceScore = llmResult is null ? null : decimal.Round((decimal)llmResult.Confidence * 100m, 2, MidpointRounding.AwayFromZero),
+            LlmTimedOut = llmTimedOut,
             LlmReason = llmResult?.Reason,
             ProbeAttemptCount = attemptNumber,
             ProbeElapsedMs = attemptStopwatch.ElapsedMilliseconds,

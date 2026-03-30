@@ -116,22 +116,64 @@ internal sealed class SourceCandidateDiscoveryEvaluator(SourceOnboardingAutomati
 
     public IReadOnlyList<SourceCandidateDiscoveryDiagnostic> BuildProbeDiagnostics(IReadOnlyCollection<SourceCandidateResult> candidates)
     {
-        var retriedCandidates = candidates.Count(candidate => candidate.Probe.ProbeAttemptCount > 1);
-        if (retriedCandidates == 0)
+        var diagnostics = new List<SourceCandidateDiscoveryDiagnostic>();
+
+        var timedOutCandidates = candidates
+            .Where(candidate => candidate.Probe.ProbeTimedOut)
+            .ToArray();
+        if (timedOutCandidates.Length > 0)
         {
-            return [];
+            var timeoutAverageMs = GetAverageDurationMs(timedOutCandidates.Select(candidate => (long?)candidate.Probe.ProbeElapsedMs));
+            diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
+            {
+                Code = "probe_timeout",
+                Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
+                Title = "Candidate probing timed out",
+                Message = timeoutAverageMs is null
+                    ? $"The per-candidate representative-page probe budget was exceeded for {timedOutCandidates.Length} candidate(s). Discovery continued with reduced confidence for those hosts."
+                    : $"The per-candidate representative-page probe budget was exceeded for {timedOutCandidates.Length} candidate(s), timing out at about {FormatDuration(timeoutAverageMs.Value)} per candidate. Discovery continued with reduced confidence for those hosts."
+            });
         }
 
-        return
-        [
-            new SourceCandidateDiscoveryDiagnostic
+        var failedCandidates = candidates.Count(candidate => candidate.Probe.ProbeFailed);
+        if (failedCandidates > 0)
+        {
+            diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
+            {
+                Code = "probe_failed",
+                Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
+                Title = "Candidate probing failed",
+                Message = $"Representative-page probing failed unexpectedly for {failedCandidates} candidate(s). Discovery continued with reduced confidence for those hosts."
+            });
+        }
+
+        var categoryFetchFailures = candidates.Count(candidate => candidate.Probe.RepresentativeCategoryPageFetchFailed);
+        var productFetchFailures = candidates.Count(candidate => candidate.Probe.RepresentativeProductPageFetchFailed);
+        var affectedFetchFailureCandidates = candidates.Count(candidate => candidate.Probe.RepresentativeCategoryPageFetchFailed || candidate.Probe.RepresentativeProductPageFetchFailed);
+        if (affectedFetchFailureCandidates > 0)
+        {
+            diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
+            {
+                Code = "representative_page_fetch_failed",
+                Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
+                Title = "Representative page fetch failed",
+                Message = $"Representative pages could not be fetched for {affectedFetchFailureCandidates} candidate(s): {categoryFetchFailures} category page failure(s) and {productFetchFailures} product page failure(s). Discovery still scored those hosts, but runtime extraction evidence is incomplete."
+            });
+        }
+
+        var retriedCandidates = candidates.Count(candidate => candidate.Probe.ProbeAttemptCount > 1);
+        if (retriedCandidates > 0)
+        {
+            diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
             {
                 Code = "probe_retried",
                 Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
                 Title = "Candidate probing retried",
                 Message = $"Transient probe slowdowns were retried with exponential backoff for {retriedCandidates} candidate(s) before final scoring."
-            }
-        ];
+            });
+        }
+
+        return diagnostics;
     }
 
     public IReadOnlyList<SourceCandidateDiscoveryDiagnostic> BuildLlmDiagnostics(IReadOnlyCollection<SourceCandidateResult> candidates)
@@ -189,7 +231,8 @@ internal sealed class SourceCandidateDiscoveryEvaluator(SourceOnboardingAutomati
 
                 case "LLM timeout":
                     var timeoutCandidates = candidates
-                        .Where(candidate => string.Equals(NormalizeNeutralLlmReason(candidate.Probe.LlmReason), group.Key, StringComparison.OrdinalIgnoreCase))
+                        .Where(candidate => candidate.Probe.LlmTimedOut
+                            || string.Equals(NormalizeNeutralLlmReason(candidate.Probe.LlmReason), group.Key, StringComparison.OrdinalIgnoreCase))
                         .ToArray();
                     var timeoutAverageMs = GetAverageDurationMs(timeoutCandidates.Select(candidate => candidate.Probe.LlmElapsedMs));
                     diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
@@ -198,8 +241,8 @@ internal sealed class SourceCandidateDiscoveryEvaluator(SourceOnboardingAutomati
                         Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
                         Title = "LLM validation timed out",
                         Message = timeoutAverageMs is null
-                            ? $"Representative product-page classification fell back to heuristics for {count} candidate(s) because the LLM timed out."
-                            : $"Representative product-page classification fell back to heuristics for {count} candidate(s) because the LLM timed out after about {FormatDuration(timeoutAverageMs.Value)} per candidate."
+                            ? $"Representative product-page classification timed out for {count} candidate(s). Search and page probing still completed, but those hosts were scored with heuristics only."
+                            : $"Representative product-page classification timed out for {count} candidate(s) after about {FormatDuration(timeoutAverageMs.Value)} per candidate. Search and page probing still completed, but those hosts were scored with heuristics only."
                     });
                     break;
 
@@ -385,6 +428,15 @@ internal sealed class SourceCandidateDiscoveryEvaluator(SourceOnboardingAutomati
                 Weight = 18m
             });
         }
+        else if (probe.RepresentativeCategoryPageFetchFailed)
+        {
+            reasons.Add(new SourceCandidateReason
+            {
+                Code = "category_page_fetch_failed",
+                Message = "A representative category page was selected, but it could not be fetched during probing.",
+                Weight = -12m
+            });
+        }
 
         if (probe.RepresentativeProductPageReachable)
         {
@@ -393,6 +445,15 @@ internal sealed class SourceCandidateDiscoveryEvaluator(SourceOnboardingAutomati
                 Code = "product_page",
                 Message = "A representative product page was reachable during probing.",
                 Weight = 22m
+            });
+        }
+        else if (probe.RepresentativeProductPageFetchFailed)
+        {
+            reasons.Add(new SourceCandidateReason
+            {
+                Code = "product_page_fetch_failed",
+                Message = "A representative product page was selected, but it could not be fetched during probing.",
+                Weight = -16m
             });
         }
 
@@ -488,6 +549,26 @@ internal sealed class SourceCandidateDiscoveryEvaluator(SourceOnboardingAutomati
                 Code = "non_catalog_bias",
                 Message = "The sampled pages look more support, blog, or marketing heavy than product-catalog heavy.",
                 Weight = -28m
+            });
+        }
+
+        if (probe.ProbeTimedOut)
+        {
+            reasons.Add(new SourceCandidateReason
+            {
+                Code = "probe_timeout",
+                Message = "Representative-page probing exceeded the per-candidate probe budget before runtime evidence could be completed.",
+                Weight = -22m
+            });
+        }
+
+        if (probe.ProbeFailed)
+        {
+            reasons.Add(new SourceCandidateReason
+            {
+                Code = "probe_failed",
+                Message = "Representative-page probing failed before runtime evidence could be completed.",
+                Weight = -24m
             });
         }
 
@@ -956,11 +1037,31 @@ internal sealed class SourceCandidateDiscoveryEvaluator(SourceOnboardingAutomati
 
     private static string BuildRuntimeExtractionMessage(SourceCandidateProbeResult probe)
     {
+        if (probe.ProbeTimedOut)
+        {
+            return "Representative page probing timed out before runtime extraction could be confirmed for this candidate.";
+        }
+
+        if (probe.ProbeFailed)
+        {
+            return "Representative page probing failed before runtime extraction could be confirmed for this candidate.";
+        }
+
         if (probe.RuntimeExtractionCompatible)
         {
             return probe.RepresentativeRuntimeProductCount == 1
                 ? "Representative runtime extraction succeeded on the sampled product page."
                 : $"Representative runtime extraction succeeded on the sampled product page and produced {probe.RepresentativeRuntimeProductCount} products.";
+        }
+
+        if (probe.RepresentativeProductPageFetchFailed)
+        {
+            return "A representative product page was identified, but fetching that page failed before runtime extraction could be confirmed.";
+        }
+
+        if (probe.RepresentativeCategoryPageFetchFailed)
+        {
+            return "A representative category page was identified, but fetching that page failed before runtime extraction could be confirmed.";
         }
 
         if (probe.RepresentativeProductPageReachable)

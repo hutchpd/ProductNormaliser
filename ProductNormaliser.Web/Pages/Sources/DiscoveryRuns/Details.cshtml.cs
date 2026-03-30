@@ -43,6 +43,18 @@ public sealed class DetailsModel(
             || string.Equals(candidate.State, "superseded", StringComparison.OrdinalIgnoreCase))
         .ToArray();
 
+    public int SearchTimeoutCount => Run?.Diagnostics.Count(IsSearchTimeoutDiagnostic) ?? 0;
+
+    public int ProbeTimeoutCandidateCount => Candidates.Count(candidate => candidate.Probe.ProbeTimedOut);
+
+    public int RepresentativePageFetchFailureCandidateCount => Candidates.Count(candidate => candidate.Probe.RepresentativeCategoryPageFetchFailed || candidate.Probe.RepresentativeProductPageFetchFailed);
+
+    public int RepresentativeCategoryFetchFailureCount => Candidates.Count(candidate => candidate.Probe.RepresentativeCategoryPageFetchFailed);
+
+    public int RepresentativeProductFetchFailureCount => Candidates.Count(candidate => candidate.Probe.RepresentativeProductPageFetchFailed);
+
+    public int LlmTimeoutCandidateCount => Candidates.Count(candidate => candidate.Probe.LlmTimedOut);
+
     public IReadOnlyList<DiscoveryRunActivityEntryModel> ActivityLogEntries => BuildActivityLogEntries();
 
     public PageHeroModel Hero => Run is null
@@ -298,6 +310,13 @@ public sealed class DetailsModel(
         var baselineUtc = run.StartedUtc ?? run.CreatedUtc;
         timestampUtc = baselineUtc.AddMilliseconds(searchElapsedMs);
         return true;
+    }
+
+    private static bool IsSearchTimeoutDiagnostic(SourceCandidateDiscoveryDiagnosticDto diagnostic)
+    {
+        return string.Equals(diagnostic.Code, "search_timeout", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(diagnostic.Code, "search_provider_timeout", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(diagnostic.Code, "search.provider.timeout", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildDiscoveryRequestSummary(DiscoveryRunDto run)

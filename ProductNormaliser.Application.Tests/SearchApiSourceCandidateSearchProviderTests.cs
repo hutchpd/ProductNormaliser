@@ -178,6 +178,40 @@ public sealed class SearchApiSourceCandidateSearchProviderTests
         });
       }
 
+      [Test]
+      public async Task SearchAsync_ReturnsTimeoutDiagnostic_WhenSearchBudgetIsExceeded()
+      {
+        using var httpClient = new HttpClient(new StubHttpMessageHandler(async (request, cancellationToken) =>
+        {
+          _ = request;
+          await Task.Delay(TimeSpan.FromMilliseconds(1500), cancellationToken);
+          return new HttpResponseMessage(HttpStatusCode.OK);
+        }))
+        {
+          BaseAddress = new Uri("https://api.search.brave.com")
+        };
+        var provider = new SearchApiSourceCandidateSearchProvider(
+            httpClient,
+            Options.Create(new SourceCandidateDiscoveryOptions
+            {
+                SearchTimeoutSeconds = 5,
+                MaxSearchQueries = 2,
+                SearchApiKey = "test-key"
+            }),
+            Options.Create(new DiscoveryRunOperationsOptions { SearchTimeoutSeconds = 1 }));
+
+        var result = await provider.SearchAsync(new DiscoverSourceCandidatesRequest
+        {
+          CategoryKeys = ["tv"]
+        });
+
+        Assert.Multiple(() =>
+        {
+          Assert.That(result.Candidates, Is.Empty);
+          Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Is.EqualTo(new[] { "search_timeout" }));
+        });
+      }
+
     private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
