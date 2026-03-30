@@ -156,6 +156,57 @@ public sealed class SourceManagementPageTests
     }
 
     [Test]
+    public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_IgnoresRegistrationValidationErrorsFromOtherForm()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            CreatedDiscoveryRun = new DiscoveryRunDto
+            {
+                RunId = "discovery_run_456",
+                RequestedCategoryKeys = ["laptop", "tv"],
+                Market = "UK",
+                Locale = "en-GB",
+                AutomationMode = "auto_accept_and_seed",
+                Status = "queued",
+                CurrentStage = "search",
+                StatusMessage = "Discovery run is queued and waiting for worker capacity.",
+                LlmStatus = "disabled",
+                LlmStatusMessage = "LLM validation is disabled.",
+                CreatedUtc = new DateTime(2026, 03, 25, 11, 05, 00, DateTimeKind.Utc),
+                UpdatedUtc = new DateTime(2026, 03, 25, 11, 05, 00, DateTimeKind.Utc)
+            }
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.IndexModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.IndexModel>.Instance)
+        {
+            CandidateDiscovery = new ProductNormaliser.Web.Pages.Sources.IndexModel.DiscoverSourceCandidatesInput
+            {
+                CategoryKeys = ["laptop", "tv"],
+                Locale = "en-GB",
+                Market = "UK",
+                AutomationMode = "auto_accept_and_seed",
+                MaxCandidates = 10
+            }
+        };
+
+        model.ModelState.AddModelError("Registration.SourceId", "The Source id field is required.");
+        model.ModelState.AddModelError("Registration.DisplayName", "The Display name field is required.");
+        model.ModelState.AddModelError("Registration.BaseUrl", "The Base URL field is required.");
+
+        var result = await model.OnPostDiscoverCandidatesAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
+            Assert.That(client.LastCreateDiscoveryRunRequest, Is.Not.Null);
+            Assert.That(client.LastCreateDiscoveryRunRequest!.CategoryKeys, Is.EqualTo(new[] { "laptop", "tv" }));
+            Assert.That(client.LastCreateDiscoveryRunRequest.AutomationMode, Is.EqualTo("auto_accept_and_seed"));
+            Assert.That(((RedirectToPageResult)result).RouteValues!["runId"], Is.EqualTo("discovery_run_456"));
+        });
+    }
+
+    [Test]
     public async Task SourcesIndex_OnPostDiscoverCandidatesAsync_QueuesSuggestAcceptRunWithoutImmediateRegistration()
     {
         var client = new FakeAdminApiClient

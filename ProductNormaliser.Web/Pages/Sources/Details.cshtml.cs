@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using ProductNormaliser.Web.Contracts;
+using ProductNormaliser.Web.Infrastructure;
 using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
 
@@ -70,7 +71,8 @@ public sealed class DetailsModel(
 
     public async Task<IActionResult> OnPostUpdateAsync(string sourceId, CancellationToken cancellationToken)
     {
-        if (!ModelState.IsValid && !await LoadAsync(sourceId, cancellationToken))
+        if (!ScopedFormValidation.TryValidateActiveForm(this, Source, nameof(Source))
+            && !await LoadAsync(sourceId, cancellationToken))
         {
             return NotFound();
         }
@@ -164,7 +166,8 @@ public sealed class DetailsModel(
 
     public async Task<IActionResult> OnPostThrottlingAsync(string sourceId, CancellationToken cancellationToken)
     {
-        if (!ModelState.IsValid && !await LoadAsync(sourceId, cancellationToken))
+        if (!ScopedFormValidation.TryValidateActiveForm(this, Throttling, nameof(Throttling))
+            && !await LoadAsync(sourceId, cancellationToken))
         {
             return NotFound();
         }
@@ -203,7 +206,8 @@ public sealed class DetailsModel(
 
     public async Task<IActionResult> OnPostDiscoveryAsync(string sourceId, CancellationToken cancellationToken)
     {
-        if (!ModelState.IsValid && !await LoadAsync(sourceId, cancellationToken))
+        if (!ScopedFormValidation.TryValidateActiveForm(this, Discovery, nameof(Discovery))
+            && !await LoadAsync(sourceId, cancellationToken))
         {
             return NotFound();
         }

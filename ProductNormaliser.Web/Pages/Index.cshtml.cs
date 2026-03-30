@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using ProductNormaliser.Web.Contracts;
+using ProductNormaliser.Web.Infrastructure;
 using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
 
@@ -417,6 +418,8 @@ public sealed class IndexModel(
             await LoadDashboardAsync(cancellationToken);
             return Page();
         }
+
+        ScopedFormValidation.TryValidateActiveForm(this, CategorySchema, nameof(CategorySchema));
 
         PrepareCategorySchemaDraft();
         ValidateCategorySchemaDraft();

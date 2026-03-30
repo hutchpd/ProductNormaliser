@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using ProductNormaliser.Web.Contracts;
+using ProductNormaliser.Web.Infrastructure;
 using ProductNormaliser.Web.Models;
 using ProductNormaliser.Web.Services;
 using System.ComponentModel.DataAnnotations;
@@ -114,7 +115,7 @@ public sealed class IndexModel(
 
     public async Task<IActionResult> OnPostRegisterAsync(CancellationToken cancellationToken)
     {
-        if (!ModelState.IsValid)
+        if (!ScopedFormValidation.TryValidateActiveForm(this, Registration, nameof(Registration)))
         {
             await LoadAsync(cancellationToken);
             return Page();
@@ -125,7 +126,7 @@ public sealed class IndexModel(
 
     public async Task<IActionResult> OnPostDiscoverCandidatesAsync(CancellationToken cancellationToken)
     {
-        if (!ModelState.IsValid)
+        if (!ScopedFormValidation.TryValidateActiveForm(this, CandidateDiscovery, nameof(CandidateDiscovery)))
         {
             await LoadAsync(cancellationToken);
             return Page();
