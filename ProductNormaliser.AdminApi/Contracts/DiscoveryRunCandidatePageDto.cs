@@ -22,4 +22,12 @@ public sealed class DiscoveryRunCandidateRunSummaryDto
     public int RepresentativeCategoryFetchFailureCount { get; init; }
     public int RepresentativeProductFetchFailureCount { get; init; }
     public int LlmTimeoutCandidateCount { get; init; }
+    public IReadOnlyList<DiscoveryRunCandidateBlockerSummaryDto> AutoAcceptBlockers { get; init; } = [];
+}
+
+public sealed class DiscoveryRunCandidateBlockerSummaryDto
+{
+    public string Code { get; init; } = string.Empty;
+    public string Label { get; init; } = string.Empty;
+    public int Count { get; init; }
 }

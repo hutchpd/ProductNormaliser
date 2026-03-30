@@ -34,6 +34,14 @@ public sealed class DiscoveryRunCandidateRunSummary
     public int RepresentativeCategoryFetchFailureCount { get; init; }
     public int RepresentativeProductFetchFailureCount { get; init; }
     public int LlmTimeoutCandidateCount { get; init; }
+    public IReadOnlyList<DiscoveryRunCandidateBlockerSummary> AutoAcceptBlockers { get; init; } = [];
+}
+
+public sealed class DiscoveryRunCandidateBlockerSummary
+{
+    public string Code { get; init; } = string.Empty;
+    public string Label { get; init; } = string.Empty;
+    public int Count { get; init; }
 }
 
 public static class DiscoveryRunCandidateStateFilters

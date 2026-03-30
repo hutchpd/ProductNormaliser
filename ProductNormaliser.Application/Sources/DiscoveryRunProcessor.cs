@@ -290,13 +290,7 @@ public sealed class DiscoveryRunProcessor(
                 mappedCandidate.SuppressionDispositionId = currentCandidate.SuppressionDispositionId;
                 mappedCandidate.ArchiveReason = currentCandidate.ArchiveReason;
                 mappedCandidate.ArchivedUtc = currentCandidate.ArchivedUtc;
-                mappedCandidate.StateMessage = mappedCandidate.State switch
-                {
-                    DiscoveryRunCandidateStates.AutoAccepted => "Guardrails passed. Publishing source registration immediately.",
-                    DiscoveryRunCandidateStates.Suggested when candidateResult.AutomationAssessment.EligibleForAutoAccept => "Guardrails passed, but the auto-accept cap is already consumed for this run. Ready for operator review.",
-                    DiscoveryRunCandidateStates.Suggested => "Ready for operator review.",
-                    _ => "Candidate did not clear guarded acceptance thresholds."
-                };
+                mappedCandidate.StateMessage = BuildCandidateStateMessage(candidateResult, mappedCandidate.State);
                 mappedCandidate.UpdatedUtc = DateTime.UtcNow;
                 if (!await discoveryRunCandidateStore.TryUpdateAsync(mappedCandidate, currentCandidate.Revision, cancellationToken))
                 {
@@ -701,6 +695,29 @@ public sealed class DiscoveryRunProcessor(
         return string.Equals(candidate.RecommendationStatus, SourceCandidateResult.RecommendationDoNotAccept, StringComparison.OrdinalIgnoreCase)
             ? DiscoveryRunCandidateStates.Failed
             : DiscoveryRunCandidateStates.Suggested;
+    }
+
+    private static string BuildCandidateStateMessage(SourceCandidateResult candidate, string state)
+    {
+        return state switch
+        {
+            DiscoveryRunCandidateStates.AutoAccepted => "Auto-accepted because the candidate stayed recommended, governance allowed publication, no registered-source duplicate blocked it, and the run still had auto-accept capacity.",
+            DiscoveryRunCandidateStates.Suggested when candidate.AlreadyRegistered => "Suggested for operator review because this host is already registered, so discovery did not auto-publish a duplicate source.",
+            DiscoveryRunCandidateStates.Suggested when candidate.AutomationAssessment.EligibleForAutoAccept => "Suggested for operator review because the run had already consumed its auto-accept allowance.",
+            DiscoveryRunCandidateStates.Suggested when string.Equals(candidate.AutomationAssessment.RequestedMode, SourceAutomationModes.OperatorAssisted, StringComparison.OrdinalIgnoreCase) => "Suggested for operator review because this run is operator-assisted only.",
+            DiscoveryRunCandidateStates.Suggested when string.Equals(candidate.AutomationAssessment.RequestedMode, SourceAutomationModes.SuggestAccept, StringComparison.OrdinalIgnoreCase) => "Suggested for operator review because this run is configured to suggest strong candidates rather than auto-publish them.",
+            DiscoveryRunCandidateStates.Suggested when candidate.AutomationAssessment.EligibleForSuggestion => "Suggested for operator review because the candidate cleared suggestion policy, but unattended publication policy still had blockers.",
+            DiscoveryRunCandidateStates.Suggested => "Suggested for operator review because the candidate was not rejected, but guarded publication still requires human review.",
+            DiscoveryRunCandidateStates.Failed when !candidate.AllowedByGovernance && !string.IsNullOrWhiteSpace(candidate.GovernanceWarning) => $"Failed guarded publication because {TrimTrailingPunctuation(candidate.GovernanceWarning!)}.",
+            DiscoveryRunCandidateStates.Failed when candidate.AutomationAssessment.BlockingReasons.Count > 0 => $"Failed guarded publication because {TrimTrailingPunctuation(candidate.AutomationAssessment.BlockingReasons[0])}.",
+            DiscoveryRunCandidateStates.Failed when string.Equals(candidate.RecommendationStatus, SourceCandidateResult.RecommendationDoNotAccept, StringComparison.OrdinalIgnoreCase) => "Failed guarded publication because the candidate resolved to do-not-accept after probe and policy checks.",
+            _ => "Candidate did not clear guarded acceptance policy."
+        };
+    }
+
+    private static string TrimTrailingPunctuation(string value)
+    {
+        return value.Trim().TrimEnd('.', '!', '?');
     }
 
     private static DiscoveryRunDiagnostic MapDiagnostic(SourceCandidateDiscoveryDiagnostic diagnostic)

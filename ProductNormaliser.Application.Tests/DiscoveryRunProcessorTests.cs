@@ -129,6 +129,73 @@ public sealed class DiscoveryRunProcessorTests
     }
 
     [Test]
+    public async Task ProcessNextAsync_LeavesExplicitStateMessage_WhenAutoAcceptCapIsConsumed()
+    {
+        var run = CreateQueuedRun(SourceAutomationModes.AutoAcceptAndSeed, llmStatus: "active");
+        var runStore = new FakeDiscoveryRunStore(run);
+        var candidateStore = new FakeDiscoveryRunCandidateStore();
+        var processor = CreateProcessor(
+            runStore,
+            candidateStore,
+            new FakeCrawlSourceStore(),
+            new RecordingSourceManagementService(),
+            new FixedSearchProvider(CreateSearchCandidate(), CreateSecondarySearchCandidate()),
+            new FixedProbeService(CreateStrongProbeResult()));
+
+        await processor.ProcessNextAsync(CancellationToken.None);
+        var candidates = await candidateStore.ListByRunAsync(run.RunId, CancellationToken.None);
+        var suggested = candidates.Single(candidate => string.Equals(candidate.CandidateKey, "trusted_retail", StringComparison.OrdinalIgnoreCase));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(suggested.State, Is.EqualTo(DiscoveryRunCandidateStates.Suggested));
+            Assert.That(suggested.AutomationAssessment.EligibleForAutoAccept, Is.True);
+            Assert.That(suggested.StateMessage, Does.Contain("already consumed its auto-accept allowance"));
+        });
+    }
+
+    [Test]
+    public async Task ProcessNextAsync_LeavesExplicitStateMessage_WhenHostIsAlreadyRegistered()
+    {
+        var run = CreateQueuedRun(SourceAutomationModes.AutoAcceptAndSeed, llmStatus: "active");
+        var runStore = new FakeDiscoveryRunStore(run);
+        var candidateStore = new FakeDiscoveryRunCandidateStore();
+        var crawlSourceStore = new FakeCrawlSourceStore(new CrawlSource
+        {
+            Id = "safe_shop",
+            DisplayName = "Safe Shop",
+            BaseUrl = "https://safe.example/",
+            Host = "safe.example",
+            AllowedMarkets = ["UK"],
+            PreferredLocale = "en-GB",
+            SupportedCategoryKeys = ["tv"],
+            AutomationPolicy = new SourceAutomationPolicy { Mode = SourceAutomationModes.AutoAcceptAndSeed },
+            ThrottlingPolicy = new SourceThrottlingPolicy(),
+            IsEnabled = true,
+            CreatedUtc = DateTime.UtcNow.AddDays(-10),
+            UpdatedUtc = DateTime.UtcNow.AddDays(-1)
+        });
+        var processor = CreateProcessor(
+            runStore,
+            candidateStore,
+            crawlSourceStore,
+            new RecordingSourceManagementService(),
+            new FixedSearchProvider(CreateSearchCandidate()),
+            new FixedProbeService(CreateStrongProbeResult()));
+
+        await processor.ProcessNextAsync(CancellationToken.None);
+        var candidate = await candidateStore.GetAsync(run.RunId, "safe_shop", CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(candidate, Is.Not.Null);
+            Assert.That(candidate!.State, Is.EqualTo(DiscoveryRunCandidateStates.Suggested));
+            Assert.That(candidate.AlreadyRegistered, Is.True);
+            Assert.That(candidate.StateMessage, Does.Contain("already registered"));
+        });
+    }
+
+    [Test]
     public async Task ProcessNextAsync_DoesNotOverwriteCandidateAcceptedByOperatorDuringRun()
     {
         var run = CreateQueuedRun(SourceAutomationModes.AutoAcceptAndSeed, llmStatus: "active");
@@ -503,6 +570,34 @@ public sealed class DiscoveryRunProcessorTests
         public Task<IReadOnlyList<DiscoveryRunCandidate>> ListByRunAsync(string runId, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<DiscoveryRunCandidate>>(items.Values.Where(candidate => string.Equals(candidate.RunId, runId, StringComparison.OrdinalIgnoreCase)).OrderByDescending(candidate => candidate.ConfidenceScore).ToArray());
 
+        public Task<DiscoveryRunCandidatePage> QueryByRunAsync(string runId, DiscoveryRunCandidateQuery query, CancellationToken cancellationToken = default)
+        {
+            var results = items.Values
+                .Where(candidate => string.Equals(candidate.RunId, runId, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(candidate => candidate.ConfidenceScore)
+                .ToArray();
+
+            return Task.FromResult(new DiscoveryRunCandidatePage
+            {
+                Items = results,
+                StateFilter = query.StateFilter ?? DiscoveryRunCandidateStateFilters.All,
+                Sort = query.Sort ?? DiscoveryRunCandidateSortModes.ReviewPriority,
+                Page = query.Page,
+                PageSize = query.PageSize,
+                TotalCount = results.Length,
+                Summary = new DiscoveryRunCandidateRunSummary
+                {
+                    RunCandidateCount = results.Length,
+                    ActiveCandidateCount = results.Count(candidate => !string.Equals(candidate.State, DiscoveryRunCandidateStates.Dismissed, StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(candidate.State, DiscoveryRunCandidateStates.Archived, StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(candidate.State, DiscoveryRunCandidateStates.Superseded, StringComparison.OrdinalIgnoreCase)),
+                    ArchivedCandidateCount = results.Count(candidate => string.Equals(candidate.State, DiscoveryRunCandidateStates.Dismissed, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(candidate.State, DiscoveryRunCandidateStates.Archived, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(candidate.State, DiscoveryRunCandidateStates.Superseded, StringComparison.OrdinalIgnoreCase))
+                }
+            });
+        }
+
         public Task<DiscoveryRunCandidate?> GetAsync(string runId, string candidateKey, CancellationToken cancellationToken = default)
             => Task.FromResult(items.TryGetValue($"{runId}:{candidateKey}", out var candidate) ? candidate : null);
 
@@ -557,11 +652,21 @@ public sealed class DiscoveryRunProcessorTests
         }
     }
 
-    private sealed class FakeCrawlSourceStore : ICrawlSourceStore
+    private sealed class FakeCrawlSourceStore(params CrawlSource[] sources) : ICrawlSourceStore
     {
-        public Task<IReadOnlyList<CrawlSource>> ListAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CrawlSource>>([]);
-        public Task<CrawlSource?> GetAsync(string sourceId, CancellationToken cancellationToken = default) => Task.FromResult<CrawlSource?>(null);
-        public Task UpsertAsync(CrawlSource source, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        private readonly Dictionary<string, CrawlSource> items = sources.ToDictionary(source => source.Id, StringComparer.OrdinalIgnoreCase);
+
+        public Task<IReadOnlyList<CrawlSource>> ListAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<CrawlSource>>(items.Values.ToArray());
+
+        public Task<CrawlSource?> GetAsync(string sourceId, CancellationToken cancellationToken = default)
+            => Task.FromResult(items.TryGetValue(sourceId, out var source) ? source : null);
+
+        public Task UpsertAsync(CrawlSource source, CancellationToken cancellationToken = default)
+        {
+            items[source.Id] = source;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class RecordingSourceManagementService : ISourceManagementService

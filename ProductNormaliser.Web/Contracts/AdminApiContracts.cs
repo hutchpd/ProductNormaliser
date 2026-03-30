@@ -416,6 +416,14 @@ public sealed class DiscoveryRunCandidateRunSummaryDto
     public int RepresentativeCategoryFetchFailureCount { get; init; }
     public int RepresentativeProductFetchFailureCount { get; init; }
     public int LlmTimeoutCandidateCount { get; init; }
+    public IReadOnlyList<DiscoveryRunCandidateBlockerSummaryDto> AutoAcceptBlockers { get; init; } = [];
+}
+
+public sealed class DiscoveryRunCandidateBlockerSummaryDto
+{
+    public string Code { get; init; } = string.Empty;
+    public string Label { get; init; } = string.Empty;
+    public int Count { get; init; }
 }
 
 public sealed class DiscoveryRunCandidateDto
@@ -524,6 +532,14 @@ public sealed class SourceCandidateAutomationAssessmentDto
     public bool RepresentativeValidationPassed { get; init; }
     public bool ExtractabilityConfidencePassed { get; init; }
     public bool YieldConfidencePassed { get; init; }
+    public bool SuggestionBreadthPassed { get; init; }
+    public bool AutoAcceptBreadthPassed { get; init; }
+    public bool LocaleAligned { get; init; }
+    public bool CrawlabilityPassed { get; init; }
+    public bool CategoryRelevancePassed { get; init; }
+    public bool CatalogLikelihoodPassed { get; init; }
+    public bool SuggestionConfidencePassed { get; init; }
+    public bool AutoAcceptConfidencePassed { get; init; }
     public bool EligibleForSuggestion { get; init; }
     public bool EligibleForAutoAccept { get; init; }
     public bool EligibleForAutoSeed { get; init; }

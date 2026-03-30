@@ -620,6 +620,7 @@ public sealed class SourceCandidateDiscoveryService(
         var requestedMarket = NormalizeOptionalText(request.Market);
         var requestedLocale = NormalizeOptionalText(request.Locale);
         var candidateMarkets = NormalizeValues(searchResult.AllowedMarkets);
+        var candidateMarketList = FormatValueList(candidateMarkets, "none");
         var unattendedAutomationRequested = requestedMode is SourceAutomationModes.SuggestAccept or SourceAutomationModes.AutoAcceptAndSeed;
 
         var marketMatchApproved = !string.IsNullOrWhiteSpace(requestedMarket)
@@ -664,12 +665,22 @@ public sealed class SourceCandidateDiscoveryService(
         var supportingReasons = new List<string>();
         if (marketMatchApproved)
         {
-            supportingReasons.Add($"Requested market '{requestedMarket}' matches candidate market metadata.");
+            supportingReasons.Add($"Requested market '{requestedMarket}' matches candidate market metadata ({candidateMarketList}).");
         }
 
         if (marketEvidenceStrongEnough)
         {
-            supportingReasons.Add("Market evidence is explicit rather than only request-hinted.");
+            supportingReasons.Add($"Market evidence is explicit and scoped to a single market ({candidateMarketList}).");
+        }
+
+        if (allowedByGovernance)
+        {
+            supportingReasons.Add("Governance allowed this candidate for discovery publication.");
+        }
+
+        if (duplicateRiskAccepted)
+        {
+            supportingReasons.Add($"Duplicate risk scored {duplicateRiskScore:0.#} against the guarded maximum {onboardingAutomationOptions.MaxDuplicateRiskScore:0.#}.");
         }
 
         if (representativeValidationPassed)
@@ -679,12 +690,27 @@ public sealed class SourceCandidateDiscoveryService(
 
         if (extractabilityConfidencePassed)
         {
-            supportingReasons.Add("Representative product evidence cleared the extractability threshold through the live runtime extractor.");
+            supportingReasons.Add($"Representative product evidence cleared extractability at {probe.ExtractabilityScore:0.#} against {onboardingAutomationOptions.MinExtractabilityScore:0.#} through the live runtime extractor.");
         }
 
         if (yieldConfidencePassed)
         {
-            supportingReasons.Add($"Predicted downstream yield confidence scored {yieldConfidenceScore:0.#}.");
+            supportingReasons.Add($"Predicted downstream yield confidence scored {yieldConfidenceScore:0.#} against {onboardingAutomationOptions.MinYieldConfidenceScore:0.#}.");
+        }
+
+        if (probe.CrawlabilityScore >= onboardingAutomationOptions.MinCrawlabilityScore)
+        {
+            supportingReasons.Add($"Crawlability scored {probe.CrawlabilityScore:0.#} against {onboardingAutomationOptions.MinCrawlabilityScore:0.#}.");
+        }
+
+        if (probe.CategoryRelevanceScore >= onboardingAutomationOptions.MinCategoryRelevanceScore)
+        {
+            supportingReasons.Add($"Category relevance scored {probe.CategoryRelevanceScore:0.#} against {onboardingAutomationOptions.MinCategoryRelevanceScore:0.#}.");
+        }
+
+        if (probe.CatalogLikelihoodScore >= onboardingAutomationOptions.MinCatalogLikelihoodScore)
+        {
+            supportingReasons.Add($"Catalog likelihood scored {probe.CatalogLikelihoodScore:0.#} against {onboardingAutomationOptions.MinCatalogLikelihoodScore:0.#}.");
         }
 
         if (unattendedAutomationRequested && suggestionBreadthPassed)
@@ -697,6 +723,16 @@ public sealed class SourceCandidateDiscoveryService(
             supportingReasons.Add($"Auto-accept breadth validated {probe.AutomationStructuredProductEvidenceSampleCount} product samples with structured product evidence.");
         }
 
+        if (confidenceScore >= onboardingAutomationOptions.SuggestMinConfidenceScore)
+        {
+            supportingReasons.Add($"Overall confidence scored {confidenceScore:0.#} against the suggestion threshold {onboardingAutomationOptions.SuggestMinConfidenceScore:0.#}.");
+        }
+
+        if (requestedMode == SourceAutomationModes.AutoAcceptAndSeed && confidenceScore >= onboardingAutomationOptions.AutoAcceptMinConfidenceScore)
+        {
+            supportingReasons.Add($"Overall confidence also cleared the auto-accept threshold at {confidenceScore:0.#} against {onboardingAutomationOptions.AutoAcceptMinConfidenceScore:0.#}.");
+        }
+
         var blockingReasons = new List<string>();
         if (string.IsNullOrWhiteSpace(requestedMarket))
         {
@@ -705,12 +741,12 @@ public sealed class SourceCandidateDiscoveryService(
 
         if (!marketMatchApproved)
         {
-            blockingReasons.Add("Candidate market metadata does not clearly match the requested market.");
+            blockingReasons.Add($"Candidate market metadata ({candidateMarketList}) does not clearly match the requested market '{requestedMarket ?? "unspecified"}'.");
         }
 
         if (!marketEvidenceStrongEnough)
         {
-            blockingReasons.Add("Candidate market metadata is missing, weakly inferred, or regionally ambiguous.");
+            blockingReasons.Add($"Candidate market evidence is '{FormatEvidence(searchResult.MarketEvidence)}' with markets [{candidateMarketList}]; automation requires explicit single-market evidence.");
         }
 
         if (!allowedByGovernance)
@@ -720,22 +756,22 @@ public sealed class SourceCandidateDiscoveryService(
 
         if (!duplicateRiskAccepted)
         {
-            blockingReasons.Add("Duplicate risk is too high for automation.");
+            blockingReasons.Add($"Duplicate risk scored {duplicateRiskScore:0.#} against the guarded maximum {onboardingAutomationOptions.MaxDuplicateRiskScore:0.#}.");
         }
 
         if (!representativeValidationPassed)
         {
-            blockingReasons.Add("Representative category and product validation both need to succeed before automation.");
+            blockingReasons.Add($"Representative validation requires both category and product pages to be reachable (category: {FormatPassFail(probe.RepresentativeCategoryPageReachable)}, product: {FormatPassFail(probe.RepresentativeProductPageReachable)}).");
         }
 
         if (!extractabilityConfidencePassed)
         {
-            blockingReasons.Add("Representative product validation did not produce products through the live runtime extractor.");
+            blockingReasons.Add($"Representative product validation produced runtime-compatible evidence={FormatPassFail(probe.RuntimeExtractionCompatible)} with extractability {probe.ExtractabilityScore:0.#} against {onboardingAutomationOptions.MinExtractabilityScore:0.#}.");
         }
 
         if (!yieldConfidencePassed)
         {
-            blockingReasons.Add("Predicted downstream yield confidence is below the guarded threshold.");
+            blockingReasons.Add($"Predicted downstream yield confidence scored {yieldConfidenceScore:0.#} against the guarded minimum {onboardingAutomationOptions.MinYieldConfidenceScore:0.#}.");
         }
 
         if (unattendedAutomationRequested && !suggestionBreadthPassed)
@@ -750,32 +786,32 @@ public sealed class SourceCandidateDiscoveryService(
 
         if (!localeAligned)
         {
-            blockingReasons.Add("Candidate locale does not align cleanly with the requested locale.");
+            blockingReasons.Add($"Candidate locale '{NormalizeOptionalText(searchResult.PreferredLocale) ?? "unspecified"}' does not align cleanly with requested locale '{requestedLocale ?? "unspecified"}'.");
         }
 
         if (probe.CrawlabilityScore < onboardingAutomationOptions.MinCrawlabilityScore)
         {
-            blockingReasons.Add("Crawlability is below the guarded threshold.");
+            blockingReasons.Add($"Crawlability scored {probe.CrawlabilityScore:0.#} against the guarded minimum {onboardingAutomationOptions.MinCrawlabilityScore:0.#}.");
         }
 
         if (probe.CategoryRelevanceScore < onboardingAutomationOptions.MinCategoryRelevanceScore)
         {
-            blockingReasons.Add("Category relevance is below the guarded threshold.");
+            blockingReasons.Add($"Category relevance scored {probe.CategoryRelevanceScore:0.#} against the guarded minimum {onboardingAutomationOptions.MinCategoryRelevanceScore:0.#}.");
         }
 
         if (probe.CatalogLikelihoodScore < onboardingAutomationOptions.MinCatalogLikelihoodScore)
         {
-            blockingReasons.Add("Catalog-likelihood is below the guarded threshold.");
+            blockingReasons.Add($"Catalog likelihood scored {probe.CatalogLikelihoodScore:0.#} against the guarded minimum {onboardingAutomationOptions.MinCatalogLikelihoodScore:0.#}.");
         }
 
         if (confidenceScore < onboardingAutomationOptions.SuggestMinConfidenceScore)
         {
-            blockingReasons.Add("Overall confidence is below the suggestion threshold.");
+            blockingReasons.Add($"Overall confidence scored {confidenceScore:0.#} against the suggestion threshold {onboardingAutomationOptions.SuggestMinConfidenceScore:0.#}.");
         }
 
         if (requestedMode == SourceAutomationModes.AutoAcceptAndSeed && confidenceScore < onboardingAutomationOptions.AutoAcceptMinConfidenceScore)
         {
-            blockingReasons.Add("Overall confidence is below the auto-accept threshold.");
+            blockingReasons.Add($"Overall confidence scored {confidenceScore:0.#} against the auto-accept threshold {onboardingAutomationOptions.AutoAcceptMinConfidenceScore:0.#}.");
         }
 
         var decision = eligibleForAutoAccept
@@ -795,6 +831,14 @@ public sealed class SourceCandidateDiscoveryService(
             RepresentativeValidationPassed = representativeValidationPassed,
             ExtractabilityConfidencePassed = extractabilityConfidencePassed,
             YieldConfidencePassed = yieldConfidencePassed,
+            SuggestionBreadthPassed = suggestionBreadthPassed,
+            AutoAcceptBreadthPassed = autoAcceptBreadthPassed,
+            LocaleAligned = localeAligned,
+            CrawlabilityPassed = probe.CrawlabilityScore >= onboardingAutomationOptions.MinCrawlabilityScore,
+            CategoryRelevancePassed = probe.CategoryRelevanceScore >= onboardingAutomationOptions.MinCategoryRelevanceScore,
+            CatalogLikelihoodPassed = probe.CatalogLikelihoodScore >= onboardingAutomationOptions.MinCatalogLikelihoodScore,
+            SuggestionConfidencePassed = confidenceScore >= onboardingAutomationOptions.SuggestMinConfidenceScore,
+            AutoAcceptConfidencePassed = confidenceScore >= onboardingAutomationOptions.AutoAcceptMinConfidenceScore,
             EligibleForSuggestion = eligibleForSuggestion,
             EligibleForAutoAccept = eligibleForAutoAccept,
             EligibleForAutoSeed = eligibleForAutoAccept,
@@ -803,6 +847,21 @@ public sealed class SourceCandidateDiscoveryService(
             SupportingReasons = supportingReasons,
             BlockingReasons = blockingReasons.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
         };
+    }
+
+    private static string FormatPassFail(bool value)
+    {
+        return value ? "yes" : "no";
+    }
+
+    private static string FormatValueList(IReadOnlyList<string> values, string fallback)
+    {
+        return values.Count == 0 ? fallback : string.Join(", ", values);
+    }
+
+    private static string FormatEvidence(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "missing" : value.Trim();
     }
 
     private static decimal CalculateHeuristicScore(SourceCandidateProbeResult probe, decimal duplicateRiskScore, bool allowedByGovernance, SourceCandidateSearchResult searchResult, DiscoverSourceCandidatesRequest request)

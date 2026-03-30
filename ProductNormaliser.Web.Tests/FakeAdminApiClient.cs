@@ -835,8 +835,168 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
                 RepresentativePageFetchFailureCandidateCount = allItems.Count(candidate => candidate.Probe.RepresentativeCategoryPageFetchFailed || candidate.Probe.RepresentativeProductPageFetchFailed),
                 RepresentativeCategoryFetchFailureCount = allItems.Count(candidate => candidate.Probe.RepresentativeCategoryPageFetchFailed),
                 RepresentativeProductFetchFailureCount = allItems.Count(candidate => candidate.Probe.RepresentativeProductPageFetchFailed),
-                LlmTimeoutCandidateCount = allItems.Count(candidate => candidate.Probe.LlmTimedOut)
+                LlmTimeoutCandidateCount = allItems.Count(candidate => candidate.Probe.LlmTimedOut),
+                AutoAcceptBlockers = BuildAutoAcceptBlockers(allItems)
             }
+        };
+    }
+
+    private static IReadOnlyList<DiscoveryRunCandidateBlockerSummaryDto> BuildAutoAcceptBlockers(IReadOnlyList<DiscoveryRunCandidateDto> candidates)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var candidate in candidates)
+        {
+            foreach (var blockerCode in GetAutoAcceptBlockerCodes(candidate))
+            {
+                counts[blockerCode] = counts.TryGetValue(blockerCode, out var count) ? count + 1 : 1;
+            }
+        }
+
+        return counts
+            .Select(entry => new DiscoveryRunCandidateBlockerSummaryDto
+            {
+                Code = entry.Key,
+                Label = GetAutoAcceptBlockerLabel(entry.Key),
+                Count = entry.Value
+            })
+            .OrderByDescending(entry => entry.Count)
+            .ThenBy(entry => entry.Label, StringComparer.OrdinalIgnoreCase)
+            .Take(8)
+            .ToArray();
+    }
+
+    private static IEnumerable<string> GetAutoAcceptBlockerCodes(DiscoveryRunCandidateDto candidate)
+    {
+        if (string.Equals(candidate.State, "auto_accepted", StringComparison.OrdinalIgnoreCase))
+        {
+            yield break;
+        }
+
+        if (string.Equals(candidate.AutomationAssessment.RequestedMode, "operator_assisted", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return "mode_operator_assisted";
+        }
+
+        if (string.Equals(candidate.AutomationAssessment.RequestedMode, "suggest_accept", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return "mode_suggest_only";
+        }
+
+        if (candidate.AlreadyRegistered)
+        {
+            yield return "already_registered";
+        }
+
+        if (string.Equals(candidate.AutomationAssessment.RequestedMode, "auto_accept_and_seed", StringComparison.OrdinalIgnoreCase)
+            && candidate.AutomationAssessment.EligibleForAutoAccept
+            && !candidate.AlreadyRegistered)
+        {
+            yield return "auto_accept_cap_consumed";
+        }
+
+        if (!candidate.AutomationAssessment.MarketMatchApproved)
+        {
+            yield return "market_mismatch";
+        }
+
+        if (!candidate.AutomationAssessment.MarketEvidenceStrongEnough)
+        {
+            yield return "market_evidence_weak";
+        }
+
+        if (!candidate.AutomationAssessment.GovernancePassed)
+        {
+            yield return "governance_rejected";
+        }
+
+        if (!candidate.AutomationAssessment.DuplicateRiskAccepted)
+        {
+            yield return "duplicate_risk_high";
+        }
+
+        if (!candidate.AutomationAssessment.RepresentativeValidationPassed)
+        {
+            yield return "representative_validation_failed";
+        }
+
+        if (!candidate.AutomationAssessment.ExtractabilityConfidencePassed)
+        {
+            yield return "runtime_extractability_failed";
+        }
+
+        if (!candidate.AutomationAssessment.YieldConfidencePassed)
+        {
+            yield return "yield_confidence_low";
+        }
+
+        if (!candidate.AutomationAssessment.SuggestionBreadthPassed)
+        {
+            yield return "suggestion_breadth_thin";
+        }
+
+        if (string.Equals(candidate.AutomationAssessment.RequestedMode, "auto_accept_and_seed", StringComparison.OrdinalIgnoreCase)
+            && !candidate.AutomationAssessment.AutoAcceptBreadthPassed)
+        {
+            yield return "auto_accept_breadth_thin";
+        }
+
+        if (!candidate.AutomationAssessment.LocaleAligned)
+        {
+            yield return "locale_misaligned";
+        }
+
+        if (!candidate.AutomationAssessment.CrawlabilityPassed)
+        {
+            yield return "crawlability_low";
+        }
+
+        if (!candidate.AutomationAssessment.CategoryRelevancePassed)
+        {
+            yield return "category_relevance_low";
+        }
+
+        if (!candidate.AutomationAssessment.CatalogLikelihoodPassed)
+        {
+            yield return "catalog_likelihood_low";
+        }
+
+        if (!candidate.AutomationAssessment.SuggestionConfidencePassed)
+        {
+            yield return "suggestion_confidence_low";
+        }
+
+        if (string.Equals(candidate.AutomationAssessment.RequestedMode, "auto_accept_and_seed", StringComparison.OrdinalIgnoreCase)
+            && !candidate.AutomationAssessment.AutoAcceptConfidencePassed)
+        {
+            yield return "auto_accept_confidence_low";
+        }
+    }
+
+    private static string GetAutoAcceptBlockerLabel(string code)
+    {
+        return code switch
+        {
+            "mode_operator_assisted" => "Run mode was operator-assisted only",
+            "mode_suggest_only" => "Run mode stopped at suggestion rather than auto-accept",
+            "already_registered" => "Host was already registered",
+            "auto_accept_cap_consumed" => "Run had already consumed its auto-accept allowance",
+            "market_mismatch" => "Candidate market did not match the requested market",
+            "market_evidence_weak" => "Market evidence was not explicit enough for auto-accept",
+            "governance_rejected" => "Governance policy rejected the candidate",
+            "duplicate_risk_high" => "Duplicate risk was too high",
+            "representative_validation_failed" => "Representative page validation did not fully succeed",
+            "runtime_extractability_failed" => "Runtime extractability evidence stayed below the guarded floor",
+            "yield_confidence_low" => "Predicted downstream yield confidence stayed below policy",
+            "suggestion_breadth_thin" => "Suggestion breadth evidence was too thin",
+            "auto_accept_breadth_thin" => "Recurring evidence for auto-accept was too thin",
+            "locale_misaligned" => "Locale did not align cleanly with the run scope",
+            "crawlability_low" => "Crawlability stayed below the guarded floor",
+            "category_relevance_low" => "Category relevance stayed below the guarded floor",
+            "catalog_likelihood_low" => "Catalog likelihood stayed below the guarded floor",
+            "suggestion_confidence_low" => "Overall confidence stayed below the suggestion threshold",
+            "auto_accept_confidence_low" => "Overall confidence stayed below the auto-accept threshold",
+            _ => code
         };
     }
 

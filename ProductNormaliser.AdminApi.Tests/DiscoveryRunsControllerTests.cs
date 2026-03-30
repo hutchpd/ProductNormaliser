@@ -139,6 +139,7 @@ public sealed class DiscoveryRunsControllerTests
             Assert.That(dto.TotalCount, Is.EqualTo(1));
             Assert.That(dto.Items[0].CandidateKey, Is.EqualTo("safe_shop"));
             Assert.That(dto.Summary.ActiveCandidateCount, Is.EqualTo(1));
+            Assert.That(dto.Summary.AutoAcceptBlockers.Any(blocker => blocker.Code == "duplicate_risk_high" && blocker.Count == 1), Is.True);
             Assert.That(service.LastCandidateQuery, Is.Not.Null);
             Assert.That(service.LastCandidateQuery!.StateFilter, Is.EqualTo(DiscoveryRunCandidateStateFilters.Active));
             Assert.That(service.LastCandidateQuery.Sort, Is.EqualTo(DiscoveryRunCandidateSortModes.ReviewPriority));
@@ -296,7 +297,16 @@ public sealed class DiscoveryRunsControllerTests
                     RepresentativePageFetchFailureCandidateCount = 0,
                     RepresentativeCategoryFetchFailureCount = 0,
                     RepresentativeProductFetchFailureCount = 0,
-                    LlmTimeoutCandidateCount = 0
+                    LlmTimeoutCandidateCount = 0,
+                    AutoAcceptBlockers =
+                    [
+                        new DiscoveryRunCandidateBlockerSummary
+                        {
+                            Code = "duplicate_risk_high",
+                            Label = "Duplicate risk was too high",
+                            Count = 1
+                        }
+                    ]
                 }
             });
         }

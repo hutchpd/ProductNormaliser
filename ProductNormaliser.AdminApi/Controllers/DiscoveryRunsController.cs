@@ -101,7 +101,13 @@ public sealed class DiscoveryRunsController(IDiscoveryRunService discoveryRunSer
                 RepresentativePageFetchFailureCandidateCount = candidates.Summary.RepresentativePageFetchFailureCandidateCount,
                 RepresentativeCategoryFetchFailureCount = candidates.Summary.RepresentativeCategoryFetchFailureCount,
                 RepresentativeProductFetchFailureCount = candidates.Summary.RepresentativeProductFetchFailureCount,
-                LlmTimeoutCandidateCount = candidates.Summary.LlmTimeoutCandidateCount
+                LlmTimeoutCandidateCount = candidates.Summary.LlmTimeoutCandidateCount,
+                AutoAcceptBlockers = candidates.Summary.AutoAcceptBlockers.Select(blocker => new Contracts.DiscoveryRunCandidateBlockerSummaryDto
+                {
+                    Code = blocker.Code,
+                    Label = blocker.Label,
+                    Count = blocker.Count
+                }).ToArray()
             }
         });
     }
@@ -313,6 +319,14 @@ public sealed class DiscoveryRunsController(IDiscoveryRunService discoveryRunSer
                 RepresentativeValidationPassed = candidate.AutomationAssessment.RepresentativeValidationPassed,
                 ExtractabilityConfidencePassed = candidate.AutomationAssessment.ExtractabilityConfidencePassed,
                 YieldConfidencePassed = candidate.AutomationAssessment.YieldConfidencePassed,
+                SuggestionBreadthPassed = candidate.AutomationAssessment.SuggestionBreadthPassed,
+                AutoAcceptBreadthPassed = candidate.AutomationAssessment.AutoAcceptBreadthPassed,
+                LocaleAligned = candidate.AutomationAssessment.LocaleAligned,
+                CrawlabilityPassed = candidate.AutomationAssessment.CrawlabilityPassed,
+                CategoryRelevancePassed = candidate.AutomationAssessment.CategoryRelevancePassed,
+                CatalogLikelihoodPassed = candidate.AutomationAssessment.CatalogLikelihoodPassed,
+                SuggestionConfidencePassed = candidate.AutomationAssessment.SuggestionConfidencePassed,
+                AutoAcceptConfidencePassed = candidate.AutomationAssessment.AutoAcceptConfidencePassed,
                 EligibleForSuggestion = candidate.AutomationAssessment.EligibleForSuggestion,
                 EligibleForAutoAccept = candidate.AutomationAssessment.EligibleForAutoAccept,
                 EligibleForAutoSeed = candidate.AutomationAssessment.EligibleForAutoSeed,

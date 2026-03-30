@@ -159,6 +159,118 @@ public sealed class DiscoveryRunDetailsPageTests
     }
 
     [Test]
+    public async Task OnGetAsync_ExposesProcessorOnlyDecisionReasons_ForSuggestedCandidates()
+    {
+        var client = new FakeAdminApiClient
+        {
+            DiscoveryRun = CreateRun(status: "completed", stage: "publish"),
+            DiscoveryRunCandidates =
+            [
+                CreateCandidate(
+                    "existing_shop",
+                    "suggested",
+                    stateMessage: "Suggested for operator review because this host is already registered, so discovery did not auto-publish a duplicate source.",
+                    automationAssessment: new SourceCandidateAutomationAssessmentDto
+                    {
+                        RequestedMode = "auto_accept_and_seed"
+                    },
+                    alreadyRegistered: true),
+                CreateCandidate(
+                    "cap_blocked",
+                    "suggested",
+                    stateMessage: "Suggested for operator review because the run had already consumed its auto-accept allowance.",
+                    automationAssessment: new SourceCandidateAutomationAssessmentDto
+                    {
+                        RequestedMode = "auto_accept_and_seed",
+                        EligibleForAutoAccept = true
+                    })
+            ]
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel>.Instance)
+        {
+            RunId = "discovery_run_1"
+        };
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        var existingShop = model.ActiveCandidates.Single(candidate => string.Equals(candidate.CandidateKey, "existing_shop", StringComparison.OrdinalIgnoreCase));
+        var capBlocked = model.ActiveCandidates.Single(candidate => string.Equals(candidate.CandidateKey, "cap_blocked", StringComparison.OrdinalIgnoreCase));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.GetCandidateDecisionSummary(existingShop), Does.Contain("already registered"));
+            Assert.That(model.GetCandidateBlockingReasons(existingShop), Has.Some.Contains("already registered"));
+            Assert.That(model.GetCandidateBlockingReasons(capBlocked), Has.Some.Contains("auto-accept allowance"));
+        });
+    }
+
+    [Test]
+    public async Task OnGetAsync_BuildsRunLevelAutoAcceptBlockerSummary()
+    {
+        var client = new FakeAdminApiClient
+        {
+            DiscoveryRun = CreateRun(status: "completed", stage: "publish"),
+            DiscoveryRunCandidates =
+            [
+                CreateCandidate(
+                    "existing_shop_1",
+                    "suggested",
+                    automationAssessment: CreateStrongAutomationAssessment(requestedMode: "auto_accept_and_seed"),
+                    alreadyRegistered: true),
+                CreateCandidate(
+                    "existing_shop_2",
+                    "suggested",
+                    automationAssessment: CreateStrongAutomationAssessment(requestedMode: "auto_accept_and_seed"),
+                    alreadyRegistered: true),
+                CreateCandidate(
+                    "duplicate_risk_high",
+                    "failed",
+                    automationAssessment: new SourceCandidateAutomationAssessmentDto
+                    {
+                        RequestedMode = "auto_accept_and_seed",
+                        Decision = "manual_only",
+                        MarketMatchApproved = true,
+                        MarketEvidenceStrongEnough = true,
+                        GovernancePassed = true,
+                        DuplicateRiskAccepted = false,
+                        RepresentativeValidationPassed = true,
+                        ExtractabilityConfidencePassed = true,
+                        YieldConfidencePassed = true,
+                        SuggestionBreadthPassed = true,
+                        AutoAcceptBreadthPassed = true,
+                        LocaleAligned = true,
+                        CrawlabilityPassed = true,
+                        CategoryRelevancePassed = true,
+                        CatalogLikelihoodPassed = true,
+                        SuggestionConfidencePassed = true,
+                        AutoAcceptConfidencePassed = true,
+                        EligibleForSuggestion = false,
+                        EligibleForAutoAccept = false,
+                        EligibleForAutoSeed = false,
+                        MarketEvidence = "explicit",
+                        LocaleEvidence = "explicit"
+                    })
+            ]
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel>.Instance)
+        {
+            RunId = "discovery_run_1"
+        };
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.HasAutoAcceptBlockers, Is.True);
+            Assert.That(model.AutoAcceptBlockers[0].Code, Is.EqualTo("already_registered"));
+            Assert.That(model.AutoAcceptBlockers[0].Count, Is.EqualTo(2));
+            Assert.That(model.AutoAcceptBlockers.Any(blocker => blocker.Code == "duplicate_risk_high" && blocker.Count == 1), Is.True);
+        });
+    }
+
+    [Test]
     public async Task OnPostPauseAsync_CallsApiAndRedirectsBackToRun()
     {
         var client = new FakeAdminApiClient
@@ -332,7 +444,9 @@ public sealed class DiscoveryRunDetailsPageTests
         DateTime? archivedUtc = null,
         string? stateMessage = null,
         string? archiveReason = null,
-        SourceCandidateProbeDto? probe = null)
+        SourceCandidateProbeDto? probe = null,
+        SourceCandidateAutomationAssessmentDto? automationAssessment = null,
+        bool alreadyRegistered = false)
     {
         return new DiscoveryRunCandidateDto
         {
@@ -359,10 +473,40 @@ public sealed class DiscoveryRunDetailsPageTests
             RuntimeExtractionStatus = "compatible",
             RuntimeExtractionMessage = "Compatible.",
             MatchedCategoryKeys = ["tv"],
+            AlreadyRegistered = alreadyRegistered,
             AllowedByGovernance = true,
             Probe = probe ?? new SourceCandidateProbeDto(),
-            AutomationAssessment = new SourceCandidateAutomationAssessmentDto(),
+            AutomationAssessment = automationAssessment ?? CreateStrongAutomationAssessment(),
             Reasons = []
+        };
+    }
+
+    private static SourceCandidateAutomationAssessmentDto CreateStrongAutomationAssessment(string requestedMode = "suggest_accept")
+    {
+        return new SourceCandidateAutomationAssessmentDto
+        {
+            RequestedMode = requestedMode,
+            Decision = requestedMode == "auto_accept_and_seed" ? "auto_accept_and_seed" : "suggest_accept",
+            MarketMatchApproved = true,
+            MarketEvidenceStrongEnough = true,
+            GovernancePassed = true,
+            DuplicateRiskAccepted = true,
+            RepresentativeValidationPassed = true,
+            ExtractabilityConfidencePassed = true,
+            YieldConfidencePassed = true,
+            SuggestionBreadthPassed = true,
+            AutoAcceptBreadthPassed = true,
+            LocaleAligned = true,
+            CrawlabilityPassed = true,
+            CategoryRelevancePassed = true,
+            CatalogLikelihoodPassed = true,
+            SuggestionConfidencePassed = true,
+            AutoAcceptConfidencePassed = true,
+            EligibleForSuggestion = true,
+            EligibleForAutoAccept = string.Equals(requestedMode, "auto_accept_and_seed", StringComparison.OrdinalIgnoreCase),
+            EligibleForAutoSeed = string.Equals(requestedMode, "auto_accept_and_seed", StringComparison.OrdinalIgnoreCase),
+            MarketEvidence = "explicit",
+            LocaleEvidence = "explicit"
         };
     }
 }

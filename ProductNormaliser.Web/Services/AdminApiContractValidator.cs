@@ -273,6 +273,24 @@ internal static class AdminApiContractValidator
             throw new InvalidOperationException("discoveryRunCandidatePage.totalPages must be zero or greater.");
         }
 
+        ValidateItems(payload.Summary.AutoAcceptBlockers, "discoveryRunCandidatePage.summary.autoAcceptBlockers", (blocker, path) =>
+        {
+            if (string.IsNullOrWhiteSpace(blocker.Code))
+            {
+                throw new InvalidOperationException($"{path}.code must be provided.");
+            }
+
+            if (string.IsNullOrWhiteSpace(blocker.Label))
+            {
+                throw new InvalidOperationException($"{path}.label must be provided.");
+            }
+
+            if (blocker.Count < 0)
+            {
+                throw new InvalidOperationException($"{path}.count must be zero or greater.");
+            }
+        });
+
         ValidateItems(payload.Items, "discoveryRunCandidatePage.items", ValidateDiscoveryRunCandidate);
     }
 

@@ -257,8 +257,20 @@
                     <dd>@Model.AutomationSettings.AutoAcceptMinConfidenceScore.ToString("0.#") confidence</dd>
                 </div>
                 <div>
+                    <dt>Duplicate-risk cap</dt>
+                    <dd>@Model.AutomationSettings.MaxDuplicateRiskScore.ToString("0.#") max risk score</dd>
+                </div>
+                <div>
                     <dt>Auto cap per run</dt>
                     <dd>@Model.AutomationSettings.MaxAutoAcceptedCandidatesPerRun</dd>
+                </div>
+                <div>
+                    <dt>Guarded quality floors</dt>
+                    <dd>@Model.AutomationSettings.MinCrawlabilityScore.ToString("0.#") crawlability / @Model.AutomationSettings.MinCategoryRelevanceScore.ToString("0.#") category relevance / @Model.AutomationSettings.MinCatalogLikelihoodScore.ToString("0.#") catalog likelihood</dd>
+                </div>
+                <div>
+                    <dt>Runtime evidence floors</dt>
+                    <dd>@Model.AutomationSettings.MinExtractabilityScore.ToString("0.#") extractability / @Model.AutomationSettings.MinYieldConfidenceScore.ToString("0.#") yield confidence</dd>
                 </div>
                 <div>
                     <dt>Probe budget</dt>

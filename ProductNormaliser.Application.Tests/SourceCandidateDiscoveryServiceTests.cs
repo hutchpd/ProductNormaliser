@@ -658,6 +658,7 @@ public sealed class SourceCandidateDiscoveryServiceTests
             Assert.That(result.Candidates[0].AutomationAssessment.EligibleForAutoAccept, Is.False);
             Assert.That(result.Candidates[0].AutomationAssessment.Decision, Is.EqualTo(SourceCandidateAutomationAssessment.DecisionSuggestAccept));
             Assert.That(result.Candidates[0].AutomationAssessment.SupportingReasons.Any(reason => reason.Contains("Automation breadth validated", StringComparison.OrdinalIgnoreCase)), Is.True);
+            Assert.That(result.Candidates[0].AutomationAssessment.SupportingReasons.Any(reason => reason.Contains("Overall confidence scored", StringComparison.OrdinalIgnoreCase)), Is.True);
         });
     }
 
@@ -793,7 +794,8 @@ public sealed class SourceCandidateDiscoveryServiceTests
             Assert.That(result.Candidates[0].AutomationAssessment.EligibleForSuggestion, Is.False);
             Assert.That(result.Candidates[0].AutomationAssessment.EligibleForAutoAccept, Is.False);
             Assert.That(result.Candidates[0].AutomationAssessment.Decision, Is.EqualTo(SourceCandidateAutomationAssessment.DecisionManualOnly));
-            Assert.That(result.Candidates[0].AutomationAssessment.BlockingReasons.Any(reason => reason.Contains("weakly inferred", StringComparison.OrdinalIgnoreCase)), Is.True);
+            Assert.That(result.Candidates[0].AutomationAssessment.BlockingReasons.Any(reason => reason.Contains("explicit single-market evidence", StringComparison.OrdinalIgnoreCase)), Is.True);
+            Assert.That(result.Candidates[0].AutomationAssessment.BlockingReasons.Any(reason => reason.Contains("request_hint", StringComparison.OrdinalIgnoreCase)), Is.True);
         });
     }
 
@@ -864,6 +866,8 @@ public sealed class SourceCandidateDiscoveryServiceTests
             Assert.That(result.Candidates[0].AutomationAssessment.EligibleForAutoAccept, Is.True);
             Assert.That(result.Candidates[0].AutomationAssessment.EligibleForAutoSeed, Is.True);
             Assert.That(result.Candidates[0].AutomationAssessment.Decision, Is.EqualTo(SourceCandidateAutomationAssessment.DecisionAutoAcceptAndSeed));
+            Assert.That(result.Candidates[0].AutomationAssessment.SupportingReasons.Any(reason => reason.Contains("Duplicate risk scored", StringComparison.OrdinalIgnoreCase)), Is.True);
+            Assert.That(result.Candidates[0].AutomationAssessment.SupportingReasons.Any(reason => reason.Contains("auto-accept threshold", StringComparison.OrdinalIgnoreCase)), Is.True);
         });
     }
 
@@ -1142,7 +1146,7 @@ public sealed class SourceCandidateDiscoveryServiceTests
             Assert.That(result.Candidates[0].Reasons.Select(reason => reason.Code), Does.Contain("runtime_extraction_mismatch"));
             Assert.That(result.Candidates[0].AutomationAssessment.EligibleForSuggestion, Is.False);
             Assert.That(result.Candidates[0].AutomationAssessment.EligibleForAutoAccept, Is.False);
-            Assert.That(result.Candidates[0].AutomationAssessment.BlockingReasons.Any(reason => reason.Contains("live runtime extractor", StringComparison.OrdinalIgnoreCase)), Is.True);
+            Assert.That(result.Candidates[0].AutomationAssessment.BlockingReasons.Any(reason => reason.Contains("runtime-compatible evidence=no", StringComparison.OrdinalIgnoreCase)), Is.True);
         });
     }
 

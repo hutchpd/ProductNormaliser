@@ -86,11 +86,22 @@ public sealed class DetailsModel(
 
     public int LlmTimeoutCandidateCount => CandidateSummary.LlmTimeoutCandidateCount;
 
+    public IReadOnlyList<DiscoveryRunCandidateBlockerSummaryDto> AutoAcceptBlockers => CandidateSummary.AutoAcceptBlockers;
+
+    public bool HasAutoAcceptBlockers => AutoAcceptBlockers.Count > 0;
+
     public bool HasActiveCandidatePages => ActiveCandidatePage.TotalPages > 1;
 
     public bool HasArchivedCandidatePages => ArchivedCandidatePage.TotalPages > 1;
 
     public IReadOnlyList<DiscoveryRunActivityEntryModel> ActivityLogEntries => BuildActivityLogEntries();
+
+    public string GetAutoAcceptBlockerCoverage(DiscoveryRunCandidateBlockerSummaryDto blocker)
+    {
+        var totalCandidates = Math.Max(1, CandidateSummary.RunCandidateCount);
+        var percentage = decimal.Round(blocker.Count * 100m / totalCandidates, 1, MidpointRounding.AwayFromZero);
+        return $"{blocker.Count} candidate(s), {percentage:0.#}% of this run";
+    }
 
     public PageHeroModel Hero => Run is null
         ? new PageHeroModel
@@ -206,15 +217,56 @@ public sealed class DetailsModel(
         return new[]
             {
                 candidate.ArchiveReason,
-                candidate.StateMessage
+                GetCandidateDecisionSummary(candidate)
             }
             .OfType<string>()
-            .Concat(candidate.Reasons
-            .Select(reason => reason.Message)
-            .Concat(candidate.AutomationAssessment.BlockingReasons))
+            .Concat(GetCandidateBlockingReasons(candidate))
+            .Concat(candidate.Reasons.Select(reason => reason.Message))
+            .Concat(GetCandidateSupportingReasons(candidate))
             .Where(message => !string.IsNullOrWhiteSpace(message))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(4)
+            .ToArray();
+    }
+
+    public string GetCandidateDecisionSummary(DiscoveryRunCandidateDto candidate)
+    {
+        if (!string.IsNullOrWhiteSpace(candidate.StateMessage))
+        {
+            return candidate.StateMessage!;
+        }
+
+        return candidate.State switch
+        {
+            "auto_accepted" => "Auto-accepted and published because unattended policy stayed green at decision time.",
+            "manually_accepted" => "Accepted by an operator after review.",
+            "suggested" => "Suggested for operator review.",
+            "failed" => "Candidate did not clear guarded acceptance policy.",
+            "dismissed" => "Dismissed from the active review queue.",
+            "superseded" when !string.IsNullOrWhiteSpace(candidate.SupersededByCandidateKey) => $"Superseded by {candidate.SupersededByCandidateKey}.",
+            "superseded" => "Superseded by another candidate in this run.",
+            "archived" => "Archived from the active review queue.",
+            _ => "Decision summary is unavailable for this candidate snapshot."
+        };
+    }
+
+    public IReadOnlyList<string> GetCandidateSupportingReasons(DiscoveryRunCandidateDto candidate)
+    {
+        return GetProcessorSupportingReasons(candidate)
+            .Concat(candidate.AutomationAssessment.SupportingReasons)
+            .Where(message => !string.IsNullOrWhiteSpace(message))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    public IReadOnlyList<string> GetCandidateBlockingReasons(DiscoveryRunCandidateDto candidate)
+    {
+        return GetProcessorBlockingReasons(candidate)
+            .Concat(new[] { candidate.GovernanceWarning })
+            .OfType<string>()
+            .Concat(candidate.AutomationAssessment.BlockingReasons)
+            .Where(message => !string.IsNullOrWhiteSpace(message))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
@@ -375,14 +427,15 @@ public sealed class DetailsModel(
         };
     }
 
-    private static string BuildArchivedCandidateSummary(DiscoveryRunCandidateDto candidate)
+    private string BuildArchivedCandidateSummary(DiscoveryRunCandidateDto candidate)
     {
         var reasons = new[]
             {
                 candidate.ArchiveReason,
-                candidate.StateMessage
+                GetCandidateDecisionSummary(candidate)
             }
-            .Concat(candidate.AutomationAssessment.BlockingReasons)
+            .Concat(GetCandidateBlockingReasons(candidate))
+            .Concat(GetCandidateSupportingReasons(candidate))
             .Concat(candidate.Reasons.Select(reason => reason.Message))
             .Where(message => !string.IsNullOrWhiteSpace(message))
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -393,6 +446,63 @@ public sealed class DetailsModel(
             : string.Join(" ", reasons.Take(3));
 
         return $"{candidate.Host} was moved out of the active queue. {suffix}";
+    }
+
+    private static IEnumerable<string> GetProcessorSupportingReasons(DiscoveryRunCandidateDto candidate)
+    {
+        if (string.Equals(candidate.State, "auto_accepted", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return "Recommendation stayed recommended and no registry duplicate blocked unattended publication.";
+            yield return "The run still had auto-accept capacity when this candidate was decided.";
+        }
+
+        if (string.Equals(candidate.State, "manually_accepted", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return "An operator accepted this candidate after review.";
+        }
+
+        if (string.Equals(candidate.State, "suggested", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(candidate.AutomationAssessment.RequestedMode, "operator_assisted", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return "This run is configured for operator-assisted review only.";
+        }
+
+        if (string.Equals(candidate.State, "suggested", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(candidate.AutomationAssessment.RequestedMode, "suggest_accept", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return "This run is configured to suggest strong candidates rather than auto-publish them.";
+        }
+
+        if (string.Equals(candidate.State, "suggested", StringComparison.OrdinalIgnoreCase)
+            && candidate.AutomationAssessment.EligibleForSuggestion
+            && !candidate.AutomationAssessment.EligibleForAutoAccept)
+        {
+            yield return "The candidate cleared suggestion policy even though unattended publication policy still had blockers.";
+        }
+    }
+
+    private static IEnumerable<string> GetProcessorBlockingReasons(DiscoveryRunCandidateDto candidate)
+    {
+        if (string.Equals(candidate.State, "suggested", StringComparison.OrdinalIgnoreCase) && candidate.AlreadyRegistered)
+        {
+            yield return "This host is already registered, so discovery did not auto-publish a duplicate source.";
+        }
+
+        if (string.Equals(candidate.State, "suggested", StringComparison.OrdinalIgnoreCase) && candidate.AutomationAssessment.EligibleForAutoAccept)
+        {
+            yield return "This candidate cleared auto-accept guardrails, but the run had already consumed its auto-accept allowance.";
+        }
+
+        if (string.Equals(candidate.State, "failed", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(candidate.RecommendationStatus, "do_not_accept", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return "Recommendation state resolved to do_not_accept, so the candidate stayed out of the publish queue.";
+        }
+
+        if (!candidate.AllowedByGovernance && string.IsNullOrWhiteSpace(candidate.GovernanceWarning))
+        {
+            yield return "Governance rejected this candidate.";
+        }
     }
 
     public sealed class DiscoveryRunActivityEntryModel

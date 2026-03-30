@@ -279,6 +279,26 @@ public sealed class DiscoveryRunServiceTests
         public Task<IReadOnlyList<DiscoveryRunCandidate>> ListByRunAsync(string runId, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<DiscoveryRunCandidate>>(items.Values.Where(candidate => string.Equals(candidate.RunId, runId, StringComparison.OrdinalIgnoreCase)).ToArray());
 
+        public Task<DiscoveryRunCandidatePage> QueryByRunAsync(string runId, DiscoveryRunCandidateQuery query, CancellationToken cancellationToken = default)
+        {
+            var results = items.Values.Where(candidate => string.Equals(candidate.RunId, runId, StringComparison.OrdinalIgnoreCase)).ToArray();
+            return Task.FromResult(new DiscoveryRunCandidatePage
+            {
+                Items = results,
+                StateFilter = query.StateFilter ?? DiscoveryRunCandidateStateFilters.All,
+                Sort = query.Sort ?? DiscoveryRunCandidateSortModes.ReviewPriority,
+                Page = query.Page,
+                PageSize = query.PageSize,
+                TotalCount = results.Length,
+                Summary = new DiscoveryRunCandidateRunSummary
+                {
+                    RunCandidateCount = results.Length,
+                    ActiveCandidateCount = results.Length,
+                    ArchivedCandidateCount = 0
+                }
+            });
+        }
+
         public Task<DiscoveryRunCandidate?> GetAsync(string runId, string candidateKey, CancellationToken cancellationToken = default)
             => Task.FromResult(items.TryGetValue($"{runId}:{candidateKey}", out var candidate) ? candidate : null);
 
