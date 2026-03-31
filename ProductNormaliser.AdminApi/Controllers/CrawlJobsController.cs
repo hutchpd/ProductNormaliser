@@ -188,14 +188,20 @@ public sealed class CrawlJobsController(
         }
 
         var jobIds = jobs.Select(job => job.JobId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var discoveredUrlFilter = Builders<DiscoveredUrl>.Filter.Ne(item => item.JobId, null)
+            & Builders<DiscoveredUrl>.Filter.In(item => item.JobId, jobIds);
         var discoveredUrls = await mongoDbContext.DiscoveredUrls
-            .Find(item => item.JobId != null && jobIds.Contains(item.JobId))
+            .Find(discoveredUrlFilter)
             .ToListAsync(cancellationToken);
+        var discoveryQueueFilter = Builders<DiscoveryQueueItem>.Filter.Ne(item => item.JobId, null)
+            & Builders<DiscoveryQueueItem>.Filter.In(item => item.JobId, jobIds);
         var discoveryQueueItems = await mongoDbContext.DiscoveryQueueItems
-            .Find(item => item.JobId != null && jobIds.Contains(item.JobId))
+            .Find(discoveryQueueFilter)
             .ToListAsync(cancellationToken);
+        var promotedQueueFilter = Builders<CrawlQueueItem>.Filter.Ne(item => item.InitiatingJobId, null)
+            & Builders<CrawlQueueItem>.Filter.In(item => item.InitiatingJobId, jobIds);
         var promotedQueueItems = await mongoDbContext.CrawlQueueItems
-            .Find(item => item.InitiatingJobId != null && jobIds.Contains(item.InitiatingJobId))
+            .Find(promotedQueueFilter)
             .ToListAsync(cancellationToken);
         var crawlSources = await mongoDbContext.CrawlSources
             .Find(Builders<CrawlSource>.Filter.Empty)
@@ -215,12 +221,14 @@ public sealed class CrawlJobsController(
         var crawlLogs = relevantSourceNames.Length == 0 || relevantSourceUrls.Length == 0
             ? []
             : await mongoDbContext.CrawlLogs
-                .Find(item => relevantSourceNames.Contains(item.SourceName) && relevantSourceUrls.Contains(item.Url))
+                .Find(Builders<CrawlLog>.Filter.In(item => item.SourceName, relevantSourceNames)
+                    & Builders<CrawlLog>.Filter.In(item => item.Url, relevantSourceUrls))
                 .ToListAsync(cancellationToken);
         var sourceProducts = relevantSourceNames.Length == 0 || relevantSourceUrls.Length == 0
             ? []
             : await mongoDbContext.SourceProducts
-                .Find(item => relevantSourceNames.Contains(item.SourceName) && relevantSourceUrls.Contains(item.SourceUrl))
+                .Find(Builders<SourceProduct>.Filter.In(item => item.SourceName, relevantSourceNames)
+                    & Builders<SourceProduct>.Filter.In(item => item.SourceUrl, relevantSourceUrls))
                 .ToListAsync(cancellationToken);
 
         var discoveredByJob = discoveredUrls.GroupBy(item => item.JobId!, StringComparer.OrdinalIgnoreCase)
