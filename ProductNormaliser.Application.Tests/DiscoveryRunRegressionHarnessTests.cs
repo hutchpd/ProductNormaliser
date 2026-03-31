@@ -146,7 +146,12 @@ public sealed class DiscoveryRunRegressionHarnessTests
                 if (lastLoggedSnapshotUtc == DateTime.MinValue || DateTime.UtcNow - lastLoggedSnapshotUtc >= TimeSpan.FromSeconds(30))
                 {
                     lastLoggedSnapshotUtc = DateTime.UtcNow;
+                    var searchSummary = finalRun.Diagnostics.LastOrDefault(diagnostic => string.Equals(diagnostic.Code, "search_provider_summary", StringComparison.OrdinalIgnoreCase))?.Message;
                     TestContext.Progress.WriteLine($"[{DateTime.UtcNow:u}] status={finalRun.Status} stage={finalRun.CurrentStage} searchResults={finalRun.SearchResultCount} collapsed={finalRun.CollapsedCandidateCount} candidates={candidates.Count} diagnostics={finalRun.Diagnostics.Count}");
+                    if (!string.IsNullOrWhiteSpace(searchSummary))
+                    {
+                        TestContext.Progress.WriteLine($"  search-summary: {searchSummary}");
+                    }
                 }
             }
 
@@ -165,6 +170,7 @@ public sealed class DiscoveryRunRegressionHarnessTests
         await processingTask;
         finalRun ??= await runStore.GetAsync(run.RunId, CancellationToken.None);
         var finalCandidates = await candidateStore.ListByRunAsync(run.RunId, CancellationToken.None);
+        DumpSearchDiagnostics(finalRun, finalCandidates);
 
         Assert.Multiple(() =>
         {
@@ -235,6 +241,34 @@ public sealed class DiscoveryRunRegressionHarnessTests
         var options = new SourceCandidateDiscoveryOptions();
         configuration.GetSection(SourceCandidateDiscoveryOptions.SectionName).Bind(options);
         return options;
+    }
+
+    private static void DumpSearchDiagnostics(DiscoveryRun? run, IReadOnlyList<DiscoveryRunCandidate> candidates)
+    {
+        if (run is null)
+        {
+            TestContext.Progress.WriteLine("final-run: <null>");
+            return;
+        }
+
+        TestContext.Progress.WriteLine($"final-run: status={run.Status} stage={run.CurrentStage} searchResults={run.SearchResultCount} collapsed={run.CollapsedCandidateCount} candidates={candidates.Count} diagnostics={run.Diagnostics.Count}");
+        foreach (var diagnostic in run.Diagnostics.Where(IsSearchDiagnostic))
+        {
+            TestContext.Progress.WriteLine($"  [{diagnostic.Code}] {diagnostic.Title} :: {diagnostic.Message}");
+        }
+
+        if (candidates.Count > 0)
+        {
+            foreach (var candidate in candidates.Take(10))
+            {
+                TestContext.Progress.WriteLine($"  candidate: key={candidate.CandidateKey} state={candidate.State} host={candidate.Host} display={candidate.DisplayName}");
+            }
+        }
+    }
+
+    private static bool IsSearchDiagnostic(DiscoveryRunDiagnostic diagnostic)
+    {
+        return diagnostic.Code.StartsWith("search_", StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class InMemoryDiscoveryRunStore : IDiscoveryRunStore

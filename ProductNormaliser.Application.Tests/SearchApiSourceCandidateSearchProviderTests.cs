@@ -65,7 +65,11 @@ public sealed class SearchApiSourceCandidateSearchProviderTests
         {
             Assert.That(requests, Has.Count.EqualTo(2));
             Assert.That(requests.All(uri => uri.AbsolutePath == "/res/v1/web/search"), Is.True);
-          Assert.That(result.Diagnostics, Is.Empty);
+          Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Is.EqualTo(new[] { "search_provider_summary" }));
+          Assert.That(result.ProviderResultCount, Is.EqualTo(4));
+          Assert.That(result.EligibleResultCount, Is.EqualTo(2));
+          Assert.That(result.DiscountedResultCount, Is.EqualTo(2));
+          Assert.That(result.MergedDuplicateCount, Is.EqualTo(1));
           Assert.That(result.Candidates, Has.Count.EqualTo(1));
           Assert.That(result.Candidates[0].Host, Is.EqualTo("samsung.com"));
           Assert.That(result.Candidates[0].BaseUrl, Is.EqualTo("https://www.samsung.com/"));
@@ -74,6 +78,9 @@ public sealed class SearchApiSourceCandidateSearchProviderTests
           Assert.That(result.Candidates[0].PreferredLocale, Is.EqualTo("en-GB"));
           Assert.That(result.Candidates[0].MatchedBrandHints, Is.EqualTo(new[] { "Samsung" }));
           Assert.That(result.Candidates[0].MatchedCategoryKeys, Is.EqualTo(new[] { "tv" }));
+          Assert.That(result.Diagnostics[0].Message, Does.Contain("Raw results: 4."));
+          Assert.That(result.Diagnostics[0].Message, Does.Contain("Eligible mapped hits: 2."));
+          Assert.That(result.Diagnostics[0].Message, Does.Contain("Discounted before candidate evaluation: 2."));
         });
     }
 
@@ -140,7 +147,7 @@ public sealed class SearchApiSourceCandidateSearchProviderTests
         Assert.Multiple(() =>
         {
           Assert.That(result.Candidates, Is.Empty);
-          Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Is.EqualTo(new[] { "search_provider_rate_limited" }));
+          Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Is.EqualTo(new[] { "search_provider_rate_limited", "search_provider_summary" }));
         });
       }
 
@@ -174,7 +181,7 @@ public sealed class SearchApiSourceCandidateSearchProviderTests
         Assert.Multiple(() =>
         {
           Assert.That(result.Candidates, Is.Empty);
-          Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Is.EqualTo(new[] { "search_provider_request_failed" }));
+          Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Is.EqualTo(new[] { "search_provider_request_failed", "search_provider_summary" }));
         });
       }
 

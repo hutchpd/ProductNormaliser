@@ -57,6 +57,10 @@ public sealed class SearchApiSourceCandidateSearchProvider(
 
         var candidatesByHost = new Dictionary<string, SourceCandidateSearchResult>(StringComparer.OrdinalIgnoreCase);
         var diagnostics = new List<SourceCandidateDiscoveryDiagnostic>();
+        var providerResultCount = 0;
+        var eligibleResultCount = 0;
+        var discountedResultCount = 0;
+        var mergedDuplicateCount = 0;
         if (!Uri.TryCreate(options.SearchApiBaseUrl, UriKind.Absolute, out _))
         {
             diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
@@ -83,6 +87,9 @@ public sealed class SearchApiSourceCandidateSearchProvider(
                 }
 
                 var queryResponse = await SearchQueryAsync(query, request, timeoutCts.Token);
+                providerResultCount += queryResponse.ProviderResultCount;
+                eligibleResultCount += queryResponse.EligibleResultCount;
+                discountedResultCount += queryResponse.DiscountedResultCount;
 
                 if (progressReporter is not null)
                 {
@@ -96,6 +103,7 @@ public sealed class SearchApiSourceCandidateSearchProvider(
                     var candidateKey = BuildCandidateGroupingKey(candidate);
                     if (candidatesByHost.TryGetValue(candidateKey, out var existing))
                     {
+                        mergedDuplicateCount += 1;
                         candidatesByHost[candidateKey] = new SourceCandidateSearchResult
                         {
                             CandidateKey = existing.CandidateKey,
@@ -162,6 +170,15 @@ public sealed class SearchApiSourceCandidateSearchProvider(
             };
         }
 
+        diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
+        {
+            RecordedUtc = DateTime.UtcNow,
+            Code = "search_provider_summary",
+            Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
+            Title = "Brave search summary",
+            Message = $"Issued {queries.Length} Brave quer{(queries.Length == 1 ? "y" : "ies")}. Raw results: {providerResultCount}. Eligible mapped hits: {eligibleResultCount}. Discounted before candidate evaluation: {discountedResultCount}. Duplicate host hits merged across queries: {mergedDuplicateCount}. Final deduplicated candidates: {candidatesByHost.Count}."
+        });
+
         if (candidatesByHost.Count == 0 && diagnostics.All(diagnostic => !IsBlockingDiagnostic(diagnostic)))
         {
             diagnostics.Add(new SourceCandidateDiscoveryDiagnostic
@@ -175,6 +192,10 @@ public sealed class SearchApiSourceCandidateSearchProvider(
 
         return new SourceCandidateSearchResponse
         {
+            ProviderResultCount = providerResultCount,
+            EligibleResultCount = eligibleResultCount,
+            DiscountedResultCount = discountedResultCount,
+            MergedDuplicateCount = mergedDuplicateCount,
             Candidates = candidatesByHost.Values
                 .OrderBy(candidate => candidate.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
@@ -209,19 +230,31 @@ public sealed class SearchApiSourceCandidateSearchProvider(
                 Code = $"search_query_results_{index:D3}",
                 Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
                 Title = $"Brave query {index}/{Math.Max(1, totalQueries)} failed",
-                Message = $"Query \"{query}\" did not yield usable candidates. {error.Message}"
+                Message = $"Query \"{query}\" did not yield usable candidates. Raw results: {response.ProviderResultCount}. Eligible mapped hits: {response.EligibleResultCount}. Discounted: {response.DiscountedResultCount}. {error.Message}"
             };
         }
 
-        if (response.Candidates.Count == 0)
+        if (response.ProviderResultCount == 0)
         {
             return new SourceCandidateDiscoveryDiagnostic
             {
                 RecordedUtc = DateTime.UtcNow,
                 Code = $"search_query_results_{index:D3}",
                 Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
-                Title = $"Brave query {index}/{Math.Max(1, totalQueries)} returned no candidates",
-                Message = $"Query \"{query}\" completed without any eligible source candidates."
+                Title = $"Brave query {index}/{Math.Max(1, totalQueries)} returned 0 raw results",
+                Message = $"Query \"{query}\" returned 0 raw Brave results. No candidate mapping was attempted."
+            };
+        }
+
+        if (response.EligibleResultCount == 0)
+        {
+            return new SourceCandidateDiscoveryDiagnostic
+            {
+                RecordedUtc = DateTime.UtcNow,
+                Code = $"search_query_results_{index:D3}",
+                Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
+                Title = $"Brave query {index}/{Math.Max(1, totalQueries)} returned {response.ProviderResultCount} raw results but 0 eligible hits",
+                Message = $"Query \"{query}\" returned {response.ProviderResultCount} raw Brave results, but all {response.DiscountedResultCount} were discounted before candidate evaluation."
             };
         }
 
@@ -230,8 +263,8 @@ public sealed class SearchApiSourceCandidateSearchProvider(
             RecordedUtc = DateTime.UtcNow,
             Code = $"search_query_results_{index:D3}",
             Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
-            Title = $"Brave query {index}/{Math.Max(1, totalQueries)} returned {response.Candidates.Count} candidate(s)",
-            Message = $"Query \"{query}\" returned {response.Candidates.Count} candidate(s): {FormatCandidatePreview(response.Candidates)}"
+            Title = $"Brave query {index}/{Math.Max(1, totalQueries)} returned {response.ProviderResultCount} raw results and {response.EligibleResultCount} eligible hit(s)",
+            Message = $"Query \"{query}\" returned {response.ProviderResultCount} raw Brave results, {response.EligibleResultCount} eligible mapped hit(s), and {response.DiscountedResultCount} discounted result(s). Candidate preview: {FormatCandidatePreview(response.Candidates)}"
         };
     }
 
@@ -317,12 +350,17 @@ public sealed class SearchApiSourceCandidateSearchProvider(
                 return new SourceCandidateSearchResponse();
             }
 
+            var mappedCandidates = payload.Web.Results
+                .Select(result => TryMapCandidate(result, request, query))
+                .OfType<SourceCandidateSearchResult>()
+                .ToArray();
+
             return new SourceCandidateSearchResponse
             {
-                Candidates = payload.Web.Results
-                    .Select(result => TryMapCandidate(result, request, query))
-                    .OfType<SourceCandidateSearchResult>()
-                    .ToArray()
+                ProviderResultCount = payload.Web.Results.Count,
+                EligibleResultCount = mappedCandidates.Length,
+                DiscountedResultCount = Math.Max(0, payload.Web.Results.Count - mappedCandidates.Length),
+                Candidates = mappedCandidates
             };
         }
         catch (OperationCanceledException)
