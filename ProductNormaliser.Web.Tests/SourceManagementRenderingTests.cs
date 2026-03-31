@@ -47,6 +47,7 @@ public sealed class SourceManagementRenderingTests
         Assert.Multiple(() =>
         {
             Assert.That(html, Does.Contain("Recent discovery runs"));
+            Assert.That(html, Does.Contain("Manage recurring discovery campaigns"));
             Assert.That(html, Does.Contain("discovery_run_1"));
             Assert.That(html, Does.Contain("discovery_run_2"));
             Assert.That(html, Does.Contain("discovery_run_3"));

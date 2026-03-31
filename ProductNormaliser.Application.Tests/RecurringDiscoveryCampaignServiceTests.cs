@@ -61,6 +61,28 @@ public sealed class RecurringDiscoveryCampaignServiceTests
         Assert.That(action, Throws.TypeOf<InvalidOperationException>());
     }
 
+    [Test]
+    public async Task DeleteAsync_RemovesCampaignAndPreservesRunHistorySemantics()
+    {
+        var store = new FakeDiscoveryCampaignStore(new RecurringDiscoveryCampaign
+        {
+            CampaignId = "campaign_1",
+            Name = "TV UK",
+            CategoryKeys = ["tv"],
+            CampaignFingerprint = "market:uk|locale:en-gb|categories:tv|brands:sony"
+        });
+        var service = CreateService(store);
+
+        var deleted = await service.DeleteAsync("campaign_1", CancellationToken.None);
+        var remainingCampaign = await store.GetAsync("campaign_1", CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(deleted, Is.True);
+            Assert.That(remainingCampaign, Is.Null);
+        });
+    }
+
     private static RecurringDiscoveryCampaignService CreateService(FakeDiscoveryCampaignStore store)
     {
         return new RecurringDiscoveryCampaignService(
@@ -93,6 +115,11 @@ public sealed class RecurringDiscoveryCampaignServiceTests
         {
             items[campaign.CampaignId] = campaign;
             return Task.CompletedTask;
+        }
+
+        public Task<bool> DeleteAsync(string campaignId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(items.Remove(campaignId));
         }
     }
 

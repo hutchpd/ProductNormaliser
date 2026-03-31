@@ -143,6 +143,28 @@ public sealed class RecurringDiscoveryCampaignService(
         return campaign;
     }
 
+    public async Task<bool> DeleteAsync(string campaignId, CancellationToken cancellationToken = default)
+    {
+        var normalizedCampaignId = NormalizeRequired(campaignId, nameof(campaignId));
+        var deleted = await discoveryCampaignStore.DeleteAsync(normalizedCampaignId, cancellationToken);
+        if (!deleted)
+        {
+            return false;
+        }
+
+        await managementAuditService.RecordAsync(
+            "recurring_discovery_campaign_deleted",
+            "recurring_discovery_campaign",
+            normalizedCampaignId,
+            new Dictionary<string, string>
+            {
+                ["preservedRunHistory"] = "true"
+            },
+            cancellationToken);
+
+        return true;
+    }
+
     private int NormalizeIntervalHours(int? intervalHours)
     {
         var value = intervalHours ?? options.RecurringCampaignDefaultIntervalHours;

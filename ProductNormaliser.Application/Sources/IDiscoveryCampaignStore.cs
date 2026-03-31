@@ -15,4 +15,6 @@ public interface IDiscoveryCampaignStore
     Task<RecurringDiscoveryCampaign?> GetByFingerprintAsync(string campaignFingerprint, CancellationToken cancellationToken = default);
 
     Task UpsertAsync(RecurringDiscoveryCampaign campaign, CancellationToken cancellationToken = default);
+
+    Task<bool> DeleteAsync(string campaignId, CancellationToken cancellationToken = default);
 }

@@ -1,0 +1,228 @@
+@page
+@model ProductNormaliser.Web.Pages.Sources.RecurringDiscoveryCampaigns.IndexModel
+@{
+    ViewData["Title"] = "Recurring Discovery";
+}
+
+<section class="dashboard-shell">
+    <partial name="_PageHero" model="Model.Hero" />
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="notice success">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="notice error">@Model.ErrorMessage</div>
+    }
+
+    <div asp-validation-summary="ModelOnly" class="notice error" role="alert"></div>
+
+    <div class="overview-grid">
+        <section class="panel">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Create Campaign</p>
+                    <h2>Schedule continuous rediscovery</h2>
+                </div>
+            </div>
+
+            <form method="post" asp-page-handler="Create" class="source-form">
+                <div>
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">Categories</p>
+                            <h2>Select campaign scope</h2>
+                        </div>
+                    </div>
+
+                    <div class="check-grid">
+                    @foreach (var category in Model.Categories)
+                    {
+                        <label class="check-card @(category.IsEnabled ? string.Empty : "disabled")">
+                            <input type="checkbox"
+                                   name="Campaign.CategoryKeys"
+                                   value="@category.CategoryKey"
+                                   checked="@Model.Campaign.CategoryKeys.Contains(category.CategoryKey)"
+                                   disabled="@(!category.IsEnabled)" />
+                            <span>
+                                <strong>@category.DisplayName</strong>
+                                <span class="subtle-copy d-block">@category.CrawlSupportStatus</span>
+                            </span>
+                        </label>
+                    }
+                    </div>
+                    <span asp-validation-for="Campaign.CategoryKeys" class="text-danger small"></span>
+                </div>
+
+                <div class="form-grid mt-3">
+                    <div>
+                        <label asp-for="Campaign.Name" class="form-label"></label>
+                        <input asp-for="Campaign.Name" class="form-control" placeholder="TV UK rediscovery" />
+                        <span class="subtle-copy">Optional. Leave blank to derive a scope-based name.</span>
+                    </div>
+                    <div>
+                        <label asp-for="Campaign.AutomationMode" class="form-label"></label>
+                        <select asp-for="Campaign.AutomationMode" class="form-control">
+                            <option value="operator_assisted">Operator-assisted</option>
+                            <option value="suggest_accept">Suggest accept</option>
+                            <option value="auto_accept_and_seed">Auto-accept and seed</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label asp-for="Campaign.Market" class="form-label"></label>
+                        <input asp-for="Campaign.Market" class="form-control" placeholder="UK" />
+                    </div>
+                    <div>
+                        <label asp-for="Campaign.Locale" class="form-label"></label>
+                        <input asp-for="Campaign.Locale" class="form-control" placeholder="en-GB" />
+                    </div>
+                    <div>
+                        <label asp-for="Campaign.MaxCandidatesPerRun" class="form-label"></label>
+                        <input asp-for="Campaign.MaxCandidatesPerRun" class="form-control" min="1" max="25" />
+                        <span asp-validation-for="Campaign.MaxCandidatesPerRun" class="text-danger small"></span>
+                    </div>
+                    <div>
+                        <label asp-for="Campaign.IntervalHours" class="form-label"></label>
+                        <input asp-for="Campaign.IntervalHours" class="form-control" min="1" max="168" />
+                        <span asp-validation-for="Campaign.IntervalHours" class="text-danger small"></span>
+                    </div>
+                    <div class="wide">
+                        <label asp-for="Campaign.BrandHints" class="form-label"></label>
+                        <textarea asp-for="Campaign.BrandHints" rows="2" class="form-control" placeholder="Samsung, LG, Sony"></textarea>
+                        <span class="subtle-copy">Brand hints become part of the campaign identity so separate rediscovery tracks can learn independently.</span>
+                    </div>
+                </div>
+
+                <div class="actions-bar mt-3">
+                    <button type="submit" class="btn btn-dark">Create campaign</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="panel panel-muted">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">How It Works</p>
+                    <h2>Fresh runs, not infinite loops</h2>
+                </div>
+            </div>
+
+            <div class="empty-panel mt-3">
+                <p class="empty-state">Each campaign schedules new discovery runs when due. The worker still processes one queued run at a time.</p>
+                <p class="subtle-copy">Deleting a campaign removes the schedule only. Existing discovery runs and their archived decisions stay intact for audit and source-memory purposes.</p>
+            </div>
+
+            <div class="detail-grid mt-3">
+                <div>
+                    <dt>Memory source</dt>
+                    <dd>Accepted, dismissed, superseded, and archived outcomes from prior runs.</dd>
+                </div>
+                <div>
+                    <dt>Scheduler</dt>
+                    <dd>The maintenance sweep creates fresh queued runs when a campaign is due.</dd>
+                </div>
+                <div>
+                    <dt>Trust signal</dt>
+                    <dd>Repeated rediscovery outcomes now feed source automation posture alongside snapshot history.</dd>
+                </div>
+                <div>
+                    <dt>Delete behavior</dt>
+                    <dd>Deletes the recurring schedule, not the historical run records.</dd>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <section class="panel panel-muted">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Campaign Inventory</p>
+                <h2>Inspect and control recurring campaigns</h2>
+            </div>
+        </div>
+
+        @if (Model.Campaigns.Count == 0)
+        {
+            <div class="empty-panel mt-3">
+                <p class="empty-state">No recurring discovery campaigns exist yet.</p>
+                <p class="subtle-copy">Create a campaign above to start building repeatable discovery memory for a specific scope.</p>
+            </div>
+        }
+        else
+        {
+            <div class="job-card-grid mt-3">
+            @foreach (var campaign in Model.Campaigns)
+            {
+                var badge = Model.GetStatusBadge(campaign);
+
+                <article class="job-card">
+                    <div class="job-card-header">
+                        <div>
+                            <strong>@campaign.Name</strong>
+                            <div class="subtle-copy">@campaign.CampaignId</div>
+                            <div class="subtle-copy">@Model.GetScopeSummary(campaign)</div>
+                        </div>
+                        <div class="d-flex flex-column align-items-end gap-2">
+                            <partial name="_StatusBadge" model='badge' />
+                            <span class="chip">@Model.GetAutomationModeLabel(campaign.AutomationMode)</span>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(campaign.StatusMessage))
+                    {
+                        <p class="subtle-copy mt-2">@campaign.StatusMessage</p>
+                    }
+
+                    <div class="chip-row compact-wrap mt-2">
+                        <span class="chip">@Model.GetScheduleSummary(campaign)</span>
+                        @if (!string.IsNullOrWhiteSpace(campaign.LastRunId))
+                        {
+                            <span class="chip">last run @campaign.LastRunId</span>
+                        }
+                    </div>
+
+                    <div class="detail-grid mt-3">
+                        <div>
+                            <dt>Memory</dt>
+                            <dd>@Model.GetMemorySummary(campaign)</dd>
+                        </div>
+                        <div>
+                            <dt>Last accepted</dt>
+                            <dd>@(campaign.LastAcceptedUtc?.ToString("u") ?? "None yet")</dd>
+                        </div>
+                    </div>
+
+                    <div class="actions-bar inline-actions mt-3">
+                        @if (string.Equals(campaign.Status, "active", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <form method="post" asp-page-handler="Pause" class="inline-form">
+                                <input type="hidden" name="campaignId" value="@campaign.CampaignId" />
+                                <button type="submit" class="btn btn-outline-dark">Pause</button>
+                            </form>
+                        }
+                        else
+                        {
+                            <form method="post" asp-page-handler="Resume" class="inline-form">
+                                <input type="hidden" name="campaignId" value="@campaign.CampaignId" />
+                                <button type="submit" class="btn btn-outline-dark">Resume</button>
+                            </form>
+                        }
+
+                        @if (!string.IsNullOrWhiteSpace(campaign.LastRunId))
+                        {
+                            <a asp-page="/Sources/DiscoveryRuns/Details" asp-route-runId="@campaign.LastRunId" class="btn btn-outline-dark">Open last run</a>
+                        }
+
+                        <form method="post" asp-page-handler="Delete" class="inline-form" onsubmit="return confirm('Delete this recurring campaign schedule? Existing discovery runs will be preserved.');">
+                            <input type="hidden" name="campaignId" value="@campaign.CampaignId" />
+                            <button type="submit" class="btn btn-outline-danger">Delete schedule</button>
+                        </form>
+                    </div>
+                </article>
+            }
+            </div>
+        }
+    </section>
+</section>

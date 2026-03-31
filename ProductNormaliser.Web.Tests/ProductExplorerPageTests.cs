@@ -448,6 +448,12 @@ public sealed class ProductExplorerPageTests
         public Task<SourceDto> UpdateThrottlingAsync(string sourceId, UpdateSourceThrottlingRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<SourceOnboardingAutomationSettingsDto> GetSourceOnboardingAutomationSettingsAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<SourceCandidateDiscoveryResponseDto> DiscoverSourceCandidatesAsync(DiscoverSourceCandidatesRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<IReadOnlyList<RecurringDiscoveryCampaignDto>> GetRecurringDiscoveryCampaignsAsync(string? status = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<RecurringDiscoveryCampaignDto?> GetRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<RecurringDiscoveryCampaignDto> CreateRecurringDiscoveryCampaignAsync(CreateRecurringDiscoveryCampaignRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<RecurringDiscoveryCampaignDto> PauseRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<RecurringDiscoveryCampaignDto> ResumeRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task DeleteRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<DiscoveryRunDto> CreateDiscoveryRunAsync(CreateDiscoveryRunRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<DiscoveryRunPageDto> GetDiscoveryRunsAsync(string? status = null, int page = 1, int pageSize = 10, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<DiscoveryRunDto?> GetDiscoveryRunAsync(string runId, CancellationToken cancellationToken = default) => throw new NotImplementedException();

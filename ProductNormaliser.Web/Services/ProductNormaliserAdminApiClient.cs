@@ -147,6 +147,41 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
         return SendAsync<SourceCandidateDiscoveryResponseDto>(HttpMethod.Post, "api/sources/candidates/discover", request, AdminApiContractValidator.ValidateSourceCandidateDiscoveryResponse, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<RecurringDiscoveryCampaignDto>> GetRecurringDiscoveryCampaignsAsync(string? status = null, CancellationToken cancellationToken = default)
+    {
+        var relativeUri = BuildRelativeUri("api/sources/recurring-discovery-campaigns", new Dictionary<string, string?>
+        {
+            ["status"] = status
+        });
+
+        return await GetRequiredAsync<RecurringDiscoveryCampaignDto[]>(relativeUri, AdminApiContractValidator.ValidateRecurringDiscoveryCampaigns, cancellationToken);
+    }
+
+    public Task<RecurringDiscoveryCampaignDto?> GetRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default)
+    {
+        return GetOptionalAsync<RecurringDiscoveryCampaignDto>($"api/sources/recurring-discovery-campaigns/{Uri.EscapeDataString(campaignId)}", AdminApiContractValidator.ValidateRecurringDiscoveryCampaign, cancellationToken);
+    }
+
+    public Task<RecurringDiscoveryCampaignDto> CreateRecurringDiscoveryCampaignAsync(CreateRecurringDiscoveryCampaignRequest request, CancellationToken cancellationToken = default)
+    {
+        return SendAsync<RecurringDiscoveryCampaignDto>(HttpMethod.Post, "api/sources/recurring-discovery-campaigns", request, AdminApiContractValidator.ValidateRecurringDiscoveryCampaign, cancellationToken);
+    }
+
+    public Task<RecurringDiscoveryCampaignDto> PauseRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default)
+    {
+        return SendAsync<RecurringDiscoveryCampaignDto>(HttpMethod.Post, $"api/sources/recurring-discovery-campaigns/{Uri.EscapeDataString(campaignId)}/pause", body: null, AdminApiContractValidator.ValidateRecurringDiscoveryCampaign, cancellationToken);
+    }
+
+    public Task<RecurringDiscoveryCampaignDto> ResumeRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default)
+    {
+        return SendAsync<RecurringDiscoveryCampaignDto>(HttpMethod.Post, $"api/sources/recurring-discovery-campaigns/{Uri.EscapeDataString(campaignId)}/resume", body: null, AdminApiContractValidator.ValidateRecurringDiscoveryCampaign, cancellationToken);
+    }
+
+    public Task DeleteRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default)
+    {
+        return SendNoContentAsync(HttpMethod.Delete, $"api/sources/recurring-discovery-campaigns/{Uri.EscapeDataString(campaignId)}", cancellationToken);
+    }
+
     public Task<DiscoveryRunDto> CreateDiscoveryRunAsync(CreateDiscoveryRunRequest request, CancellationToken cancellationToken = default)
     {
         return SendAsync<DiscoveryRunDto>(HttpMethod.Post, "api/sources/discovery-runs", request, AdminApiContractValidator.ValidateDiscoveryRun, cancellationToken);

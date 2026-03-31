@@ -50,4 +50,10 @@ public sealed class RecurringDiscoveryCampaignRepository(MongoDbContext context)
     {
         await Collection.ReplaceOneAsync(existing => existing.CampaignId == campaign.CampaignId, campaign, new ReplaceOptions { IsUpsert = true }, cancellationToken);
     }
+
+    public async Task<bool> DeleteAsync(string campaignId, CancellationToken cancellationToken = default)
+    {
+        var result = await Collection.DeleteOneAsync(existing => existing.CampaignId == campaignId, cancellationToken);
+        return result.DeletedCount > 0;
+    }
 }

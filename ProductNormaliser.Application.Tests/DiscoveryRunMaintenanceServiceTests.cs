@@ -400,6 +400,11 @@ public sealed class DiscoveryRunMaintenanceServiceTests
             items[campaign.CampaignId] = campaign;
             return Task.CompletedTask;
         }
+
+        public Task<bool> DeleteAsync(string campaignId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(items.Remove(campaignId));
+        }
     }
 
     private sealed class RecordingDiscoveryRunService : IDiscoveryRunService

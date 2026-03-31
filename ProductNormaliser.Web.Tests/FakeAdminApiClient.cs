@@ -37,12 +37,15 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         MinYieldConfidenceScore = 70m
     };
     public SourceCandidateDiscoveryResponseDto SourceCandidateDiscoveryResponse { get; set; } = new();
+    public IReadOnlyList<RecurringDiscoveryCampaignDto> RecurringDiscoveryCampaigns { get; set; } = [];
+    public RecurringDiscoveryCampaignDto? RecurringDiscoveryCampaign { get; set; }
     public DiscoveryRunDto? DiscoveryRun { get; set; }
     public DiscoveryRunDto? CreatedDiscoveryRun { get; set; }
     public DiscoveryRunPageDto DiscoveryRunPage { get; set; } = new();
     public IReadOnlyList<DiscoveryRunCandidateDto> DiscoveryRunCandidates { get; set; } = [];
     public RegisterSourceRequest? LastRegisteredSourceRequest { get; private set; }
     public DiscoverSourceCandidatesRequest? LastSourceCandidateDiscoveryRequest { get; private set; }
+    public CreateRecurringDiscoveryCampaignRequest? LastCreateRecurringDiscoveryCampaignRequest { get; private set; }
     public CreateDiscoveryRunRequest? LastCreateDiscoveryRunRequest { get; private set; }
     public UpdateSourceRequest? LastUpdatedSourceRequest { get; private set; }
     public string? LastUpdatedSourceId { get; private set; }
@@ -63,6 +66,11 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public string? LastCancelledJobId { get; private set; }
     public string? LastRequestedCrawlJobId { get; private set; }
     public string? LastRequestedDiscoveryRunId { get; private set; }
+    public string? LastRequestedRecurringDiscoveryCampaignId { get; private set; }
+    public string? LastRequestedRecurringDiscoveryCampaignStatus { get; private set; }
+    public string? LastPausedRecurringDiscoveryCampaignId { get; private set; }
+    public string? LastResumedRecurringDiscoveryCampaignId { get; private set; }
+    public string? LastDeletedRecurringDiscoveryCampaignId { get; private set; }
     public string? LastRequestedDiscoveryRunStatus { get; private set; }
     public int? LastRequestedDiscoveryRunPageNumber { get; private set; }
     public int? LastRequestedDiscoveryRunPageSize { get; private set; }
@@ -411,6 +419,71 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             ? Task.FromResult(SourceCandidateDiscoveryResponse)
             : Task.FromException<SourceCandidateDiscoveryResponseDto>(SourceCandidateDiscoveryException);
     }
+
+    public Task<IReadOnlyList<RecurringDiscoveryCampaignDto>> GetRecurringDiscoveryCampaignsAsync(string? status = null, CancellationToken cancellationToken = default)
+    {
+        LastRequestedRecurringDiscoveryCampaignStatus = status;
+        return Task.FromResult(RecurringDiscoveryCampaigns);
+    }
+
+    public Task<RecurringDiscoveryCampaignDto?> GetRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default)
+    {
+        LastRequestedRecurringDiscoveryCampaignId = campaignId;
+        return Task.FromResult(RecurringDiscoveryCampaign ?? RecurringDiscoveryCampaigns.FirstOrDefault(item => string.Equals(item.CampaignId, campaignId, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    public Task<RecurringDiscoveryCampaignDto> CreateRecurringDiscoveryCampaignAsync(CreateRecurringDiscoveryCampaignRequest request, CancellationToken cancellationToken = default)
+    {
+        LastCreateRecurringDiscoveryCampaignRequest = request;
+        var campaign = RecurringDiscoveryCampaign ?? new RecurringDiscoveryCampaignDto
+        {
+            CampaignId = "campaign_default",
+            Name = string.IsNullOrWhiteSpace(request.Name) ? string.Join(", ", request.CategoryKeys) : request.Name,
+            CategoryKeys = request.CategoryKeys.ToArray(),
+            Locale = request.Locale,
+            Market = request.Market,
+            BrandHints = request.BrandHints.ToArray(),
+            AutomationMode = request.AutomationMode ?? "operator_assisted",
+            MaxCandidatesPerRun = request.MaxCandidatesPerRun,
+            IntervalHours = request.IntervalHours ?? 24,
+            Status = "active",
+            CampaignFingerprint = "market:uk|locale:en-gb|categories:tv|brands:",
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow,
+            NextScheduledUtc = DateTime.UtcNow.AddHours(request.IntervalHours ?? 24)
+        };
+
+        RecurringDiscoveryCampaign = campaign;
+        RecurringDiscoveryCampaigns = RecurringDiscoveryCampaigns
+            .Where(item => !string.Equals(item.CampaignId, campaign.CampaignId, StringComparison.OrdinalIgnoreCase))
+            .Append(campaign)
+            .ToArray();
+        return Task.FromResult(campaign);
+    }
+
+    public Task<RecurringDiscoveryCampaignDto> PauseRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default)
+    {
+        LastPausedRecurringDiscoveryCampaignId = campaignId;
+        return MutateRecurringDiscoveryCampaignAsync(campaignId, "paused", "Recurring discovery campaign is paused and will not schedule new runs.");
+    }
+
+    public Task<RecurringDiscoveryCampaignDto> ResumeRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default)
+    {
+        LastResumedRecurringDiscoveryCampaignId = campaignId;
+        return MutateRecurringDiscoveryCampaignAsync(campaignId, "active", "Recurring discovery campaign resumed and is eligible for the next maintenance sweep.");
+    }
+
+    public Task DeleteRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default)
+    {
+        LastDeletedRecurringDiscoveryCampaignId = campaignId;
+        RecurringDiscoveryCampaigns = RecurringDiscoveryCampaigns.Where(item => !string.Equals(item.CampaignId, campaignId, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (RecurringDiscoveryCampaign is not null && string.Equals(RecurringDiscoveryCampaign.CampaignId, campaignId, StringComparison.OrdinalIgnoreCase))
+        {
+            RecurringDiscoveryCampaign = null;
+        }
+
+        return Task.CompletedTask;
+    }
     public Task<DiscoveryRunDto> CreateDiscoveryRunAsync(CreateDiscoveryRunRequest request, CancellationToken cancellationToken = default)
     {
         LastCreateDiscoveryRunRequest = request;
@@ -711,6 +784,53 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         };
 
         return Task.FromResult(DiscoveryRun);
+    }
+
+    private Task<RecurringDiscoveryCampaignDto> MutateRecurringDiscoveryCampaignAsync(string campaignId, string status, string statusMessage)
+    {
+        var campaign = RecurringDiscoveryCampaign is not null && string.Equals(RecurringDiscoveryCampaign.CampaignId, campaignId, StringComparison.OrdinalIgnoreCase)
+            ? RecurringDiscoveryCampaign
+            : RecurringDiscoveryCampaigns.FirstOrDefault(item => string.Equals(item.CampaignId, campaignId, StringComparison.OrdinalIgnoreCase))
+                ?? throw new KeyNotFoundException(campaignId);
+
+        var updated = new RecurringDiscoveryCampaignDto
+        {
+            CampaignId = campaign.CampaignId,
+            Name = campaign.Name,
+            CategoryKeys = campaign.CategoryKeys,
+            Locale = campaign.Locale,
+            Market = campaign.Market,
+            BrandHints = campaign.BrandHints,
+            AutomationMode = campaign.AutomationMode,
+            MaxCandidatesPerRun = campaign.MaxCandidatesPerRun,
+            IntervalHours = campaign.IntervalHours,
+            Status = status,
+            CampaignFingerprint = campaign.CampaignFingerprint,
+            LastRunId = campaign.LastRunId,
+            StatusMessage = statusMessage,
+            HistoricalRunCount = campaign.HistoricalRunCount,
+            CompletedRunCount = campaign.CompletedRunCount,
+            AcceptedCandidateCount = campaign.AcceptedCandidateCount,
+            DismissedCandidateCount = campaign.DismissedCandidateCount,
+            SupersededCandidateCount = campaign.SupersededCandidateCount,
+            ArchivedCandidateCount = campaign.ArchivedCandidateCount,
+            RunsWithAcceptedCandidates = campaign.RunsWithAcceptedCandidates,
+            RunsWithoutAcceptedCandidates = campaign.RunsWithoutAcceptedCandidates,
+            LastCompletedUtc = campaign.LastCompletedUtc,
+            LastAcceptedUtc = campaign.LastAcceptedUtc,
+            CreatedUtc = campaign.CreatedUtc,
+            UpdatedUtc = DateTime.UtcNow,
+            LastScheduledUtc = campaign.LastScheduledUtc,
+            NextScheduledUtc = status == "active"
+                ? DateTime.UtcNow.AddHours(Math.Max(1, campaign.IntervalHours))
+                : campaign.NextScheduledUtc
+        };
+
+        RecurringDiscoveryCampaign = updated;
+        RecurringDiscoveryCampaigns = RecurringDiscoveryCampaigns
+            .Select(item => string.Equals(item.CampaignId, campaignId, StringComparison.OrdinalIgnoreCase) ? updated : item)
+            .ToArray();
+        return Task.FromResult(updated);
     }
 
     private Task<DiscoveryRunCandidateDto> MutateCandidateAsync(string candidateKey, int expectedRevision, string state, string stateMessage, string? acceptedSourceId = null)

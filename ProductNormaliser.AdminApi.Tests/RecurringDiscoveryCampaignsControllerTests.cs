@@ -55,6 +55,24 @@ public sealed class RecurringDiscoveryCampaignsControllerTests
         Assert.That(result, Is.TypeOf<ConflictObjectResult>());
     }
 
+    [Test]
+    public async Task Delete_ReturnsNoContentWhenCampaignExists()
+    {
+        var service = new FakeRecurringDiscoveryCampaignService
+        {
+            Campaign = CreateCampaign()
+        };
+        var controller = new RecurringDiscoveryCampaignsController(service);
+
+        var result = await controller.Delete("campaign_1", CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<NoContentResult>());
+            Assert.That(service.LastDeletedCampaignId, Is.EqualTo("campaign_1"));
+        });
+    }
+
     private static RecurringDiscoveryCampaign CreateCampaign()
     {
         return new RecurringDiscoveryCampaign
@@ -95,6 +113,7 @@ public sealed class RecurringDiscoveryCampaignsControllerTests
     {
         public RecurringDiscoveryCampaign? Campaign { get; set; }
         public InvalidOperationException? PauseException { get; set; }
+        public string? LastDeletedCampaignId { get; private set; }
 
         public Task<IReadOnlyList<RecurringDiscoveryCampaign>> ListAsync(string? status = null, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<RecurringDiscoveryCampaign>>(Campaign is null ? [] : [Campaign]);
@@ -110,5 +129,17 @@ public sealed class RecurringDiscoveryCampaignsControllerTests
 
         public Task<RecurringDiscoveryCampaign?> ResumeAsync(string campaignId, CancellationToken cancellationToken = default)
             => Task.FromResult(Campaign);
+
+        public Task<bool> DeleteAsync(string campaignId, CancellationToken cancellationToken = default)
+        {
+            LastDeletedCampaignId = campaignId;
+            var deleted = Campaign is not null && string.Equals(Campaign.CampaignId, campaignId, StringComparison.OrdinalIgnoreCase);
+            if (deleted)
+            {
+                Campaign = null;
+            }
+
+            return Task.FromResult(deleted);
+        }
     }
 }

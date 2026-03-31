@@ -218,6 +218,16 @@ internal static class AdminApiContractValidator
         ValidateItems(payload.Candidates, "sourceCandidateDiscovery.candidates", ValidateSourceCandidate);
     }
 
+    public static void ValidateRecurringDiscoveryCampaigns(IReadOnlyList<RecurringDiscoveryCampaignDto> payload)
+    {
+        ValidateItems(payload, "recurringDiscoveryCampaigns", ValidateRecurringDiscoveryCampaign);
+    }
+
+    public static void ValidateRecurringDiscoveryCampaign(RecurringDiscoveryCampaignDto payload)
+    {
+        ValidateRecurringDiscoveryCampaign(payload, "recurringDiscoveryCampaign");
+    }
+
     public static void ValidateDiscoveryRun(DiscoveryRunDto payload)
     {
         ValidateDiscoveryRun(payload, "discoveryRun");
@@ -565,6 +575,27 @@ internal static class AdminApiContractValidator
         ValidateEnumValue(payload.CurrentStage, DiscoveryRunStages, $"{path}.currentStage", NormalizeLowerUnderscore);
         ValidateEnumValue(payload.LlmStatus, LlmStatuses, $"{path}.llmStatus", value => value);
         ValidateItems(payload.Diagnostics, $"{path}.diagnostics", ValidateSourceCandidateDiscoveryDiagnostic);
+    }
+
+    private static void ValidateRecurringDiscoveryCampaign(RecurringDiscoveryCampaignDto payload, string path)
+    {
+        ValidateRequiredString(payload.CampaignId, $"{path}.campaignId");
+        ValidateRequiredString(payload.Name, $"{path}.name");
+        ValidateStringItems(payload.CategoryKeys, $"{path}.categoryKeys");
+        ValidateStringItems(payload.BrandHints, $"{path}.brandHints");
+        ValidateEnumValue(payload.AutomationMode, SourceAutomationModes, $"{path}.automationMode", value => value);
+        ValidateRequiredString(payload.Status, $"{path}.status");
+        ValidateRequiredString(payload.CampaignFingerprint, $"{path}.campaignFingerprint");
+
+        if (payload.MaxCandidatesPerRun <= 0)
+        {
+            throw new InvalidOperationException($"{path}.maxCandidatesPerRun must be a positive integer.");
+        }
+
+        if (payload.IntervalHours <= 0)
+        {
+            throw new InvalidOperationException($"{path}.intervalHours must be a positive integer.");
+        }
     }
 
     private static void ValidateSourceCandidateDiscoveryDiagnostic(SourceCandidateDiscoveryDiagnosticDto payload, string path)

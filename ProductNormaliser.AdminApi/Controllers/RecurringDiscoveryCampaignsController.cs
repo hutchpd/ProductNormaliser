@@ -72,6 +72,16 @@ public sealed class RecurringDiscoveryCampaignsController(IRecurringDiscoveryCam
     public Task<IActionResult> Resume(string campaignId, CancellationToken cancellationToken = default)
         => MutateAsync(() => recurringDiscoveryCampaignService.ResumeAsync(campaignId, cancellationToken));
 
+    [HttpDelete("{campaignId}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(string campaignId, CancellationToken cancellationToken = default)
+    {
+        return await recurringDiscoveryCampaignService.DeleteAsync(campaignId, cancellationToken)
+            ? NoContent()
+            : NotFound();
+    }
+
     private async Task<IActionResult> MutateAsync(Func<Task<RecurringDiscoveryCampaign?>> action)
     {
         try

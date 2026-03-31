@@ -13,4 +13,6 @@ public interface IRecurringDiscoveryCampaignService
     Task<RecurringDiscoveryCampaign?> PauseAsync(string campaignId, CancellationToken cancellationToken = default);
 
     Task<RecurringDiscoveryCampaign?> ResumeAsync(string campaignId, CancellationToken cancellationToken = default);
+
+    Task<bool> DeleteAsync(string campaignId, CancellationToken cancellationToken = default);
 }

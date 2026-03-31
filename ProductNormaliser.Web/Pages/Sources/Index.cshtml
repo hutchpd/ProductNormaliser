@@ -171,6 +171,7 @@
         <div class="empty-panel mt-3">
                 <p class="empty-state">Start a persisted discovery run for the selected categories, then review live stage progress and candidate decisions from the dedicated run details page.</p>
             <p class="subtle-copy">Automation stays opt-in. Operator-assisted remains the default, suggestion mode only labels safe candidates, and guarded auto-accept plus seeding only runs when the visible thresholds and guardrails pass.</p>
+            <p class="subtle-copy"><a asp-page="/Sources/RecurringDiscoveryCampaigns/Index">Manage recurring discovery campaigns</a> when you want the same scope to keep generating fresh runs over time.</p>
         </div>
 
         @if (Model.HasAutomationLlmStatusNotice())
