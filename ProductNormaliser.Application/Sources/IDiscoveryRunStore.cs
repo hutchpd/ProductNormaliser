@@ -12,5 +12,9 @@ public interface IDiscoveryRunStore
 
     Task<IReadOnlyList<DiscoveryRun>> ListByStatusesAsync(IReadOnlyCollection<string> statuses, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<DiscoveryRun>> ListByCampaignAsync(string campaignId, CancellationToken cancellationToken = default);
+
+    Task<bool> HasIncompleteCampaignRunAsync(string campaignId, CancellationToken cancellationToken = default);
+
     Task UpsertAsync(DiscoveryRun run, CancellationToken cancellationToken = default);
 }

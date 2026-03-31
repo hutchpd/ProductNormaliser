@@ -55,6 +55,22 @@ public sealed class DiscoveryRunRepository(MongoDbContext context)
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<DiscoveryRun>> ListByCampaignAsync(string campaignId, CancellationToken cancellationToken = default)
+    {
+        return await Collection.Find(run => run.RecurringCampaignId == campaignId)
+            .SortByDescending(run => run.CreatedUtc)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<bool> HasIncompleteCampaignRunAsync(string campaignId, CancellationToken cancellationToken = default)
+    {
+        return await Collection.Find(run => run.RecurringCampaignId == campaignId
+                && run.Status != DiscoveryRunStatuses.Completed
+                && run.Status != DiscoveryRunStatuses.Cancelled
+                && run.Status != DiscoveryRunStatuses.Failed)
+            .AnyAsync(cancellationToken);
+    }
+
     public async Task UpsertAsync(DiscoveryRun run, CancellationToken cancellationToken = default)
     {
         await Collection.ReplaceOneAsync(existing => existing.RunId == run.RunId, run, new ReplaceOptions { IsUpsert = true }, cancellationToken);

@@ -27,4 +27,9 @@ public sealed class SourceAutomationMonitoringOptions
     public decimal QuarantineMinDiscoveryBreadthScore { get; set; } = 0.20m;
     public decimal QuarantineMinExtractabilityRate { get; set; } = 0.20m;
     public decimal QuarantineMaxNoProductRate { get; set; } = 0.80m;
+    public int RecurringDiscoverySuggestMinRuns { get; set; } = 2;
+    public decimal RecurringDiscoverySuggestMinAcceptanceRate { get; set; } = 0.50m;
+    public int RecurringDiscoveryAutoAcceptMinRuns { get; set; } = 3;
+    public decimal RecurringDiscoveryAutoAcceptMinAcceptanceRate { get; set; } = 0.75m;
+    public decimal RecurringDiscoveryManualReviewDismissalRate { get; set; } = 0.75m;
 }

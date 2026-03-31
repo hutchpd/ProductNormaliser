@@ -229,6 +229,9 @@ public sealed class SourceAutomationPostureDto
     public decimal DownstreamYieldScore { get; init; }
     public decimal TrustTrendDelta { get; init; }
     public decimal ExtractabilityTrendDelta { get; init; }
+    public int RecurringDiscoveryRunCount { get; init; }
+    public int RecurringDiscoveryAcceptedCount { get; init; }
+    public decimal RecurringDiscoveryAcceptanceRate { get; init; }
     public IReadOnlyList<string> SupportingReasons { get; init; } = [];
     public IReadOnlyList<string> BlockingReasons { get; init; } = [];
 }
@@ -335,6 +338,8 @@ public sealed class CreateDiscoveryRunRequest
 public sealed class DiscoveryRunDto
 {
     public string RunId { get; init; } = string.Empty;
+    public string TriggerKind { get; init; } = "manual";
+    public string? RecurringCampaignId { get; init; }
     public IReadOnlyList<string> RequestedCategoryKeys { get; init; } = [];
     public string? Locale { get; init; }
     public string? Market { get; init; }

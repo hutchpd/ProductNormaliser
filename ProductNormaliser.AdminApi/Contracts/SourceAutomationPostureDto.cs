@@ -11,6 +11,9 @@ public sealed class SourceAutomationPostureDto
     public decimal DownstreamYieldScore { get; init; }
     public decimal TrustTrendDelta { get; init; }
     public decimal ExtractabilityTrendDelta { get; init; }
+    public int RecurringDiscoveryRunCount { get; init; }
+    public int RecurringDiscoveryAcceptedCount { get; init; }
+    public decimal RecurringDiscoveryAcceptanceRate { get; init; }
     public IReadOnlyList<string> SupportingReasons { get; init; } = [];
     public IReadOnlyList<string> BlockingReasons { get; init; } = [];
 }

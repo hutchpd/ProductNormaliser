@@ -77,6 +77,34 @@ public sealed class DiscoveryRunServiceTests
     }
 
     [Test]
+    public async Task CreateScheduledAsync_QueuesRecurringCampaignRun()
+    {
+        var runStore = new FakeDiscoveryRunStore();
+        var service = CreateService(runStore);
+
+        var run = await service.CreateScheduledAsync(new RecurringDiscoveryCampaign
+        {
+            CampaignId = "campaign_1",
+            Name = "TV UK",
+            CategoryKeys = ["tv"],
+            Market = "UK",
+            Locale = "en-GB",
+            BrandHints = ["Sony"],
+            AutomationMode = SourceAutomationModes.SuggestAccept,
+            MaxCandidatesPerRun = 12,
+            CampaignFingerprint = "market:uk|locale:en-gb|categories:tv|brands:sony"
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(run.TriggerKind, Is.EqualTo(DiscoveryRunTriggerKinds.RecurringCampaign));
+            Assert.That(run.RecurringCampaignId, Is.EqualTo("campaign_1"));
+            Assert.That(run.BrandHints, Is.EqualTo(new[] { "Sony" }));
+            Assert.That(run.StatusMessage, Does.Contain("Recurring discovery campaign"));
+        });
+    }
+
+    [Test]
     public async Task AcceptCandidateAsync_RegistersSuggestedCandidate()
     {
         var runStore = new FakeDiscoveryRunStore(CreateRun("run_1", DiscoveryRunStatuses.Completed));
@@ -116,7 +144,7 @@ public sealed class DiscoveryRunServiceTests
         {
             Assert.That(activeDisposition.State, Is.EqualTo(DiscoveryRunCandidateStates.Dismissed));
             Assert.That(activeDisposition.IsActive, Is.True);
-            Assert.That(activeDisposition.ScopeFingerprint, Is.EqualTo("market:uk|locale:en-gb|categories:tv"));
+            Assert.That(activeDisposition.ScopeFingerprint, Is.EqualTo("market:uk|locale:en-gb|categories:tv|brands:"));
         });
 
         var restored = await service.RestoreCandidateAsync("run_1", "safe_shop", 2, CancellationToken.None);
@@ -265,6 +293,15 @@ public sealed class DiscoveryRunServiceTests
         public Task<IReadOnlyList<DiscoveryRun>> ListByStatusesAsync(IReadOnlyCollection<string> statuses, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<DiscoveryRun>>(items.Values.Where(run => statuses.Contains(run.Status)).ToArray());
 
+        public Task<IReadOnlyList<DiscoveryRun>> ListByCampaignAsync(string campaignId, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<DiscoveryRun>>(items.Values.Where(run => string.Equals(run.RecurringCampaignId, campaignId, StringComparison.OrdinalIgnoreCase)).ToArray());
+
+        public Task<bool> HasIncompleteCampaignRunAsync(string campaignId, CancellationToken cancellationToken = default)
+            => Task.FromResult(items.Values.Any(run => string.Equals(run.RecurringCampaignId, campaignId, StringComparison.OrdinalIgnoreCase)
+                && run.Status != DiscoveryRunStatuses.Completed
+                && run.Status != DiscoveryRunStatuses.Cancelled
+                && run.Status != DiscoveryRunStatuses.Failed));
+
         public Task UpsertAsync(DiscoveryRun run, CancellationToken cancellationToken = default)
         {
             items[run.RunId] = run;
@@ -278,6 +315,9 @@ public sealed class DiscoveryRunServiceTests
 
         public Task<IReadOnlyList<DiscoveryRunCandidate>> ListByRunAsync(string runId, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<DiscoveryRunCandidate>>(items.Values.Where(candidate => string.Equals(candidate.RunId, runId, StringComparison.OrdinalIgnoreCase)).ToArray());
+
+        public Task<IReadOnlyList<DiscoveryRunCandidate>> ListByHostsAsync(IReadOnlyCollection<string> hosts, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<DiscoveryRunCandidate>>(items.Values.Where(candidate => hosts.Contains(candidate.Host)).ToArray());
 
         public Task<DiscoveryRunCandidatePage> QueryByRunAsync(string runId, DiscoveryRunCandidateQuery query, CancellationToken cancellationToken = default)
         {

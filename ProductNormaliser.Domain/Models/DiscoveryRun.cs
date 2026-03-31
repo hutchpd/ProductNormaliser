@@ -3,6 +3,9 @@ namespace ProductNormaliser.Core.Models;
 public sealed class DiscoveryRun
 {
     public string RunId { get; set; } = default!;
+    public string TriggerKind { get; set; } = DiscoveryRunTriggerKinds.Manual;
+    public string? RecurringCampaignId { get; set; }
+    public string? RecurringCampaignFingerprint { get; set; }
     public IReadOnlyList<string> RequestedCategoryKeys { get; set; } = [];
     public string? Locale { get; set; }
     public string? Market { get; set; }

@@ -6,6 +6,8 @@ public interface IDiscoveryRunService
 {
     Task<DiscoveryRun> CreateAsync(CreateDiscoveryRunRequest request, CancellationToken cancellationToken = default);
 
+    Task<DiscoveryRun> CreateScheduledAsync(RecurringDiscoveryCampaign campaign, CancellationToken cancellationToken = default);
+
     Task<DiscoveryRunPage> ListAsync(DiscoveryRunQuery query, CancellationToken cancellationToken = default);
 
     Task<DiscoveryRun?> GetAsync(string runId, CancellationToken cancellationToken = default);

@@ -25,6 +25,7 @@ public sealed class MongoDbContext
         CrawlJobs = Database.GetCollection<CrawlJob>(MongoCollectionNames.CrawlJobs);
         CrawlSources = Database.GetCollection<CrawlSource>(MongoCollectionNames.CrawlSources);
         DiscoveryRuns = Database.GetCollection<DiscoveryRun>(MongoCollectionNames.DiscoveryRuns);
+        RecurringDiscoveryCampaigns = Database.GetCollection<RecurringDiscoveryCampaign>(MongoCollectionNames.RecurringDiscoveryCampaigns);
         DiscoveryRunCandidates = Database.GetCollection<DiscoveryRunCandidate>(MongoCollectionNames.DiscoveryRunCandidates);
         DiscoveryRunCandidateDispositions = Database.GetCollection<DiscoveryRunCandidateDisposition>(MongoCollectionNames.DiscoveryRunCandidateDispositions);
         DiscoveryQueueItems = Database.GetCollection<DiscoveryQueueItem>(MongoCollectionNames.DiscoveryQueue);
@@ -59,6 +60,8 @@ public sealed class MongoDbContext
     public IMongoCollection<CrawlSource> CrawlSources { get; }
 
     public IMongoCollection<DiscoveryRun> DiscoveryRuns { get; }
+
+    public IMongoCollection<RecurringDiscoveryCampaign> RecurringDiscoveryCampaigns { get; }
 
     public IMongoCollection<DiscoveryRunCandidate> DiscoveryRunCandidates { get; }
 

@@ -23,6 +23,7 @@ public static class MongoMappingRegistry
         RegisterClassMap<CrawlJob>(map => map.MapIdMember(model => model.JobId));
         RegisterClassMap<CrawlSource>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<DiscoveryRun>(map => map.MapIdMember(model => model.RunId));
+        RegisterClassMap<RecurringDiscoveryCampaign>(map => map.MapIdMember(model => model.CampaignId));
         RegisterClassMap<DiscoveryRunCandidate>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<DiscoveryRunCandidateDisposition>(map => map.MapIdMember(model => model.Id));
         RegisterClassMap<DiscoveryQueueItem>(map => map.MapIdMember(model => model.Id));

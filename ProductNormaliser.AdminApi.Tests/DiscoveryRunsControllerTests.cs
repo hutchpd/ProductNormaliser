@@ -269,6 +269,9 @@ public sealed class DiscoveryRunsControllerTests
         public Task<DiscoveryRun> CreateAsync(ProductNormaliser.Application.Sources.CreateDiscoveryRunRequest request, CancellationToken cancellationToken = default)
             => Task.FromResult(CreatedRun ?? throw new InvalidOperationException("No run configured."));
 
+        public Task<DiscoveryRun> CreateScheduledAsync(RecurringDiscoveryCampaign campaign, CancellationToken cancellationToken = default)
+            => Task.FromResult(CreatedRun ?? throw new InvalidOperationException("No run configured."));
+
         public Task<DiscoveryRun?> GetAsync(string runId, CancellationToken cancellationToken = default)
             => Task.FromResult(CreatedRun is not null && string.Equals(CreatedRun.RunId, runId, StringComparison.OrdinalIgnoreCase) ? CreatedRun : null);
 

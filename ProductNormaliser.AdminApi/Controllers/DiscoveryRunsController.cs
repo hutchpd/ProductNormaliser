@@ -197,6 +197,8 @@ public sealed class DiscoveryRunsController(IDiscoveryRunService discoveryRunSer
         return new Contracts.DiscoveryRunDto
         {
             RunId = run.RunId,
+            TriggerKind = run.TriggerKind,
+            RecurringCampaignId = run.RecurringCampaignId,
             RequestedCategoryKeys = run.RequestedCategoryKeys,
             Locale = run.Locale,
             Market = run.Market,

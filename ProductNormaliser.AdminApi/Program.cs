@@ -72,6 +72,7 @@ builder.Services.AddSingleton<ILlmStatusProvider>(serviceProvider => serviceProv
 builder.Services.AddSingleton<ISourceCandidateProbeService, HttpSourceCandidateProbeService>();
 builder.Services.AddSingleton<ISourceCandidateDiscoveryService, SourceCandidateDiscoveryService>();
 builder.Services.AddSingleton<IDiscoveryRunService, DiscoveryRunService>();
+builder.Services.AddSingleton<IRecurringDiscoveryCampaignService, RecurringDiscoveryCampaignService>();
 builder.Services.AddSingleton<ISourceManagementService, SourceManagementService>();
 builder.Services.AddSingleton<ISourceOperationalInsightsProvider, SourceOperationalInsightsProvider>();
 builder.Services.AddSingleton<IAdminQueryService, AdminQueryService>();

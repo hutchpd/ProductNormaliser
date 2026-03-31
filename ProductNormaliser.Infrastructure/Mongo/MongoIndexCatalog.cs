@@ -105,7 +105,29 @@ internal static class MongoIndexCatalog
                 Index(
                     Builders<DiscoveryRun>.IndexKeys
                         .Descending(run => run.CreatedUtc),
-                    "CreatedUtc_-1")
+                    "CreatedUtc_-1"),
+                Index(
+                    Builders<DiscoveryRun>.IndexKeys
+                        .Ascending(run => run.RecurringCampaignId)
+                        .Ascending(run => run.Status)
+                        .Descending(run => run.CreatedUtc),
+                    "RecurringCampaignId_1_Status_1_CreatedUtc_-1")
+            ],
+            cancellationToken);
+
+        await CreateIndexesAsync(
+            context.RecurringDiscoveryCampaigns,
+            [
+                Index(
+                    Builders<RecurringDiscoveryCampaign>.IndexKeys
+                        .Ascending(campaign => campaign.Status)
+                        .Ascending(campaign => campaign.NextScheduledUtc),
+                    "Status_1_NextScheduledUtc_1"),
+                Index(
+                    Builders<RecurringDiscoveryCampaign>.IndexKeys
+                        .Ascending(campaign => campaign.CampaignFingerprint),
+                    "CampaignFingerprint_1",
+                    unique: true)
             ],
             cancellationToken);
 

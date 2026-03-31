@@ -8,6 +8,8 @@ namespace ProductNormaliser.Application.Sources;
 
 public sealed class DiscoveryRunMaintenanceService(
     IDiscoveryRunStore discoveryRunStore,
+    IDiscoveryCampaignStore discoveryCampaignStore,
+    IDiscoveryRunService discoveryRunService,
     IDiscoveryRunCandidateStore discoveryRunCandidateStore,
     IOptions<DiscoveryRunOperationsOptions> options,
     ILogger<DiscoveryRunMaintenanceService>? logger = null)
@@ -19,6 +21,53 @@ public sealed class DiscoveryRunMaintenanceService(
     {
         await RecoverAbandonedRunsAsync(cancellationToken);
         await ArchiveExpiredCandidatesAsync(cancellationToken);
+        await RefreshRecurringCampaignsAsync(cancellationToken);
+        await ScheduleDueCampaignsAsync(cancellationToken);
+    }
+
+    private async Task RefreshRecurringCampaignsAsync(CancellationToken cancellationToken)
+    {
+        var campaigns = await discoveryCampaignStore.ListAsync(cancellationToken);
+        foreach (var campaign in campaigns)
+        {
+            var runs = await discoveryRunStore.ListByCampaignAsync(campaign.CampaignId, cancellationToken);
+            campaign.Memory = await BuildCampaignMemoryAsync(runs, cancellationToken);
+            campaign.LastRunId = runs.FirstOrDefault()?.RunId;
+
+            if (campaign.NextScheduledUtc is null && string.Equals(campaign.Status, RecurringDiscoveryCampaignStatuses.Active, StringComparison.OrdinalIgnoreCase))
+            {
+                campaign.NextScheduledUtc = DateTime.UtcNow;
+            }
+
+            campaign.StatusMessage = BuildCampaignStatusMessage(campaign, await discoveryRunStore.HasIncompleteCampaignRunAsync(campaign.CampaignId, cancellationToken));
+            campaign.UpdatedUtc = DateTime.UtcNow;
+            await discoveryCampaignStore.UpsertAsync(campaign, cancellationToken);
+        }
+    }
+
+    private async Task ScheduleDueCampaignsAsync(CancellationToken cancellationToken)
+    {
+        var utcNow = DateTime.UtcNow;
+        var dueCampaigns = await discoveryCampaignStore.ListDueAsync(utcNow, options.RecurringCampaignSweepBatchSize, cancellationToken);
+        foreach (var campaign in dueCampaigns)
+        {
+            if (await discoveryRunStore.HasIncompleteCampaignRunAsync(campaign.CampaignId, cancellationToken))
+            {
+                campaign.StatusMessage = "Recurring discovery campaign is waiting for the current scheduled run to finish before queuing another run.";
+                campaign.UpdatedUtc = utcNow;
+                await discoveryCampaignStore.UpsertAsync(campaign, cancellationToken);
+                continue;
+            }
+
+            var scheduledRun = await discoveryRunService.CreateScheduledAsync(campaign, cancellationToken);
+            campaign.LastRunId = scheduledRun.RunId;
+            campaign.LastScheduledUtc = utcNow;
+            campaign.NextScheduledUtc = utcNow.AddHours(Math.Max(1, campaign.IntervalHours));
+            campaign.StatusMessage = BuildCampaignStatusMessage(campaign, hasIncompleteRun: true);
+            campaign.UpdatedUtc = utcNow;
+            await discoveryCampaignStore.UpsertAsync(campaign, cancellationToken);
+            logger.LogInformation("Scheduled recurring discovery campaign {CampaignId} as run {RunId}.", campaign.CampaignId, scheduledRun.RunId);
+        }
     }
 
     private async Task RecoverAbandonedRunsAsync(CancellationToken cancellationToken)
@@ -138,6 +187,109 @@ public sealed class DiscoveryRunMaintenanceService(
         return string.Equals(candidate.State, DiscoveryRunCandidateStates.AutoAccepted, StringComparison.OrdinalIgnoreCase)
             || string.Equals(candidate.State, DiscoveryRunCandidateStates.ManuallyAccepted, StringComparison.OrdinalIgnoreCase)
             || string.Equals(candidate.State, DiscoveryRunCandidateStates.Superseded, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<RecurringDiscoveryCampaignMemory> BuildCampaignMemoryAsync(IReadOnlyList<DiscoveryRun> runs, CancellationToken cancellationToken)
+    {
+        var acceptedCandidateCount = 0;
+        var dismissedCandidateCount = 0;
+        var supersededCandidateCount = 0;
+        var archivedCandidateCount = 0;
+        var runsWithAcceptedCandidates = 0;
+        DateTime? lastAcceptedUtc = null;
+
+        foreach (var run in runs)
+        {
+            var candidates = await discoveryRunCandidateStore.ListByRunAsync(run.RunId, cancellationToken);
+            var acceptedInRun = false;
+            foreach (var candidate in candidates)
+            {
+                if (IsAcceptedCandidate(candidate))
+                {
+                    acceptedCandidateCount += 1;
+                    acceptedInRun = true;
+                    var acceptedUtc = candidate.DecisionUtc ?? candidate.UpdatedUtc;
+                    if (lastAcceptedUtc is null || acceptedUtc > lastAcceptedUtc.Value)
+                    {
+                        lastAcceptedUtc = acceptedUtc;
+                    }
+                }
+
+                if (string.Equals(candidate.State, DiscoveryRunCandidateStates.Dismissed, StringComparison.OrdinalIgnoreCase))
+                {
+                    dismissedCandidateCount += 1;
+                }
+
+                if (string.Equals(candidate.State, DiscoveryRunCandidateStates.Superseded, StringComparison.OrdinalIgnoreCase))
+                {
+                    supersededCandidateCount += 1;
+                }
+
+                if (string.Equals(candidate.State, DiscoveryRunCandidateStates.Archived, StringComparison.OrdinalIgnoreCase))
+                {
+                    archivedCandidateCount += 1;
+                }
+            }
+
+            if (acceptedInRun)
+            {
+                runsWithAcceptedCandidates += 1;
+            }
+        }
+
+        var completedRuns = runs.Count(IsTerminalRun);
+        return new RecurringDiscoveryCampaignMemory
+        {
+            HistoricalRunCount = runs.Count,
+            CompletedRunCount = completedRuns,
+            AcceptedCandidateCount = acceptedCandidateCount,
+            DismissedCandidateCount = dismissedCandidateCount,
+            SupersededCandidateCount = supersededCandidateCount,
+            ArchivedCandidateCount = archivedCandidateCount,
+            RunsWithAcceptedCandidates = runsWithAcceptedCandidates,
+            RunsWithoutAcceptedCandidates = Math.Max(0, completedRuns - runsWithAcceptedCandidates),
+            LastCompletedUtc = runs.Where(run => run.CompletedUtc is not null).Select(run => run.CompletedUtc).Max(),
+            LastAcceptedUtc = lastAcceptedUtc
+        };
+    }
+
+    private static string BuildCampaignStatusMessage(RecurringDiscoveryCampaign campaign, bool hasIncompleteRun)
+    {
+        if (string.Equals(campaign.Status, RecurringDiscoveryCampaignStatuses.Paused, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Recurring discovery campaign is paused and will not schedule new runs.";
+        }
+
+        if (hasIncompleteRun)
+        {
+            return "Recurring discovery campaign has an active scheduled run in progress.";
+        }
+
+        if (campaign.Memory.AcceptedCandidateCount > 0)
+        {
+            return $"Recurring discovery campaign has produced {campaign.Memory.AcceptedCandidateCount} accepted candidates across {campaign.Memory.HistoricalRunCount} runs.";
+        }
+
+        if (campaign.Memory.HistoricalRunCount > 0)
+        {
+            return $"Recurring discovery campaign has completed {campaign.Memory.HistoricalRunCount} runs and is still building source memory for this scope.";
+        }
+
+        return "Recurring discovery campaign is active and waiting for the next maintenance sweep.";
+    }
+
+    private static bool IsAcceptedCandidate(DiscoveryRunCandidate candidate)
+    {
+        return !string.IsNullOrWhiteSpace(candidate.AcceptedSourceId)
+            || string.Equals(candidate.State, DiscoveryRunCandidateStates.AutoAccepted, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(candidate.State, DiscoveryRunCandidateStates.ManuallyAccepted, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsTerminalRun(DiscoveryRun run)
+    {
+        return string.Equals(run.Status, DiscoveryRunStatuses.Completed, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(run.Status, DiscoveryRunStatuses.Cancelled, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(run.Status, DiscoveryRunStatuses.Failed, StringComparison.OrdinalIgnoreCase);
     }
 
     private static void AppendDiagnostic(DiscoveryRun run, string code, string severity, string title, string message)

@@ -15,6 +15,18 @@ public sealed class DiscoveryRunCandidateRepository(MongoDbContext context)
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<DiscoveryRunCandidate>> ListByHostsAsync(IReadOnlyCollection<string> hosts, CancellationToken cancellationToken = default)
+    {
+        if (hosts.Count == 0)
+        {
+            return [];
+        }
+
+        return await Collection.Find(candidate => hosts.Contains(candidate.Host))
+            .SortByDescending(candidate => candidate.UpdatedUtc)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<DiscoveryRunCandidatePage> QueryByRunAsync(string runId, DiscoveryRunCandidateQuery query, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);

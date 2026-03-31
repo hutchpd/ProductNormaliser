@@ -3,6 +3,8 @@ namespace ProductNormaliser.AdminApi.Contracts;
 public sealed class DiscoveryRunDto
 {
     public string RunId { get; init; } = string.Empty;
+    public string TriggerKind { get; init; } = "manual";
+    public string? RecurringCampaignId { get; init; }
     public IReadOnlyList<string> RequestedCategoryKeys { get; init; } = [];
     public string? Locale { get; init; }
     public string? Market { get; init; }

@@ -306,7 +306,7 @@ public sealed class DiscoveryRunProcessorTests
             {
                 Id = "disp_1",
                 State = DiscoveryRunCandidateStates.Dismissed,
-                ScopeFingerprint = "market:uk|locale:en-gb|categories:tv",
+                ScopeFingerprint = "market:uk|locale:en-gb|categories:tv|brands:sony",
                 RequestedCategoryKeys = ["tv"],
                 Market = run.Market,
                 Locale = run.Locale,
@@ -583,6 +583,15 @@ public sealed class DiscoveryRunProcessorTests
         public Task<IReadOnlyList<DiscoveryRun>> ListByStatusesAsync(IReadOnlyCollection<string> statuses, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<DiscoveryRun>>(items.Values.Where(run => statuses.Contains(run.Status)).ToArray());
 
+        public Task<IReadOnlyList<DiscoveryRun>> ListByCampaignAsync(string campaignId, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<DiscoveryRun>>(items.Values.Where(run => string.Equals(run.RecurringCampaignId, campaignId, StringComparison.OrdinalIgnoreCase)).ToArray());
+
+        public Task<bool> HasIncompleteCampaignRunAsync(string campaignId, CancellationToken cancellationToken = default)
+            => Task.FromResult(items.Values.Any(run => string.Equals(run.RecurringCampaignId, campaignId, StringComparison.OrdinalIgnoreCase)
+                && run.Status != DiscoveryRunStatuses.Completed
+                && run.Status != DiscoveryRunStatuses.Cancelled
+                && run.Status != DiscoveryRunStatuses.Failed));
+
         public Task UpsertAsync(DiscoveryRun run, CancellationToken cancellationToken = default)
         {
             items[run.RunId] = run;
@@ -598,6 +607,9 @@ public sealed class DiscoveryRunProcessorTests
 
         public Task<IReadOnlyList<DiscoveryRunCandidate>> ListByRunAsync(string runId, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<DiscoveryRunCandidate>>(items.Values.Where(candidate => string.Equals(candidate.RunId, runId, StringComparison.OrdinalIgnoreCase)).OrderByDescending(candidate => candidate.ConfidenceScore).ToArray());
+
+        public Task<IReadOnlyList<DiscoveryRunCandidate>> ListByHostsAsync(IReadOnlyCollection<string> hosts, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<DiscoveryRunCandidate>>(items.Values.Where(candidate => hosts.Contains(candidate.Host)).ToArray());
 
         public Task<DiscoveryRunCandidatePage> QueryByRunAsync(string runId, DiscoveryRunCandidateQuery query, CancellationToken cancellationToken = default)
         {

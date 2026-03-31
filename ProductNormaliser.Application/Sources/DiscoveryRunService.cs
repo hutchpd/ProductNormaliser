@@ -53,30 +53,17 @@ public sealed class DiscoveryRunService(
             throw new ArgumentException($"Unknown category keys: {string.Join(", ", unknownCategoryKeys)}.", nameof(request));
         }
 
-        var llmStatus = llmStatusProvider?.GetStatus() ?? new LlmServiceStatus
-        {
-            Code = LlmStatusCodes.Disabled,
-            Message = "LLM validation status is not exposed by the current classifier."
-        };
-
-        var utcNow = DateTime.UtcNow;
-        var run = new DiscoveryRun
-        {
-            RunId = $"discovery_run_{Guid.NewGuid():N}",
-            RequestedCategoryKeys = categoryKeys,
-            Locale = SourceCandidateDiscoveryEvaluator.NormalizeOptionalText(request.Locale),
-            Market = SourceCandidateDiscoveryEvaluator.NormalizeOptionalText(request.Market),
-            AutomationMode = SourceAutomationModes.Normalize(request.AutomationMode),
-            BrandHints = SourceCandidateDiscoveryEvaluator.NormalizeValues(request.BrandHints),
-            MaxCandidates = SourceCandidateDiscoveryEvaluator.NormalizeMaxCandidates(request.MaxCandidates),
-            Status = DiscoveryRunStatuses.Queued,
-            CurrentStage = DiscoveryRunStageNames.Search,
-            StatusMessage = "Discovery run is queued and waiting for worker capacity.",
-            LlmStatus = llmStatus.Code,
-            LlmStatusMessage = llmStatus.Message,
-            CreatedUtc = utcNow,
-            UpdatedUtc = utcNow
-        };
+        var run = BuildQueuedRun(
+            categoryKeys,
+            SourceCandidateDiscoveryEvaluator.NormalizeOptionalText(request.Locale),
+            SourceCandidateDiscoveryEvaluator.NormalizeOptionalText(request.Market),
+            SourceAutomationModes.Normalize(request.AutomationMode),
+            SourceCandidateDiscoveryEvaluator.NormalizeValues(request.BrandHints),
+            SourceCandidateDiscoveryEvaluator.NormalizeMaxCandidates(request.MaxCandidates),
+            DiscoveryRunTriggerKinds.Manual,
+            recurringCampaignId: null,
+            recurringCampaignFingerprint: null,
+            "Discovery run is queued and waiting for worker capacity.");
 
         await discoveryRunStore.UpsertAsync(run, cancellationToken);
         await managementAuditService.RecordAsync(
@@ -85,6 +72,40 @@ public sealed class DiscoveryRunService(
             run.RunId,
             new Dictionary<string, string>
             {
+                ["categories"] = string.Join(',', run.RequestedCategoryKeys),
+                ["market"] = run.Market ?? string.Empty,
+                ["locale"] = run.Locale ?? string.Empty,
+                ["automationMode"] = run.AutomationMode
+            },
+            cancellationToken);
+
+        return run;
+    }
+
+    public async Task<DiscoveryRun> CreateScheduledAsync(RecurringDiscoveryCampaign campaign, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+
+        var run = BuildQueuedRun(
+            campaign.CategoryKeys,
+            campaign.Locale,
+            campaign.Market,
+            campaign.AutomationMode,
+            campaign.BrandHints,
+            campaign.MaxCandidatesPerRun,
+            DiscoveryRunTriggerKinds.RecurringCampaign,
+            campaign.CampaignId,
+            campaign.CampaignFingerprint,
+            $"Recurring discovery campaign '{campaign.Name}' queued a fresh run and is waiting for worker capacity.");
+
+        await discoveryRunStore.UpsertAsync(run, cancellationToken);
+        await managementAuditService.RecordAsync(
+            "discovery_run_scheduled",
+            "discovery_run",
+            run.RunId,
+            new Dictionary<string, string>
+            {
+                ["campaignId"] = campaign.CampaignId,
                 ["categories"] = string.Join(',', run.RequestedCategoryKeys),
                 ["market"] = run.Market ?? string.Empty,
                 ["locale"] = run.Locale ?? string.Empty,
@@ -579,5 +600,46 @@ public sealed class DiscoveryRunService(
                 DiscoveryRunCandidateSortModes.UpdatedDesc => DiscoveryRunCandidateSortModes.UpdatedDesc,
                 _ => DiscoveryRunCandidateSortModes.ReviewPriority
             };
+    }
+
+    private DiscoveryRun BuildQueuedRun(
+        IReadOnlyList<string> categoryKeys,
+        string? locale,
+        string? market,
+        string automationMode,
+        IReadOnlyList<string> brandHints,
+        int maxCandidates,
+        string triggerKind,
+        string? recurringCampaignId,
+        string? recurringCampaignFingerprint,
+        string statusMessage)
+    {
+        var llmStatus = llmStatusProvider?.GetStatus() ?? new LlmServiceStatus
+        {
+            Code = LlmStatusCodes.Disabled,
+            Message = "LLM validation status is not exposed by the current classifier."
+        };
+
+        var utcNow = DateTime.UtcNow;
+        return new DiscoveryRun
+        {
+            RunId = $"discovery_run_{Guid.NewGuid():N}",
+            TriggerKind = triggerKind,
+            RecurringCampaignId = recurringCampaignId,
+            RecurringCampaignFingerprint = recurringCampaignFingerprint,
+            RequestedCategoryKeys = categoryKeys,
+            Locale = locale,
+            Market = market,
+            AutomationMode = automationMode,
+            BrandHints = brandHints,
+            MaxCandidates = maxCandidates,
+            Status = DiscoveryRunStatuses.Queued,
+            CurrentStage = DiscoveryRunStageNames.Search,
+            StatusMessage = statusMessage,
+            LlmStatus = llmStatus.Code,
+            LlmStatusMessage = llmStatus.Message,
+            CreatedUtc = utcNow,
+            UpdatedUtc = utcNow
+        };
     }
 }

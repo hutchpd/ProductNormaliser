@@ -54,6 +54,54 @@ public sealed class SourceAutomationPostureEvaluatorTests
         });
     }
 
+    [Test]
+    public void Evaluate_PromotesSuggestMode_WhenRecurringDiscoveryKeepsFindingAcceptedCandidates()
+    {
+        var evaluator = new SourceAutomationPostureEvaluator(new SourceAutomationMonitoringOptions());
+
+        var posture = evaluator.Evaluate(
+            SourceAutomationModes.SuggestAccept,
+            [],
+            new SourceRecurringDiscoveryHistory
+            {
+                DiscoveryRunCount = 3,
+                AcceptedCandidateCount = 2,
+                SuggestedCandidateCount = 1
+            });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(posture.EffectiveMode, Is.EqualTo(SourceAutomationModes.SuggestAccept));
+            Assert.That(posture.RecurringDiscoveryRunCount, Is.EqualTo(3));
+            Assert.That(posture.RecurringDiscoveryAcceptedCount, Is.EqualTo(2));
+            Assert.That(posture.SupportingReasons.Any(reason => reason.Contains("Recurring discovery", StringComparison.OrdinalIgnoreCase)), Is.True);
+        });
+    }
+
+    [Test]
+    public void Evaluate_FlagsManualReview_WhenRecurringDiscoveryMostlyEndsInDismissals()
+    {
+        var evaluator = new SourceAutomationPostureEvaluator(new SourceAutomationMonitoringOptions());
+
+        var posture = evaluator.Evaluate(
+            SourceAutomationModes.AutoAcceptAndSeed,
+            [],
+            new SourceRecurringDiscoveryHistory
+            {
+                DiscoveryRunCount = 4,
+                AcceptedCandidateCount = 0,
+                DismissedCandidateCount = 3,
+                SupersededCandidateCount = 1
+            });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(posture.Status, Is.EqualTo(SourceAutomationPosture.StatusManualReview));
+            Assert.That(posture.RecommendedAction, Is.EqualTo(SourceAutomationPosture.ActionFlagManualReview));
+            Assert.That(posture.BlockingReasons.Any(reason => reason.Contains("dismiss or supersede", StringComparison.OrdinalIgnoreCase)), Is.True);
+        });
+    }
+
     private static SourceQualitySnapshot CreateSnapshot(
         string categoryKey,
         DateTime timestampUtc,

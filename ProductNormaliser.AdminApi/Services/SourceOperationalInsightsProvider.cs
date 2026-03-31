@@ -69,6 +69,27 @@ public sealed class SourceOperationalInsightsProvider(
                     .Find(Builders<DiscoveryQueueItem>.Filter.In(item => item.SourceId, sourceIds))
                     .ToListAsync(insightCancellationToken);
 
+            var sourceHosts = sources
+                .SelectMany(source => source.GetDiscoveryHosts())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            var discoveryCandidates = sourceIds.Length == 0 && sourceHosts.Length == 0
+                ? []
+                : await mongoDbContext.DiscoveryRunCandidates
+                    .Find(Builders<DiscoveryRunCandidate>.Filter.Or(
+                        sourceIds.Length == 0
+                            ? Builders<DiscoveryRunCandidate>.Filter.Where(_ => false)
+                            : Builders<DiscoveryRunCandidate>.Filter.Or(
+                                Builders<DiscoveryRunCandidate>.Filter.In(candidate => candidate.AcceptedSourceId, sourceIds),
+                                Builders<DiscoveryRunCandidate>.Filter.AnyIn(candidate => candidate.DuplicateSourceIds, sourceIds)),
+                        sourceHosts.Length == 0
+                            ? Builders<DiscoveryRunCandidate>.Filter.Where(_ => false)
+                            : Builders<DiscoveryRunCandidate>.Filter.In(candidate => candidate.Host, sourceHosts)))
+                    .SortByDescending(candidate => candidate.UpdatedUtc)
+                    .Limit(4000)
+                    .ToListAsync(insightCancellationToken);
+
             var discoveredUrls = sourceIds.Length == 0
                 ? []
                 : await mongoDbContext.DiscoveredUrls
@@ -83,7 +104,7 @@ public sealed class SourceOperationalInsightsProvider(
 
             return sources.ToDictionary(
                 source => source.Id,
-                source => BuildInsights(source, categoriesByKey, snapshots, latestActivityBySource, discoveryQueueItems, discoveredUrls),
+                source => BuildInsights(source, categoriesByKey, snapshots, latestActivityBySource, discoveryQueueItems, discoveredUrls, discoveryCandidates),
                 StringComparer.OrdinalIgnoreCase);
         }
         catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -102,7 +123,8 @@ public sealed class SourceOperationalInsightsProvider(
         IReadOnlyList<SourceQualitySnapshot> snapshots,
         IReadOnlyDictionary<string, CrawlLog> latestActivityBySource,
         IReadOnlyList<DiscoveryQueueItem> discoveryQueueItems,
-        IReadOnlyList<DiscoveredUrl> discoveredUrls)
+        IReadOnlyList<DiscoveredUrl> discoveredUrls,
+        IReadOnlyList<DiscoveryRunCandidate> discoveryCandidates)
     {
         var throughputWindowStartUtc = DateTime.UtcNow.AddHours(-24);
         var assignedCategories = source.SupportedCategoryKeys
@@ -124,6 +146,7 @@ public sealed class SourceOperationalInsightsProvider(
 
         var sourceDiscoveryQueueItems = discoveryQueueItems.Where(item => string.Equals(item.SourceId, source.Id, StringComparison.OrdinalIgnoreCase)).ToArray();
         var sourceDiscoveredUrls = discoveredUrls.Where(item => string.Equals(item.SourceId, source.Id, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var recurringDiscoveryHistory = BuildRecurringDiscoveryHistory(source, discoveryCandidates);
         var discoveryCoverageByCategory = source.SupportedCategoryKeys
             .Concat(sourceDiscoveredUrls.Select(item => item.CategoryKey))
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -135,7 +158,7 @@ public sealed class SourceOperationalInsightsProvider(
         return new SourceOperationalInsights
         {
             Readiness = BuildReadiness(source, assignedCategories),
-            Health = BuildHealth(source.AutomationPolicy?.Mode, latestSnapshots, sourceSnapshots),
+            Health = BuildHealth(source.AutomationPolicy?.Mode, latestSnapshots, sourceSnapshots, recurringDiscoveryHistory),
             LastActivity = latestActivity is null ? null : new SourceLastActivityDto
             {
                 TimestampUtc = latestActivity.TimestampUtc,
@@ -246,9 +269,13 @@ public sealed class SourceOperationalInsightsProvider(
         };
     }
 
-    private SourceHealthSummaryDto BuildHealth(string? configuredMode, IReadOnlyList<SourceQualitySnapshot> snapshots, IReadOnlyList<SourceQualitySnapshot> sourceHistory)
+    private SourceHealthSummaryDto BuildHealth(
+        string? configuredMode,
+        IReadOnlyList<SourceQualitySnapshot> snapshots,
+        IReadOnlyList<SourceQualitySnapshot> sourceHistory,
+        SourceRecurringDiscoveryHistory recurringDiscoveryHistory)
     {
-        var automation = automationPostureEvaluator.Evaluate(configuredMode ?? SourceAutomationModes.OperatorAssisted, sourceHistory);
+        var automation = automationPostureEvaluator.Evaluate(configuredMode ?? SourceAutomationModes.OperatorAssisted, sourceHistory, recurringDiscoveryHistory);
 
         if (snapshots.Count == 0)
         {
@@ -291,9 +318,45 @@ public sealed class SourceOperationalInsightsProvider(
             DownstreamYieldScore = ToPercent(posture.DownstreamYieldScore),
             TrustTrendDelta = ToPercent(posture.TrustTrendDelta),
             ExtractabilityTrendDelta = ToPercent(posture.ExtractabilityTrendDelta),
+            RecurringDiscoveryRunCount = posture.RecurringDiscoveryRunCount,
+            RecurringDiscoveryAcceptedCount = posture.RecurringDiscoveryAcceptedCount,
+            RecurringDiscoveryAcceptanceRate = ToPercent(posture.RecurringDiscoveryAcceptanceRate),
             SupportingReasons = posture.SupportingReasons,
             BlockingReasons = posture.BlockingReasons
         };
+    }
+
+    private static SourceRecurringDiscoveryHistory BuildRecurringDiscoveryHistory(CrawlSource source, IReadOnlyList<DiscoveryRunCandidate> discoveryCandidates)
+    {
+        var sourceHosts = source.GetDiscoveryHosts();
+        var relevantCandidates = discoveryCandidates
+            .Where(candidate => string.Equals(candidate.AcceptedSourceId, source.Id, StringComparison.OrdinalIgnoreCase)
+                || candidate.DuplicateSourceIds.Contains(source.Id, StringComparer.OrdinalIgnoreCase)
+                || sourceHosts.Contains(candidate.Host, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
+
+        return new SourceRecurringDiscoveryHistory
+        {
+            DiscoveryRunCount = relevantCandidates
+                .Select(candidate => candidate.RunId)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count(),
+            AcceptedCandidateCount = relevantCandidates.Count(candidate => IsAccepted(candidate.State) || string.Equals(candidate.AcceptedSourceId, source.Id, StringComparison.OrdinalIgnoreCase)),
+            SuggestedCandidateCount = relevantCandidates.Count(candidate => string.Equals(candidate.State, DiscoveryRunCandidateStates.Suggested, StringComparison.OrdinalIgnoreCase)),
+            DismissedCandidateCount = relevantCandidates.Count(candidate => string.Equals(candidate.State, DiscoveryRunCandidateStates.Dismissed, StringComparison.OrdinalIgnoreCase)),
+            SupersededCandidateCount = relevantCandidates.Count(candidate => string.Equals(candidate.State, DiscoveryRunCandidateStates.Superseded, StringComparison.OrdinalIgnoreCase)),
+            LastAcceptedUtc = relevantCandidates
+                .Where(candidate => IsAccepted(candidate.State) || string.Equals(candidate.AcceptedSourceId, source.Id, StringComparison.OrdinalIgnoreCase))
+                .Select(candidate => candidate.DecisionUtc ?? candidate.UpdatedUtc)
+                .DefaultIfEmpty()
+                .Max()
+        };
+    }
+
+    private static bool IsAccepted(string state)
+    {
+        return string.Equals(state, DiscoveryRunCandidateStates.AutoAccepted, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(state, DiscoveryRunCandidateStates.ManuallyAccepted, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string DetermineHealthStatus(decimal trustScore, decimal successfulCrawlRate, decimal extractabilityRate, decimal noProductRate)

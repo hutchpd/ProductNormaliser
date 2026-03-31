@@ -6,9 +6,10 @@ public sealed class SourceAutomationPostureEvaluator(SourceAutomationMonitoringO
 {
     private readonly SourceAutomationMonitoringOptions options = options ?? new SourceAutomationMonitoringOptions();
 
-    public SourceAutomationPosture Evaluate(string configuredMode, IReadOnlyList<SourceQualitySnapshot> snapshots)
+    public SourceAutomationPosture Evaluate(string configuredMode, IReadOnlyList<SourceQualitySnapshot> snapshots, SourceRecurringDiscoveryHistory? recurringDiscoveryHistory = null)
     {
         var normalizedMode = SourceAutomationModes.Normalize(configuredMode);
+        var recurringHistory = recurringDiscoveryHistory ?? new SourceRecurringDiscoveryHistory();
         var orderedSnapshots = snapshots
             .OrderByDescending(snapshot => snapshot.TimestampUtc)
             .ToArray();
@@ -20,7 +21,7 @@ public sealed class SourceAutomationPostureEvaluator(SourceAutomationMonitoringO
         var current = Aggregate(latestSnapshotsByCategory);
         var trustTrendDelta = CalculateAverageDelta(orderedSnapshots, snapshot => snapshot.HistoricalTrustScore);
         var extractabilityTrendDelta = CalculateAverageDelta(orderedSnapshots, snapshot => snapshot.ExtractabilityRate);
-        var supportsSuggestion = latestSnapshotsByCategory.Length > 0
+        var snapshotSupportsSuggestion = latestSnapshotsByCategory.Length > 0
             && current.TrustScore >= options.SuggestMinTrustScore
             && current.DiscoveryBreadthScore >= options.SuggestMinDiscoveryBreadthScore
             && current.ProductTargetPromotionRate >= options.SuggestMinProductPromotionRate
@@ -29,7 +30,7 @@ public sealed class SourceAutomationPostureEvaluator(SourceAutomationMonitoringO
             && current.DownstreamYieldScore >= options.SuggestMinDownstreamYieldScore
             && current.SpecStabilityScore >= options.SuggestMinSpecStabilityScore
             && current.PriceVolatilityScore <= options.SuggestMaxPriceVolatilityScore;
-        var supportsAutoAccept = supportsSuggestion
+        var snapshotSupportsAutoAccept = snapshotSupportsSuggestion
             && current.TrustScore >= options.AutoAcceptMinTrustScore
             && current.DiscoveryBreadthScore >= options.AutoAcceptMinDiscoveryBreadthScore
             && current.ProductTargetPromotionRate >= options.AutoAcceptMinProductPromotionRate
@@ -40,14 +41,26 @@ public sealed class SourceAutomationPostureEvaluator(SourceAutomationMonitoringO
             && current.PriceVolatilityScore <= options.AutoAcceptMaxPriceVolatilityScore
             && trustTrendDelta >= -options.MaxTrustScoreDropForAutoAccept
             && extractabilityTrendDelta >= -options.MaxExtractabilityDropForAutoAccept;
+        var recurringSupportsSuggestion = recurringHistory.DiscoveryRunCount >= options.RecurringDiscoverySuggestMinRuns
+            && recurringHistory.AcceptanceRate >= options.RecurringDiscoverySuggestMinAcceptanceRate;
+        var recurringSupportsAutoAccept = recurringHistory.DiscoveryRunCount >= options.RecurringDiscoveryAutoAcceptMinRuns
+            && recurringHistory.AcceptanceRate >= options.RecurringDiscoveryAutoAcceptMinAcceptanceRate;
         var shouldQuarantine = latestSnapshotsByCategory.Length > 0
             && (current.TrustScore < options.QuarantineMinTrustScore
                 || current.DiscoveryBreadthScore < options.QuarantineMinDiscoveryBreadthScore
                 || current.ExtractabilityRate < options.QuarantineMinExtractabilityRate
                 || current.NoProductRate > options.QuarantineMaxNoProductRate);
+        var shouldFlagRecurringManualReview = recurringHistory.DiscoveryRunCount >= options.RecurringDiscoverySuggestMinRuns
+            && recurringHistory.DiscoveryRunCount > 0
+            && decimal.Round((decimal)(recurringHistory.DismissedCandidateCount + recurringHistory.SupersededCandidateCount) / recurringHistory.DiscoveryRunCount, 4, MidpointRounding.AwayFromZero) >= options.RecurringDiscoveryManualReviewDismissalRate;
 
-        var supportingReasons = BuildSupportingReasons(current, supportsSuggestion, supportsAutoAccept);
-        var blockingReasons = BuildBlockingReasons(current, trustTrendDelta, extractabilityTrendDelta, latestSnapshotsByCategory.Length);
+        var supportsSuggestion = snapshotSupportsSuggestion
+            || (!shouldQuarantine && recurringSupportsSuggestion);
+        var supportsAutoAccept = snapshotSupportsAutoAccept
+            || (!shouldQuarantine && (snapshotSupportsSuggestion || latestSnapshotsByCategory.Length == 0) && recurringSupportsAutoAccept);
+
+        var supportingReasons = BuildSupportingReasons(current, supportsSuggestion, supportsAutoAccept, recurringHistory, recurringSupportsSuggestion, recurringSupportsAutoAccept);
+        var blockingReasons = BuildBlockingReasons(current, trustTrendDelta, extractabilityTrendDelta, latestSnapshotsByCategory.Length, recurringHistory, shouldFlagRecurringManualReview);
 
         if (normalizedMode == SourceAutomationModes.OperatorAssisted)
         {
@@ -62,16 +75,21 @@ public sealed class SourceAutomationPostureEvaluator(SourceAutomationMonitoringO
                 DownstreamYieldScore = current.DownstreamYieldScore,
                 TrustTrendDelta = trustTrendDelta,
                 ExtractabilityTrendDelta = extractabilityTrendDelta,
+                RecurringDiscoveryRunCount = recurringHistory.DiscoveryRunCount,
+                RecurringDiscoveryAcceptedCount = recurringHistory.AcceptedCandidateCount,
+                RecurringDiscoveryAcceptanceRate = recurringHistory.AcceptanceRate,
                 SupportingReasons = latestSnapshotsByCategory.Length == 0
-                    ? []
+                    ? supportingReasons
                     : ["Longitudinal automation review is available, but this source remains operator-assisted by policy."],
                 BlockingReasons = latestSnapshotsByCategory.Length == 0
-                    ? ["No longitudinal source snapshots are recorded yet."]
-                    : []
+                    ? blockingReasons
+                    : shouldFlagRecurringManualReview
+                        ? blockingReasons
+                        : []
             };
         }
 
-        var effectiveMode = shouldQuarantine
+        var effectiveMode = shouldQuarantine || shouldFlagRecurringManualReview
             ? SourceAutomationModes.OperatorAssisted
             : normalizedMode == SourceAutomationModes.AutoAcceptAndSeed
                 ? supportsAutoAccept
@@ -85,6 +103,8 @@ public sealed class SourceAutomationPostureEvaluator(SourceAutomationMonitoringO
 
         var status = shouldQuarantine
             ? SourceAutomationPosture.StatusQuarantined
+            : shouldFlagRecurringManualReview
+                ? SourceAutomationPosture.StatusManualReview
             : effectiveMode == normalizedMode
                 ? SourceAutomationPosture.StatusHealthy
                 : effectiveMode == SourceAutomationModes.SuggestAccept
@@ -92,6 +112,8 @@ public sealed class SourceAutomationPostureEvaluator(SourceAutomationMonitoringO
                     : SourceAutomationPosture.StatusManualReview;
         var recommendedAction = shouldQuarantine
             ? SourceAutomationPosture.ActionPauseReseeding
+            : shouldFlagRecurringManualReview
+                ? SourceAutomationPosture.ActionFlagManualReview
             : effectiveMode == normalizedMode
                 ? SourceAutomationPosture.ActionKeepCurrentMode
                 : effectiveMode == SourceAutomationModes.SuggestAccept
@@ -109,12 +131,21 @@ public sealed class SourceAutomationPostureEvaluator(SourceAutomationMonitoringO
             DownstreamYieldScore = current.DownstreamYieldScore,
             TrustTrendDelta = trustTrendDelta,
             ExtractabilityTrendDelta = extractabilityTrendDelta,
+            RecurringDiscoveryRunCount = recurringHistory.DiscoveryRunCount,
+            RecurringDiscoveryAcceptedCount = recurringHistory.AcceptedCandidateCount,
+            RecurringDiscoveryAcceptanceRate = recurringHistory.AcceptanceRate,
             SupportingReasons = supportingReasons,
             BlockingReasons = blockingReasons
         };
     }
 
-    private IReadOnlyList<string> BuildSupportingReasons(AggregatedSnapshot current, bool supportsSuggestion, bool supportsAutoAccept)
+    private IReadOnlyList<string> BuildSupportingReasons(
+        AggregatedSnapshot current,
+        bool supportsSuggestion,
+        bool supportsAutoAccept,
+        SourceRecurringDiscoveryHistory recurringHistory,
+        bool recurringSupportsSuggestion,
+        bool recurringSupportsAutoAccept)
     {
         var reasons = new List<string>();
 
@@ -147,17 +178,31 @@ public sealed class SourceAutomationPostureEvaluator(SourceAutomationMonitoringO
             reasons.Add("Longitudinal evidence still supports unattended suggestion.");
         }
 
+        if (recurringSupportsAutoAccept)
+        {
+            reasons.Add($"Recurring discovery accepted {recurringHistory.AcceptedCandidateCount} candidates across {recurringHistory.DiscoveryRunCount} rediscovery runs.");
+        }
+        else if (recurringSupportsSuggestion)
+        {
+            reasons.Add($"Recurring discovery kept resurfacing this source with a {ToPercent(recurringHistory.AcceptanceRate):0.#}% acceptance rate.");
+        }
+
         return reasons;
     }
 
-    private IReadOnlyList<string> BuildBlockingReasons(AggregatedSnapshot current, decimal trustTrendDelta, decimal extractabilityTrendDelta, int snapshotCount)
+    private IReadOnlyList<string> BuildBlockingReasons(
+        AggregatedSnapshot current,
+        decimal trustTrendDelta,
+        decimal extractabilityTrendDelta,
+        int snapshotCount,
+        SourceRecurringDiscoveryHistory recurringHistory,
+        bool shouldFlagRecurringManualReview)
     {
         var reasons = new List<string>();
 
         if (snapshotCount == 0)
         {
             reasons.Add("No longitudinal source snapshots are recorded yet.");
-            return reasons;
         }
 
         if (current.DiscoveryBreadthScore < options.SuggestMinDiscoveryBreadthScore)
@@ -203,6 +248,11 @@ public sealed class SourceAutomationPostureEvaluator(SourceAutomationMonitoringO
         if (extractabilityTrendDelta < 0m)
         {
             reasons.Add($"Extractability trend moved {ToPercent(extractabilityTrendDelta):0.#} points over the monitoring window.");
+        }
+
+        if (shouldFlagRecurringManualReview)
+        {
+            reasons.Add($"Recurring discovery ended in dismiss or supersede decisions for {recurringHistory.DismissedCandidateCount + recurringHistory.SupersededCandidateCount} of {recurringHistory.DiscoveryRunCount} rediscovery runs.");
         }
 
         return reasons.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();

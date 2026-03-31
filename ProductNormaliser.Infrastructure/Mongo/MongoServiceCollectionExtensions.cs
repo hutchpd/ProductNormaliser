@@ -61,6 +61,7 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<CrawlJobRepository>();
         services.AddSingleton<CrawlSourceRepository>();
         services.AddSingleton<DiscoveryRunRepository>();
+        services.AddSingleton<RecurringDiscoveryCampaignRepository>();
         services.AddSingleton<DiscoveryRunCandidateRepository>();
         services.AddSingleton<DiscoveryRunCandidateDispositionRepository>();
         services.AddSingleton<DiscoveryQueueRepository>();
@@ -74,6 +75,7 @@ public static class MongoServiceCollectionExtensions
         services.AddSingleton<ICrawlJobStore>(serviceProvider => serviceProvider.GetRequiredService<CrawlJobRepository>());
         services.AddSingleton<IKnownCrawlTargetStore>(serviceProvider => serviceProvider.GetRequiredService<KnownCrawlTargetRepository>());
         services.AddSingleton<IDiscoveryRunStore>(serviceProvider => serviceProvider.GetRequiredService<DiscoveryRunRepository>());
+        services.AddSingleton<IDiscoveryCampaignStore>(serviceProvider => serviceProvider.GetRequiredService<RecurringDiscoveryCampaignRepository>());
         services.AddSingleton<IDiscoveryRunCandidateStore>(serviceProvider => serviceProvider.GetRequiredService<DiscoveryRunCandidateRepository>());
         services.AddSingleton<IDiscoveryRunCandidateDispositionStore>(serviceProvider => serviceProvider.GetRequiredService<DiscoveryRunCandidateDispositionRepository>());
         services.AddSingleton<IDiscoveryQueueStore>(serviceProvider => serviceProvider.GetRequiredService<DiscoveryQueueRepository>());
