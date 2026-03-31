@@ -263,26 +263,34 @@ public sealed class DiscoveryRunService(
         try
         {
             var source = await sourceManagementService.RegisterAsync(registration, cancellationToken);
-            claimedCandidate.AcceptedSourceId = source.Id;
-            claimedCandidate.StateMessage = $"Accepted and registered as source '{source.Id}'.";
-            claimedCandidate.UpdatedUtc = DateTime.UtcNow;
-            claimedCandidate.DecisionUtc = claimedCandidate.UpdatedUtc;
-            claimedCandidate.Revision += 1;
-            await discoveryRunCandidateStore.UpsertAsync(claimedCandidate, cancellationToken);
+            return await CompleteAcceptedCandidateAsync(
+                run,
+                claimedCandidate,
+                source,
+                linkedToExistingSource: false,
+                $"Accepted and registered as source '{source.Id}'.",
+                cancellationToken);
+        }
+        catch (ArgumentException exception) when (IsDuplicateSourceRegistrationException(exception, registration.SourceId))
+        {
+            var existingSource = await sourceManagementService.GetAsync(registration.SourceId, cancellationToken);
+            if (existingSource is not null)
+            {
+                return await CompleteAcceptedCandidateAsync(
+                    run,
+                    claimedCandidate,
+                    existingSource,
+                    linkedToExistingSource: true,
+                    $"Accepted and linked to existing source '{existingSource.Id}' because it was already registered.",
+                    cancellationToken);
+            }
 
-            await SupersedeDuplicateCandidatesAsync(run, claimedCandidate, cancellationToken);
-            await RefreshRunSummaryAsync(run, cancellationToken);
-            return claimedCandidate;
+            await RevertAcceptedCandidateAsync(run, claimedCandidate, cancellationToken);
+            throw;
         }
         catch
         {
-            claimedCandidate.State = claimedCandidate.PreviousState ?? DiscoveryRunCandidateStates.Suggested;
-            claimedCandidate.StateMessage = "Acceptance failed before source registration completed. The candidate was returned to review.";
-            claimedCandidate.AcceptedSourceId = null;
-            claimedCandidate.UpdatedUtc = DateTime.UtcNow;
-            claimedCandidate.Revision += 1;
-            await discoveryRunCandidateStore.UpsertAsync(claimedCandidate, cancellationToken);
-            await RefreshRunSummaryAsync(run, cancellationToken);
+            await RevertAcceptedCandidateAsync(run, claimedCandidate, cancellationToken);
             throw;
         }
     }
@@ -396,6 +404,52 @@ public sealed class DiscoveryRunService(
 
         run.UpdatedUtc = DateTime.UtcNow;
         await discoveryRunStore.UpsertAsync(run, cancellationToken);
+    }
+
+    private async Task<DiscoveryRunCandidate> CompleteAcceptedCandidateAsync(
+        DiscoveryRun run,
+        DiscoveryRunCandidate claimedCandidate,
+        CrawlSource source,
+        bool linkedToExistingSource,
+        string stateMessage,
+        CancellationToken cancellationToken)
+    {
+        claimedCandidate.AcceptedSourceId = source.Id;
+        if (linkedToExistingSource)
+        {
+            claimedCandidate.AlreadyRegistered = true;
+            claimedCandidate.DuplicateSourceIds = claimedCandidate.DuplicateSourceIds
+                .Append(source.Id)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            claimedCandidate.DuplicateSourceDisplayNames = claimedCandidate.DuplicateSourceDisplayNames
+                .Append(source.DisplayName)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+        claimedCandidate.StateMessage = stateMessage;
+        claimedCandidate.UpdatedUtc = DateTime.UtcNow;
+        claimedCandidate.DecisionUtc = claimedCandidate.UpdatedUtc;
+        claimedCandidate.Revision += 1;
+        await discoveryRunCandidateStore.UpsertAsync(claimedCandidate, cancellationToken);
+
+        await SupersedeDuplicateCandidatesAsync(run, claimedCandidate, cancellationToken);
+        await RefreshRunSummaryAsync(run, cancellationToken);
+        return claimedCandidate;
+    }
+
+    private async Task RevertAcceptedCandidateAsync(DiscoveryRun run, DiscoveryRunCandidate claimedCandidate, CancellationToken cancellationToken)
+    {
+        claimedCandidate.State = claimedCandidate.PreviousState ?? DiscoveryRunCandidateStates.Suggested;
+        claimedCandidate.StateMessage = "Acceptance failed before source registration completed. The candidate was returned to review.";
+        claimedCandidate.AcceptedSourceId = null;
+        claimedCandidate.UpdatedUtc = DateTime.UtcNow;
+        claimedCandidate.Revision += 1;
+        await discoveryRunCandidateStore.UpsertAsync(claimedCandidate, cancellationToken);
+        await RefreshRunSummaryAsync(run, cancellationToken);
     }
 
     private async Task SupersedeDuplicateCandidatesAsync(DiscoveryRun run, DiscoveryRunCandidate acceptedCandidate, CancellationToken cancellationToken)
@@ -558,6 +612,12 @@ public sealed class DiscoveryRunService(
     private static InvalidOperationException CreateConcurrencyException(string candidateKey)
     {
         return new InvalidOperationException($"Candidate '{candidateKey}' changed while this action was in progress. Refresh the run and retry.");
+    }
+
+    private static bool IsDuplicateSourceRegistrationException(ArgumentException exception, string sourceId)
+    {
+        return string.Equals(exception.ParamName, "registration", StringComparison.Ordinal)
+            && exception.Message.Contains($"Source '{sourceId}' already exists.", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<DiscoveryRun> RequireRunAsync(string runId, CancellationToken cancellationToken)

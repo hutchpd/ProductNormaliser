@@ -127,6 +127,43 @@ public sealed class DiscoveryRunServiceTests
     }
 
     [Test]
+    public async Task AcceptCandidateAsync_LinksExistingSource_WhenSourceIsAlreadyRegistered()
+    {
+        var runStore = new FakeDiscoveryRunStore(CreateRun("run_1", DiscoveryRunStatuses.Completed));
+        var candidateStore = new FakeDiscoveryRunCandidateStore(CreateCandidate("run_1", "safe_shop", DiscoveryRunCandidateStates.Suggested));
+        var sourceManagement = new RecordingSourceManagementService(
+            new CrawlSource
+            {
+                Id = "safe_shop",
+                DisplayName = "Safe Shop",
+                BaseUrl = "https://safe.example/",
+                Host = "safe.example",
+                IsEnabled = true,
+                AllowedMarkets = ["UK"],
+                PreferredLocale = "en-GB",
+                SupportedCategoryKeys = ["tv"],
+                AutomationPolicy = new SourceAutomationPolicy(),
+                ThrottlingPolicy = new SourceThrottlingPolicy(),
+                CreatedUtc = DateTime.UtcNow.AddDays(-1),
+                UpdatedUtc = DateTime.UtcNow.AddDays(-1)
+            });
+        var service = CreateService(runStore, candidateStore, sourceManagement);
+
+        var candidate = await service.AcceptCandidateAsync("run_1", "safe_shop", 1, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(candidate, Is.Not.Null);
+            Assert.That(candidate!.State, Is.EqualTo(DiscoveryRunCandidateStates.ManuallyAccepted));
+            Assert.That(candidate.AcceptedSourceId, Is.EqualTo("safe_shop"));
+            Assert.That(candidate.AlreadyRegistered, Is.True);
+            Assert.That(candidate.DuplicateSourceIds, Is.EqualTo(new[] { "safe_shop" }));
+            Assert.That(candidate.StateMessage, Is.EqualTo("Accepted and linked to existing source 'safe_shop' because it was already registered."));
+            Assert.That(sourceManagement.Registrations, Has.Count.EqualTo(1));
+        });
+    }
+
+    [Test]
     public async Task DismissAndRestoreCandidate_RoundTripPreviousState()
     {
         var runStore = new FakeDiscoveryRunStore(CreateRun("run_1", DiscoveryRunStatuses.Completed));
@@ -405,16 +442,24 @@ public sealed class DiscoveryRunServiceTests
         public Task<CategoryMetadata> UpsertAsync(CategoryMetadata categoryMetadata, CancellationToken cancellationToken = default) => Task.FromResult(categoryMetadata);
     }
 
-    private sealed class RecordingSourceManagementService : ISourceManagementService
+    private sealed class RecordingSourceManagementService(params CrawlSource[] existingSources) : ISourceManagementService
     {
+        private readonly Dictionary<string, CrawlSource> sources = existingSources.ToDictionary(source => source.Id, StringComparer.OrdinalIgnoreCase);
+
         public List<CrawlSourceRegistration> Registrations { get; } = [];
 
-        public Task<IReadOnlyList<CrawlSource>> ListAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CrawlSource>>([]);
-        public Task<CrawlSource?> GetAsync(string sourceId, CancellationToken cancellationToken = default) => Task.FromResult<CrawlSource?>(null);
+        public Task<IReadOnlyList<CrawlSource>> ListAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<CrawlSource>>(sources.Values.ToArray());
+        public Task<CrawlSource?> GetAsync(string sourceId, CancellationToken cancellationToken = default)
+            => Task.FromResult(sources.TryGetValue(sourceId, out var source) ? source : null);
         public Task<CrawlSource> RegisterAsync(CrawlSourceRegistration registration, CancellationToken cancellationToken = default)
         {
             Registrations.Add(registration);
-            return Task.FromResult(new CrawlSource
+            if (sources.TryGetValue(registration.SourceId, out _))
+            {
+                throw new ArgumentException($"Source '{registration.SourceId}' already exists.", nameof(registration));
+            }
+
+            var source = new CrawlSource
             {
                 Id = registration.SourceId,
                 DisplayName = registration.DisplayName,
@@ -428,7 +473,9 @@ public sealed class DiscoveryRunServiceTests
                 ThrottlingPolicy = new SourceThrottlingPolicy(),
                 CreatedUtc = DateTime.UtcNow,
                 UpdatedUtc = DateTime.UtcNow
-            });
+            };
+            sources[source.Id] = source;
+            return Task.FromResult(source);
         }
         public Task<CrawlSource> UpdateAsync(string sourceId, CrawlSourceUpdate update, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<CrawlSource> EnableAsync(string sourceId, CancellationToken cancellationToken = default) => throw new NotSupportedException();

@@ -7,6 +7,7 @@ namespace ProductNormaliser.Application.Sources;
 public sealed class RecurringDiscoveryCampaignService(
     IDiscoveryCampaignStore discoveryCampaignStore,
     ICategoryMetadataService categoryMetadataService,
+    IDiscoveryRunService discoveryRunService,
     IManagementAuditService managementAuditService,
     Microsoft.Extensions.Options.IOptions<DiscoveryRunOperationsOptions> options) : IRecurringDiscoveryCampaignService
 {
@@ -73,13 +74,20 @@ public sealed class RecurringDiscoveryCampaignService(
             IntervalHours = intervalHours,
             Status = RecurringDiscoveryCampaignStatuses.Active,
             CampaignFingerprint = fingerprint,
-            StatusMessage = "Recurring discovery campaign is active and waiting for the next maintenance sweep.",
+            StatusMessage = "Recurring discovery campaign is active. Queueing the initial run now.",
             CreatedUtc = utcNow,
             UpdatedUtc = utcNow,
-            NextScheduledUtc = utcNow
+            NextScheduledUtc = utcNow.AddHours(intervalHours)
         };
 
         await discoveryCampaignStore.UpsertAsync(campaign, cancellationToken);
+        var scheduledRun = await discoveryRunService.CreateScheduledAsync(campaign, cancellationToken);
+        campaign.LastRunId = scheduledRun.RunId;
+        campaign.LastScheduledUtc = utcNow;
+        campaign.StatusMessage = $"Recurring discovery campaign queued initial run '{scheduledRun.RunId}'. Future runs will be scheduled automatically.";
+        campaign.UpdatedUtc = DateTime.UtcNow;
+        await discoveryCampaignStore.UpsertAsync(campaign, cancellationToken);
+
         await managementAuditService.RecordAsync(
             "recurring_discovery_campaign_created",
             "recurring_discovery_campaign",
@@ -131,7 +139,7 @@ public sealed class RecurringDiscoveryCampaignService(
         }
 
         campaign.Status = RecurringDiscoveryCampaignStatuses.Active;
-        campaign.StatusMessage = "Recurring discovery campaign resumed and is eligible for the next maintenance sweep.";
+        campaign.StatusMessage = "Recurring discovery campaign resumed. Future runs will be scheduled automatically when the next window opens.";
         campaign.NextScheduledUtc ??= DateTime.UtcNow;
         if (campaign.NextScheduledUtc < DateTime.UtcNow)
         {

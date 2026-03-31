@@ -200,6 +200,28 @@ public sealed class DiscoveryRunsControllerTests
         });
     }
 
+    [Test]
+    public async Task AcceptCandidate_ReturnsConflictProblemForArgumentValidationFailure()
+    {
+        var service = new FakeDiscoveryRunService
+        {
+            AcceptException = new ArgumentException("Source 'safe_shop' already exists.", "registration")
+        };
+        var controller = new DiscoveryRunsController(service);
+
+        var result = await controller.AcceptCandidate("discovery_run_1", "safe_shop", new DiscoveryRunCandidateMutationRequest { ExpectedRevision = 4 }, CancellationToken.None);
+
+        Assert.That(result, Is.TypeOf<ConflictObjectResult>());
+        var conflict = (ConflictObjectResult)result;
+        var problem = conflict.Value as ValidationProblemDetails;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(problem, Is.Not.Null);
+            Assert.That(problem!.Errors["request"], Does.Contain("Source 'safe_shop' already exists."));
+        });
+    }
+
     private static DiscoveryRun CreateRun(string runId, string status)
     {
         return new DiscoveryRun
@@ -261,6 +283,7 @@ public sealed class DiscoveryRunsControllerTests
     {
         public DiscoveryRun? CreatedRun { get; set; }
         public InvalidOperationException? PauseException { get; set; }
+        public ArgumentException? AcceptException { get; set; }
         public DiscoveryRunCandidate? RestoredCandidate { get; set; }
         public DiscoveryRunQuery? LastListQuery { get; private set; }
         public DiscoveryRunCandidateQuery? LastCandidateQuery { get; private set; }
@@ -332,7 +355,8 @@ public sealed class DiscoveryRunsControllerTests
 
         public Task<DiscoveryRun?> ResumeAsync(string runId, CancellationToken cancellationToken = default) => Task.FromResult(CreatedRun);
         public Task<DiscoveryRun?> StopAsync(string runId, CancellationToken cancellationToken = default) => Task.FromResult(CreatedRun);
-        public Task<DiscoveryRunCandidate?> AcceptCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default) => Task.FromResult<DiscoveryRunCandidate?>(null);
+        public Task<DiscoveryRunCandidate?> AcceptCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default)
+            => AcceptException is null ? Task.FromResult<DiscoveryRunCandidate?>(null) : Task.FromException<DiscoveryRunCandidate?>(AcceptException);
         public Task<DiscoveryRunCandidate?> DismissCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default) => Task.FromResult<DiscoveryRunCandidate?>(null);
         public Task<DiscoveryRunCandidate?> RestoreCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default)
         {

@@ -37,7 +37,7 @@ public sealed class IndexModel(
     {
         Eyebrow = "Continuous Discovery",
         Title = "Manage recurring discovery campaigns",
-        Description = "Create repeatable discovery schedules keyed by category, market, locale, and brand hints. Maintenance will queue fresh runs while preserving longitudinal learning from prior outcomes.",
+        Description = "Create repeatable discovery schedules keyed by category, market, locale, and brand hints. The initial run queues immediately, and later runs are scheduled automatically while preserving longitudinal learning from prior outcomes.",
         Metrics =
         [
             new HeroMetricModel { Label = "Campaigns", Value = Campaigns.Count.ToString() },
@@ -74,7 +74,9 @@ public sealed class IndexModel(
                 IntervalHours = Campaign.IntervalHours
             }, cancellationToken);
 
-            StatusMessage = $"Created recurring discovery campaign '{campaign.Name}'. Maintenance will queue the next due run automatically.";
+            StatusMessage = string.IsNullOrWhiteSpace(campaign.LastRunId)
+                ? $"Created recurring discovery campaign '{campaign.Name}'. The initial run will be queued shortly and future runs will be scheduled automatically."
+                : $"Created recurring discovery campaign '{campaign.Name}'. Initial run '{campaign.LastRunId}' is queued now.";
             return RedirectToPage();
         }
         catch (AdminApiValidationException exception)
@@ -192,7 +194,9 @@ public sealed class IndexModel(
     {
         if (campaign.HistoricalRunCount == 0)
         {
-            return "No historical runs yet. The first due maintenance sweep will queue the initial run.";
+            return string.IsNullOrWhiteSpace(campaign.LastRunId)
+                ? "No historical runs yet. The initial run has not completed, and future runs will be scheduled automatically."
+                : $"No historical runs yet. Initial run '{campaign.LastRunId}' is queued or in progress.";
         }
 
         return $"{campaign.HistoricalRunCount} run(s), {campaign.AcceptedCandidateCount} accepted, {campaign.DismissedCandidateCount} dismissed, {campaign.SupersededCandidateCount} superseded, {campaign.RunsWithAcceptedCandidates} run(s) with accepted candidates.";

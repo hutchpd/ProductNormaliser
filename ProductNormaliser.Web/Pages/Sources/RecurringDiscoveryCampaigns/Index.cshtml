@@ -110,7 +110,7 @@
             </div>
 
             <div class="empty-panel mt-3">
-                <p class="empty-state">Each campaign schedules new discovery runs when due. The worker still processes one queued run at a time.</p>
+                <p class="empty-state">Creating a campaign queues the first discovery run immediately. The worker still processes one queued run at a time.</p>
                 <p class="subtle-copy">Deleting a campaign removes the schedule only. Existing discovery runs and their archived decisions stay intact for audit and source-memory purposes.</p>
             </div>
 
@@ -121,7 +121,7 @@
                 </div>
                 <div>
                     <dt>Scheduler</dt>
-                    <dd>The maintenance sweep creates fresh queued runs when a campaign is due.</dd>
+                    <dd>After the initial run, the maintenance sweep creates fresh queued runs when the next campaign window opens.</dd>
                 </div>
                 <div>
                     <dt>Trust signal</dt>

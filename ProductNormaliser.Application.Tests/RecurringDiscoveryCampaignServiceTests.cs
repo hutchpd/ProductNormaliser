@@ -13,7 +13,8 @@ public sealed class RecurringDiscoveryCampaignServiceTests
     public async Task CreateAsync_NormalizesCampaignIdentityAndSchedulesImmediately()
     {
         var store = new FakeDiscoveryCampaignStore();
-        var service = CreateService(store);
+        var discoveryRunService = new RecordingDiscoveryRunService();
+        var service = CreateService(store, discoveryRunService);
 
         var campaign = await service.CreateAsync(new CreateRecurringDiscoveryCampaignRequest
         {
@@ -32,6 +33,10 @@ public sealed class RecurringDiscoveryCampaignServiceTests
             Assert.That(campaign.CampaignFingerprint, Is.EqualTo("market:uk|locale:en-gb|categories:tv|brands:sony"));
             Assert.That(campaign.NextScheduledUtc, Is.Not.Null);
             Assert.That(campaign.IntervalHours, Is.EqualTo(12));
+            Assert.That(campaign.LastRunId, Does.StartWith("discovery_run_"));
+            Assert.That(campaign.LastScheduledUtc, Is.Not.Null);
+            Assert.That(campaign.StatusMessage, Does.Contain($"queued initial run '{campaign.LastRunId}'"));
+            Assert.That(discoveryRunService.ScheduledCampaignIds, Is.EqualTo(new[] { campaign.CampaignId }));
         });
     }
 
@@ -83,11 +88,12 @@ public sealed class RecurringDiscoveryCampaignServiceTests
         });
     }
 
-    private static RecurringDiscoveryCampaignService CreateService(FakeDiscoveryCampaignStore store)
+    private static RecurringDiscoveryCampaignService CreateService(FakeDiscoveryCampaignStore store, RecordingDiscoveryRunService? discoveryRunService = null)
     {
         return new RecurringDiscoveryCampaignService(
             store,
             new FakeCategoryMetadataService(new CategoryMetadata { CategoryKey = "tv", DisplayName = "TV", IsEnabled = true }),
+            discoveryRunService ?? new RecordingDiscoveryRunService(),
             new RecordingAuditService(),
             Options.Create(new DiscoveryRunOperationsOptions()));
     }
@@ -146,5 +152,48 @@ public sealed class RecurringDiscoveryCampaignServiceTests
 
         public Task<IReadOnlyList<ManagementAuditEntry>> ListRecentAsync(int take = 100, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<ManagementAuditEntry>>([]);
+    }
+
+    private sealed class RecordingDiscoveryRunService : IDiscoveryRunService
+    {
+        public List<string> ScheduledCampaignIds { get; } = [];
+
+        public Task<DiscoveryRun> CreateAsync(ProductNormaliser.Application.Sources.CreateDiscoveryRunRequest request, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public Task<DiscoveryRun> CreateScheduledAsync(RecurringDiscoveryCampaign campaign, CancellationToken cancellationToken = default)
+        {
+            ScheduledCampaignIds.Add(campaign.CampaignId);
+            return Task.FromResult(new DiscoveryRun
+            {
+                RunId = $"discovery_run_{campaign.CampaignId.Replace("discovery_campaign_", string.Empty, StringComparison.OrdinalIgnoreCase)}",
+                TriggerKind = DiscoveryRunTriggerKinds.RecurringCampaign,
+                RecurringCampaignId = campaign.CampaignId,
+                RequestedCategoryKeys = campaign.CategoryKeys,
+                Market = campaign.Market,
+                Locale = campaign.Locale,
+                AutomationMode = campaign.AutomationMode,
+                BrandHints = campaign.BrandHints,
+                MaxCandidates = campaign.MaxCandidatesPerRun,
+                Status = DiscoveryRunStatuses.Queued,
+                CurrentStage = DiscoveryRunStageNames.Search,
+                StatusMessage = "Queued.",
+                LlmStatus = "disabled",
+                LlmStatusMessage = "Disabled.",
+                CreatedUtc = DateTime.UtcNow,
+                UpdatedUtc = DateTime.UtcNow
+            });
+        }
+
+        public Task<DiscoveryRunPage> ListAsync(DiscoveryRunQuery query, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DiscoveryRun?> GetAsync(string runId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DiscoveryRunCandidate>> ListCandidatesAsync(string runId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DiscoveryRunCandidatePage> QueryCandidatesAsync(string runId, DiscoveryRunCandidateQuery query, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DiscoveryRun?> PauseAsync(string runId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DiscoveryRun?> ResumeAsync(string runId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DiscoveryRun?> StopAsync(string runId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DiscoveryRunCandidate?> AcceptCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DiscoveryRunCandidate?> DismissCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<DiscoveryRunCandidate?> RestoreCandidateAsync(string runId, string candidateKey, int expectedRevision, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }

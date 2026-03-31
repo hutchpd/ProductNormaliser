@@ -66,7 +66,32 @@ public sealed class RecurringDiscoveryCampaignPageTests
             Assert.That(client.LastCreateRecurringDiscoveryCampaignRequest!.CategoryKeys, Is.EqualTo(new[] { "tv" }));
             Assert.That(client.LastCreateRecurringDiscoveryCampaignRequest.BrandHints, Is.EqualTo(new[] { "Sony" }));
             Assert.That(model.StatusMessage, Does.Contain("Created recurring discovery campaign"));
+            Assert.That(model.StatusMessage, Does.Contain("Initial run 'discovery_run_1' is queued now"));
         });
+    }
+
+    [Test]
+    public void GetMemorySummary_ShowsQueuedInitialRun_WhenNoHistoryExistsYet()
+    {
+        var model = new ProductNormaliser.Web.Pages.Sources.RecurringDiscoveryCampaigns.IndexModel(
+            new FakeAdminApiClient(),
+            NullLogger<ProductNormaliser.Web.Pages.Sources.RecurringDiscoveryCampaigns.IndexModel>.Instance);
+
+        var summary = model.GetMemorySummary(new RecurringDiscoveryCampaignDto
+        {
+            CampaignId = "campaign_1",
+            Name = "TV UK",
+            CategoryKeys = ["tv"],
+            AutomationMode = "suggest_accept",
+            Status = "active",
+            CampaignFingerprint = "market:uk|locale:en-gb|categories:tv|brands:",
+            LastRunId = "discovery_run_1",
+            HistoricalRunCount = 0,
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow
+        });
+
+        Assert.That(summary, Is.EqualTo("No historical runs yet. Initial run 'discovery_run_1' is queued or in progress."));
     }
 
     [Test]

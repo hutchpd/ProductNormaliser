@@ -178,6 +178,10 @@ public sealed class DiscoveryRunsController(IDiscoveryRunService discoveryRunSer
             var candidate = await action();
             return candidate is null ? NotFound() : Ok(Map(candidate));
         }
+        catch (ArgumentException exception)
+        {
+            return Conflict(CreateProblem(exception));
+        }
         catch (InvalidOperationException exception)
         {
             return Conflict(CreateProblem(exception));
@@ -188,8 +192,23 @@ public sealed class DiscoveryRunsController(IDiscoveryRunService discoveryRunSer
     {
         return new ValidationProblemDetails(new Dictionary<string, string[]>
         {
-            ["request"] = [exception.Message]
+            ["request"] = [GetProblemMessage(exception)]
         });
+    }
+
+    private static string GetProblemMessage(Exception exception)
+    {
+        if (exception is ArgumentException argumentException
+            && !string.IsNullOrWhiteSpace(argumentException.ParamName))
+        {
+            var suffix = $" (Parameter '{argumentException.ParamName}')";
+            if (argumentException.Message.EndsWith(suffix, StringComparison.Ordinal))
+            {
+                return argumentException.Message[..^suffix.Length];
+            }
+        }
+
+        return exception.Message;
     }
 
     private static Contracts.DiscoveryRunDto Map(DiscoveryRun run)
