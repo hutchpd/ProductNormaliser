@@ -1,9 +1,17 @@
+using System.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using ProductNormaliser.Application.AI;
 using ProductNormaliser.Application.Categories;
 using ProductNormaliser.Application.Governance;
 using ProductNormaliser.Application.Sources;
+using ProductNormaliser.Core.Interfaces;
 using ProductNormaliser.Core.Models;
+using ProductNormaliser.Infrastructure.AI;
+using ProductNormaliser.Infrastructure.Crawling;
+using ProductNormaliser.Infrastructure.Sources;
+using ProductNormaliser.Infrastructure.StructuredData;
 using ProductNormaliser.Worker;
 
 namespace ProductNormaliser.Tests;
@@ -42,10 +50,20 @@ public sealed class DiscoveryRunRegressionHarnessTests
     }
 
     [Test]
-    [Explicit("Manual 10-minute discovery polling harness")]
-    [CancelAfter(600000)]
+    [Explicit("Live 10-minute discovery polling harness")]
+    [CancelAfter(720000)]
     public async Task DiscoveryRun_TvPollingHarness_CompletesAndPersistsSearchProgress()
     {
+        var observationWindow = TimeSpan.FromMinutes(10);
+        var harnessStopwatch = Stopwatch.StartNew();
+        var liveConfiguration = LoadLiveHarnessConfiguration();
+        var liveSearchOptions = BindLiveSearchOptions(liveConfiguration);
+        if (string.IsNullOrWhiteSpace(liveSearchOptions.SearchApiKey))
+        {
+            Assert.Ignore("SourceCandidateDiscovery:SearchApiKey is not configured for the live discovery harness.");
+            return;
+        }
+
         var runStore = new InMemoryDiscoveryRunStore();
         var candidateStore = new InMemoryDiscoveryRunCandidateStore();
         var dispositionStore = new InMemoryDiscoveryRunCandidateDispositionStore();
@@ -53,6 +71,27 @@ public sealed class DiscoveryRunRegressionHarnessTests
         var sourceManagementService = new RecordingSourceManagementService();
         var managementAuditService = new NoOpManagementAuditService();
         var crawlSourceStore = new InMemoryCrawlSourceStore();
+        using var searchHttpClient = new HttpClient();
+        using var fetchHttpClient = new HttpClient();
+        var discoveryRunOperationsOptions = new DiscoveryRunOperationsOptions
+        {
+            SearchTimeoutSeconds = Math.Max(30, liveSearchOptions.SearchTimeoutSeconds),
+            ProbeTimeoutSeconds = Math.Max(20, liveSearchOptions.ProbeTimeoutSeconds),
+            LlmVerificationTimeoutMs = 2000
+        };
+        var searchProvider = new SearchApiSourceCandidateSearchProvider(
+            searchHttpClient,
+            Options.Create(liveSearchOptions),
+            Options.Create(discoveryRunOperationsOptions));
+        var probeService = new HttpSourceCandidateProbeService(
+            new HttpFetcher(fetchHttpClient, Options.Create(new CrawlPipelineOptions()), crawlSourceStore),
+            new SchemaOrgJsonLdExtractor(),
+            new UnusedPageClassificationService(),
+            Options.Create(liveSearchOptions),
+            Options.Create(new SourceOnboardingAutomationOptions()),
+            Options.Create(discoveryRunOperationsOptions),
+            Options.Create(new LlmOptions { Enabled = false }),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<HttpSourceCandidateProbeService>.Instance);
         var runService = new DiscoveryRunService(
             runStore,
             candidateStore,
@@ -67,31 +106,28 @@ public sealed class DiscoveryRunRegressionHarnessTests
             crawlSourceStore,
             sourceManagementService,
             new AllowAllCrawlGovernanceService(),
-            new SlowProgressSearchProvider(),
-            new FixedProbeService(CreateStrongProbeResult()),
+            searchProvider,
+            probeService,
             Options.Create(new SourceOnboardingAutomationOptions()),
-            Options.Create(new DiscoveryRunOperationsOptions
-            {
-                SearchTimeoutSeconds = 30,
-                ProbeTimeoutSeconds = 30,
-                LlmVerificationTimeoutMs = 5000
-            }));
+            Options.Create(discoveryRunOperationsOptions));
 
         var run = await runService.CreateAsync(new CreateDiscoveryRunRequest
         {
             CategoryKeys = ["tv"],
             Market = "UK",
             Locale = "en-GB",
-            AutomationMode = SourceAutomationModes.SuggestAccept,
+            AutomationMode = SourceAutomationModes.OperatorAssisted,
             MaxCandidates = 5
         }, CancellationToken.None);
 
         var processingTask = processor.ProcessNextAsync(CancellationToken.None);
-        var deadlineUtc = DateTime.UtcNow.AddMinutes(10);
+        var deadlineUtc = DateTime.UtcNow.Add(observationWindow);
         var observedRunning = false;
         var observedSearchDiagnostics = false;
         var observedSearchResults = false;
         var observedCandidates = false;
+        var observedTerminalCompletion = false;
+        var lastLoggedSnapshotUtc = DateTime.MinValue;
         DiscoveryRun? finalRun = null;
 
         while (DateTime.UtcNow < deadlineUtc)
@@ -105,16 +141,25 @@ public sealed class DiscoveryRunRegressionHarnessTests
                     diagnostic.Code.StartsWith("search_query_started_", StringComparison.OrdinalIgnoreCase)
                     || diagnostic.Code.StartsWith("search_query_results_", StringComparison.OrdinalIgnoreCase));
                 observedSearchResults |= finalRun.SearchResultCount > 0;
+                observedTerminalCompletion |= string.Equals(finalRun.Status, DiscoveryRunStatuses.Completed, StringComparison.OrdinalIgnoreCase);
+
+                if (lastLoggedSnapshotUtc == DateTime.MinValue || DateTime.UtcNow - lastLoggedSnapshotUtc >= TimeSpan.FromSeconds(30))
+                {
+                    lastLoggedSnapshotUtc = DateTime.UtcNow;
+                    TestContext.Progress.WriteLine($"[{DateTime.UtcNow:u}] status={finalRun.Status} stage={finalRun.CurrentStage} searchResults={finalRun.SearchResultCount} collapsed={finalRun.CollapsedCandidateCount} candidates={candidates.Count} diagnostics={finalRun.Diagnostics.Count}");
+                }
             }
 
             observedCandidates |= candidates.Count > 0;
 
-            if (finalRun is not null && IsTerminalStatus(finalRun.Status))
+            if (finalRun is not null
+                && IsTerminalStatus(finalRun.Status)
+                && !string.Equals(finalRun.Status, DiscoveryRunStatuses.Completed, StringComparison.OrdinalIgnoreCase))
             {
                 break;
             }
 
-            await Task.Delay(200, CancellationToken.None);
+            await Task.Delay(TimeSpan.FromSeconds(5), CancellationToken.None);
         }
 
         await processingTask;
@@ -124,10 +169,12 @@ public sealed class DiscoveryRunRegressionHarnessTests
         Assert.Multiple(() =>
         {
             Assert.That(finalRun, Is.Not.Null);
+            Assert.That(harnessStopwatch.Elapsed, Is.GreaterThanOrEqualTo(observationWindow), "The live harness must observe the run for the full ten-minute window.");
             Assert.That(observedRunning, Is.True, "The run never left the queued state while being polled.");
             Assert.That(observedSearchDiagnostics, Is.True, "No live search-query diagnostics were persisted while the run was executing.");
             Assert.That(observedSearchResults, Is.True, "The run never reported any search results while being polled.");
             Assert.That(observedCandidates, Is.True, "No candidates were ever materialized for the run.");
+            Assert.That(observedTerminalCompletion, Is.True, "The run did not complete successfully during the ten-minute observation window.");
             Assert.That(finalRun!.Status, Is.EqualTo(DiscoveryRunStatuses.Completed));
             Assert.That(finalRun.SearchResultCount, Is.GreaterThan(0));
             Assert.That(finalRun.CollapsedCandidateCount, Is.GreaterThan(0));
@@ -173,6 +220,21 @@ public sealed class DiscoveryRunRegressionHarnessTests
         return string.Equals(status, DiscoveryRunStatuses.Completed, StringComparison.OrdinalIgnoreCase)
             || string.Equals(status, DiscoveryRunStatuses.Cancelled, StringComparison.OrdinalIgnoreCase)
             || string.Equals(status, DiscoveryRunStatuses.Failed, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IConfigurationRoot LoadLiveHarnessConfiguration()
+    {
+        return new ConfigurationBuilder()
+            .AddUserSecrets(typeof(WorkerDiscoveryServiceCollectionExtensions).Assembly, optional: true)
+            .AddEnvironmentVariables()
+            .Build();
+    }
+
+    private static SourceCandidateDiscoveryOptions BindLiveSearchOptions(IConfiguration configuration)
+    {
+        var options = new SourceCandidateDiscoveryOptions();
+        configuration.GetSection(SourceCandidateDiscoveryOptions.SectionName).Bind(options);
+        return options;
     }
 
     private sealed class InMemoryDiscoveryRunStore : IDiscoveryRunStore
@@ -475,6 +537,14 @@ public sealed class DiscoveryRunRegressionHarnessTests
         public Task<SourceCandidateProbeResult> ProbeAsync(SourceCandidateSearchResult candidate, IReadOnlyCollection<string> categoryKeys, string automationMode, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(result);
+        }
+    }
+
+    private sealed class UnusedPageClassificationService : IPageClassificationService
+    {
+        public Task<PageClassificationResult> ClassifyAsync(string content, string category, CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("Live discovery harness should run with LLM disabled and must not invoke page classification.");
         }
     }
 
