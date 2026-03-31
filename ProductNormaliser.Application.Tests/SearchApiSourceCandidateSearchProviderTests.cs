@@ -13,9 +13,11 @@ public sealed class SearchApiSourceCandidateSearchProviderTests
     public async Task SearchAsync_MapsSupportedResults_AndFiltersUnsupportedUris()
     {
         var requests = new List<Uri>();
+      var subscriptionTokens = new List<string?>();
         using var httpClient = new HttpClient(new StubHttpMessageHandler((request, cancellationToken) =>
         {
             requests.Add(request.RequestUri!);
+        subscriptionTokens.Add(request.Headers.TryGetValues("X-Subscription-Token", out var values) ? values.SingleOrDefault() : null);
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(
@@ -65,6 +67,7 @@ public sealed class SearchApiSourceCandidateSearchProviderTests
         {
             Assert.That(requests, Has.Count.EqualTo(2));
             Assert.That(requests.All(uri => uri.AbsolutePath == "/res/v1/web/search"), Is.True);
+            Assert.That(subscriptionTokens, Is.EqualTo(new[] { "test-key", "test-key" }));
           Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Is.EqualTo(new[] { "search_provider_summary" }));
           Assert.That(result.ProviderResultCount, Is.EqualTo(4));
           Assert.That(result.EligibleResultCount, Is.EqualTo(2));
@@ -148,6 +151,111 @@ public sealed class SearchApiSourceCandidateSearchProviderTests
         {
           Assert.That(result.Candidates, Is.Empty);
           Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Is.EqualTo(new[] { "search_provider_rate_limited", "search_provider_summary" }));
+        });
+      }
+
+      [Test]
+      public async Task SearchAsync_WhenProviderReturns422_IncludesResponseDetailInDiagnostic()
+      {
+        using var httpClient = new HttpClient(new StubHttpMessageHandler((request, cancellationToken) =>
+        {
+          _ = request;
+          _ = cancellationToken;
+          return Task.FromResult(new HttpResponseMessage(HttpStatusCode.UnprocessableEntity)
+          {
+            Content = new StringContent("Missing required header X-Subscription-Token", Encoding.UTF8, "text/plain")
+          });
+        }))
+        {
+          BaseAddress = new Uri("https://api.search.brave.com")
+        };
+        var provider = new SearchApiSourceCandidateSearchProvider(
+            httpClient,
+            Options.Create(new SourceCandidateDiscoveryOptions
+            {
+                SearchTimeoutSeconds = 5,
+                MaxSearchQueries = 2,
+                SearchApiKey = "test-key"
+            }),
+            Options.Create(new DiscoveryRunOperationsOptions()));
+
+        var result = await provider.SearchAsync(new DiscoverSourceCandidatesRequest
+        {
+          CategoryKeys = ["tv"]
+        });
+
+        Assert.Multiple(() =>
+        {
+          Assert.That(result.Candidates, Is.Empty);
+          Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Is.EqualTo(new[] { "search_provider_http_error", "search_provider_summary" }));
+          Assert.That(result.Diagnostics[0].Message, Does.Contain("HTTP 422"));
+          Assert.That(result.Diagnostics[0].Message, Does.Contain("Missing required header X-Subscription-Token"));
+        });
+      }
+
+      [Test]
+      public async Task SearchAsync_WhenConstructedDirectly_AddsConfiguredSubscriptionTokenHeader()
+      {
+        using var httpClient = new HttpClient(new StubHttpMessageHandler((request, cancellationToken) =>
+        {
+          _ = cancellationToken;
+          var hasToken = request.Headers.TryGetValues("X-Subscription-Token", out var values)
+              && string.Equals(values.SingleOrDefault(), "test-key", StringComparison.Ordinal);
+
+          if (!hasToken)
+          {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.UnprocessableEntity)
+            {
+              Content = new StringContent("Missing required header X-Subscription-Token", Encoding.UTF8, "text/plain")
+            });
+          }
+
+          return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+          {
+            Content = new StringContent(
+                """
+                {
+                  "web": {
+                    "results": [
+                      {
+                        "title": "Samsung Official Store",
+                        "url": "https://www.samsung.com/uk/tvs/",
+                        "description": "Official Samsung TV range in the UK"
+                      }
+                    ]
+                  }
+                }
+                """,
+                Encoding.UTF8,
+                "application/json")
+          });
+        }))
+        {
+          BaseAddress = new Uri("https://api.search.brave.com")
+        };
+        var provider = new SearchApiSourceCandidateSearchProvider(
+            httpClient,
+            Options.Create(new SourceCandidateDiscoveryOptions
+            {
+                SearchTimeoutSeconds = 5,
+                MaxSearchQueries = 1,
+                SearchApiKey = "test-key"
+            }),
+            Options.Create(new DiscoveryRunOperationsOptions()));
+
+        var result = await provider.SearchAsync(new DiscoverSourceCandidatesRequest
+        {
+          CategoryKeys = ["tv"],
+          BrandHints = ["Samsung"],
+          Market = "UK",
+          Locale = "en-GB"
+        });
+
+        Assert.Multiple(() =>
+        {
+          Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Code), Does.Not.Contain("search_provider_http_error"));
+          Assert.That(result.ProviderResultCount, Is.EqualTo(1));
+          Assert.That(result.Candidates, Has.Count.EqualTo(1));
         });
       }
 

@@ -107,8 +107,10 @@
                     <div><dt>Requested categories</dt><dd>@string.Join(", ", Model.Run.RequestedCategoryKeys)</dd></div>
                     <div><dt>Market / locale</dt><dd>@(string.IsNullOrWhiteSpace(Model.Run.Market) ? "Any market" : Model.Run.Market) / @(string.IsNullOrWhiteSpace(Model.Run.Locale) ? "Any locale" : Model.Run.Locale)</dd></div>
                     <div><dt>Automation mode</dt><dd>@Model.Run.AutomationMode</dd></div>
-                    <div><dt>Search results</dt><dd>@Model.Run.SearchResultCount</dd></div>
+                    <div><dt>Eligible search hits</dt><dd>@Model.Run.SearchResultCount</dd></div>
                     <div><dt>Collapsed candidates</dt><dd>@Model.Run.CollapsedCandidateCount</dd></div>
+                    <div><dt>Provider summary</dt><dd>@Model.SearchProviderSummaryDisplay</dd></div>
+                    <div><dt>Provider issue</dt><dd>@Model.SearchProviderIssueDisplay</dd></div>
                     <div><dt>Suggested</dt><dd>@Model.Run.SuggestedCandidateCount</dd></div>
                     <div><dt>Auto-accepted</dt><dd>@Model.Run.AutoAcceptedCandidateCount</dd></div>
                     <div><dt>Published</dt><dd>@Model.Run.PublishedCandidateCount</dd></div>
@@ -122,6 +124,14 @@
                 @if (!string.IsNullOrWhiteSpace(Model.Run.StatusMessage))
                 {
                     <div class="notice info mt-3">@Model.Run.StatusMessage</div>
+                }
+
+                @if (Model.HasSearchProviderIssue)
+                {
+                    <div class="@Model.SearchProviderIssueNoticeClass mt-3">
+                        <strong>Latest provider issue</strong>
+                        <div>@Model.SearchProviderIssueDisplay</div>
+                    </div>
                 }
 
                 @foreach (var diagnostic in Model.Run.Diagnostics)

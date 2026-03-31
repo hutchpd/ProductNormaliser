@@ -211,6 +211,7 @@ public sealed class DiscoveryRunDetailsPageTests
     {
         var startedUtc = DateTime.UtcNow.AddSeconds(-8);
         var completedUtc = startedUtc.AddSeconds(2);
+        var summaryUtc = completedUtc.AddSeconds(1);
         var client = new FakeAdminApiClient
         {
             DiscoveryRun = CreateRun(
@@ -231,8 +232,16 @@ public sealed class DiscoveryRunDetailsPageTests
                         RecordedUtc = completedUtc,
                         Code = "search_query_results_001",
                         Severity = "info",
-                        Title = "Brave query 1/2 returned 2 candidate(s)",
-                        Message = "Query \"tv retailer UK en-GB\" returned 2 candidate(s): Panel Store <panel.example>, Vision Direct <vision.example>"
+                        Title = "Brave query 1/2 returned 4 raw results and 2 eligible hit(s)",
+                        Message = "Query \"tv retailer UK en-GB\" returned 4 raw Brave results, 2 eligible mapped hit(s), and 2 discounted result(s). Candidate preview: Panel Store <panel.example>, Vision Direct <vision.example>"
+                    },
+                    new SourceCandidateDiscoveryDiagnosticDto
+                    {
+                        RecordedUtc = summaryUtc,
+                        Code = "search_provider_summary",
+                        Severity = "info",
+                        Title = "Brave search summary",
+                        Message = "Issued 2 Brave queries. Raw results: 4. Eligible mapped hits: 2. Discounted before candidate evaluation: 2. Duplicate host hits merged across queries: 1. Final deduplicated candidates: 1."
                     }
                 ])
         };
@@ -248,12 +257,58 @@ public sealed class DiscoveryRunDetailsPageTests
         {
             Assert.That(model.SearchLogEntries.Select(entry => entry.Title), Is.EqualTo(new[]
             {
-                "Brave query 1/2 returned 2 candidate(s)",
+                "Brave query 1/2 returned 4 raw results and 2 eligible hit(s)",
                 "Brave query 1/2 started"
             }));
             Assert.That(model.SearchLogEntries[0].TimestampKind, Is.EqualTo("Recorded"));
+            Assert.That(model.SearchProviderSummaryDisplay, Does.Contain("Raw results: 4."));
+            Assert.That(model.SearchProviderIssueDisplay, Is.EqualTo("No provider issue persisted."));
             Assert.That(model.ActivityLogEntries.Select(entry => entry.Title), Does.Not.Contain("Brave query 1/2 started"));
-            Assert.That(model.ActivityLogEntries.Select(entry => entry.Title), Does.Not.Contain("Brave query 1/2 returned 2 candidate(s)"));
+            Assert.That(model.ActivityLogEntries.Select(entry => entry.Title), Does.Not.Contain("Brave query 1/2 returned 4 raw results and 2 eligible hit(s)"));
+        });
+    }
+
+    [Test]
+    public async Task OnGetAsync_ExposesLatestSearchProviderIssue()
+    {
+        var client = new FakeAdminApiClient
+        {
+            DiscoveryRun = CreateRun(
+                status: "completed",
+                stage: "publish",
+                searchResultCount: 0,
+                collapsedCandidateCount: 0,
+                diagnostics:
+                [
+                    new SourceCandidateDiscoveryDiagnosticDto
+                    {
+                        Code = "search_provider_http_error",
+                        Severity = "error",
+                        Title = "Search provider request failed",
+                        Message = "The search provider returned HTTP 422 while looking up source candidates. Response detail: Missing required header X-Subscription-Token"
+                    },
+                    new SourceCandidateDiscoveryDiagnosticDto
+                    {
+                        Code = "search_provider_summary",
+                        Severity = "info",
+                        Title = "Brave search summary",
+                        Message = "Issued 1 Brave query. Raw results: 0. Eligible mapped hits: 0. Discounted before candidate evaluation: 0. Duplicate host hits merged across queries: 0. Final deduplicated candidates: 0."
+                    }
+                ])
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel>.Instance)
+        {
+            RunId = "discovery_run_1"
+        };
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.SearchProviderSummaryDisplay, Does.Contain("Issued 1 Brave query."));
+            Assert.That(model.HasSearchProviderIssue, Is.True);
+            Assert.That(model.SearchProviderIssueDisplay, Does.Contain("HTTP 422"));
         });
     }
 

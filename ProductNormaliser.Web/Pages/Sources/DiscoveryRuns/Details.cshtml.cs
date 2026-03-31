@@ -127,6 +127,21 @@ public sealed class DetailsModel(
 
     public IReadOnlyList<DiscoveryRunActivityEntryModel> SearchLogEntries => BuildSearchLogEntries();
 
+    public string SearchProviderSummaryDisplay => GetLatestSearchProviderSummary()?.Message ?? "No provider summary persisted yet.";
+
+    public string SearchProviderIssueDisplay => GetLatestSearchProviderIssue()?.Message ?? "No provider issue persisted.";
+
+    public string SearchProviderIssueTone => GetLatestSearchProviderIssue()?.Severity ?? "info";
+
+    public bool HasSearchProviderIssue => GetLatestSearchProviderIssue() is not null;
+
+    public string SearchProviderIssueNoticeClass => SearchProviderIssueTone switch
+    {
+        "error" => "notice error",
+        "warning" => "notice warning",
+        _ => "notice info"
+    };
+
     public string LastHeartbeatDisplay => Run?.LastHeartbeatUtc?.ToString("u") ?? "No worker heartbeat persisted yet";
 
     public string? WorkerLivenessWarning => Run is null ? null : BuildWorkerLivenessWarning(Run, DateTime.UtcNow);
@@ -363,7 +378,7 @@ public sealed class DetailsModel(
                 TimestampKind = ExactTimestampKind,
                 Tone = "success",
                 Title = "Search completed",
-                Message = $"Search returned {Run.SearchResultCount} raw result{(Run.SearchResultCount == 1 ? string.Empty : "s")} and collapsed them into {Run.CollapsedCandidateCount} candidate slot{(Run.CollapsedCandidateCount == 1 ? string.Empty : "s")}."
+                Message = $"Search persisted {Run.SearchResultCount} eligible hit{(Run.SearchResultCount == 1 ? string.Empty : "s")} and collapsed them into {Run.CollapsedCandidateCount} candidate slot{(Run.CollapsedCandidateCount == 1 ? string.Empty : "s")}."
             });
         }
         else if (Run.SearchResultCount > 0 || Run.CollapsedCandidateCount > 0)
@@ -374,7 +389,7 @@ public sealed class DetailsModel(
                 TimestampKind = SnapshotTimestampKind,
                 Tone = "info",
                 Title = "Search snapshot updated",
-                Message = $"The latest run snapshot shows {Run.SearchResultCount} raw result{(Run.SearchResultCount == 1 ? string.Empty : "s")} and {Run.CollapsedCandidateCount} collapsed candidate slot{(Run.CollapsedCandidateCount == 1 ? string.Empty : "s")}."
+                Message = $"The latest run snapshot shows {Run.SearchResultCount} eligible search hit{(Run.SearchResultCount == 1 ? string.Empty : "s")} and {Run.CollapsedCandidateCount} collapsed candidate slot{(Run.CollapsedCandidateCount == 1 ? string.Empty : "s")}."
             });
         }
 
@@ -459,6 +474,16 @@ public sealed class DetailsModel(
             .OrderByDescending(entry => entry.TimestampUtc)
             .ThenBy(entry => entry.TimestampKind, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private SourceCandidateDiscoveryDiagnosticDto? GetLatestSearchProviderSummary()
+    {
+        return Run?.Diagnostics.LastOrDefault(diagnostic => string.Equals(diagnostic.Code, "search_provider_summary", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private SourceCandidateDiscoveryDiagnosticDto? GetLatestSearchProviderIssue()
+    {
+        return Run?.Diagnostics.LastOrDefault(IsSearchProviderIssueDiagnostic);
     }
 
     private static bool TryGetSearchCompletedUtc(DiscoveryRunDto run, out DateTime timestampUtc)
@@ -568,6 +593,17 @@ public sealed class DetailsModel(
     {
         return diagnostic.Code.StartsWith("search_query_started_", StringComparison.OrdinalIgnoreCase)
             || diagnostic.Code.StartsWith("search_query_results_", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSearchProviderIssueDiagnostic(SourceCandidateDiscoveryDiagnosticDto diagnostic)
+    {
+        if (!diagnostic.Code.StartsWith("search_provider_", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return !string.Equals(diagnostic.Code, "search_provider_summary", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(diagnostic.Code, "search_provider_no_results", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildDiscoveryRequestSummary(DiscoveryRunDto run)

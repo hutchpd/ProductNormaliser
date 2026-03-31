@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Net.Http.Headers;
 using Microsoft.Extensions.Options;
 using ProductNormaliser.Application.Sources;
 
@@ -10,6 +11,7 @@ public sealed class SearchApiSourceCandidateSearchProvider(
     IOptions<SourceCandidateDiscoveryOptions> options,
     IOptions<DiscoveryRunOperationsOptions> operationsOptions) : IProgressReportingSourceCandidateSearchProvider
 {
+    private const string SubscriptionTokenHeaderName = "X-Subscription-Token";
     private static readonly Uri DefaultBaseAddress = new("https://api.search.brave.com", UriKind.Absolute);
     private readonly SourceCandidateDiscoveryOptions options = options.Value;
     private readonly DiscoveryRunOperationsOptions operationsOptions = operationsOptions.Value;
@@ -309,6 +311,7 @@ public sealed class SearchApiSourceCandidateSearchProvider(
         try
         {
             using var message = new HttpRequestMessage(HttpMethod.Get, BuildRequestUri(query));
+            ApplyRequestHeaders(message);
             using var response = await httpClient.SendAsync(message, cancellationToken);
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
@@ -329,6 +332,7 @@ public sealed class SearchApiSourceCandidateSearchProvider(
 
             if (!response.IsSuccessStatusCode)
             {
+                var responseDetail = await ReadErrorDetailAsync(response, cancellationToken);
                 return new SourceCandidateSearchResponse
                 {
                     Diagnostics =
@@ -338,7 +342,7 @@ public sealed class SearchApiSourceCandidateSearchProvider(
                             Code = "search_provider_http_error",
                             Severity = SourceCandidateDiscoveryDiagnostic.SeverityError,
                             Title = "Search provider request failed",
-                            Message = $"The search provider returned HTTP {(int)response.StatusCode} while looking up source candidates. Manual source registration is still available while provider-backed lookup is degraded."
+                            Message = $"The search provider returned HTTP {(int)response.StatusCode} while looking up source candidates.{FormatProviderErrorDetail(responseDetail)} Manual source registration is still available while provider-backed lookup is degraded."
                         }
                     ]
                 };
@@ -569,6 +573,51 @@ public sealed class SearchApiSourceCandidateSearchProvider(
         return normalized.StartsWith("www.", StringComparison.OrdinalIgnoreCase)
             ? normalized[4..]
             : normalized;
+    }
+
+    private void ApplyRequestHeaders(HttpRequestMessage message)
+    {
+        message.Headers.Accept.Clear();
+        message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        if (string.IsNullOrWhiteSpace(options.SearchApiKey))
+        {
+            return;
+        }
+
+        message.Headers.Remove(SubscriptionTokenHeaderName);
+        message.Headers.TryAddWithoutValidation(SubscriptionTokenHeaderName, options.SearchApiKey);
+    }
+
+    private static async Task<string?> ReadErrorDetailAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (response.Content is null)
+        {
+            return null;
+        }
+
+        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return null;
+        }
+
+        var condensed = string.Join(' ', payload
+            .Split(['\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        if (condensed.Length <= 240)
+        {
+            return condensed;
+        }
+
+        return condensed[..240] + "...";
+    }
+
+    private static string FormatProviderErrorDetail(string? detail)
+    {
+        return string.IsNullOrWhiteSpace(detail)
+            ? string.Empty
+            : $" Response detail: {detail}";
     }
 
     private Uri BuildRequestUri(string query)

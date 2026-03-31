@@ -188,6 +188,53 @@ public sealed class DiscoveryRunRegressionHarnessTests
         });
     }
 
+    [Test]
+    [Explicit("Live Brave provider smoke test")]
+    [CancelAfter(60000)]
+    public async Task SearchProvider_TvSmokeTest_DoesNotReturnProviderHttpError()
+    {
+        var liveConfiguration = LoadLiveHarnessConfiguration();
+        var liveSearchOptions = BindLiveSearchOptions(liveConfiguration);
+        if (string.IsNullOrWhiteSpace(liveSearchOptions.SearchApiKey))
+        {
+            Assert.Ignore("SourceCandidateDiscovery:SearchApiKey is not configured for the live search smoke test.");
+            return;
+        }
+
+        using var searchHttpClient = new HttpClient();
+        var provider = new SearchApiSourceCandidateSearchProvider(
+            searchHttpClient,
+            Options.Create(liveSearchOptions),
+            Options.Create(new DiscoveryRunOperationsOptions
+            {
+                SearchTimeoutSeconds = Math.Max(30, liveSearchOptions.SearchTimeoutSeconds)
+            }));
+
+        var result = await provider.SearchAsync(new DiscoverSourceCandidatesRequest
+        {
+            CategoryKeys = ["tv"],
+            Market = "UK",
+            Locale = "en-GB"
+        }, CancellationToken.None);
+
+        var blockingCodes = result.Diagnostics
+            .Where(diagnostic => string.Equals(diagnostic.Severity, SourceCandidateDiscoveryDiagnostic.SeverityError, StringComparison.OrdinalIgnoreCase))
+            .Select(diagnostic => diagnostic.Code)
+            .ToArray();
+
+        foreach (var diagnostic in result.Diagnostics)
+        {
+            TestContext.Progress.WriteLine($"[{diagnostic.Code}] {diagnostic.Title} :: {diagnostic.Message}");
+        }
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(blockingCodes, Does.Not.Contain("search_provider_http_error"));
+            Assert.That(blockingCodes, Does.Not.Contain("search_provider_request_failed"));
+            Assert.That(blockingCodes, Does.Not.Contain("search_provider_rate_limited"));
+        });
+    }
+
     private static SourceCandidateProbeResult CreateStrongProbeResult()
     {
         return new SourceCandidateProbeResult

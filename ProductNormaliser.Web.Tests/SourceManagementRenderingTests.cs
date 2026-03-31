@@ -532,12 +532,75 @@ public sealed class SourceManagementRenderingTests
         });
     }
 
+    [Test]
+    public async Task SourcesIndex_RendersSearchProviderSummaryAndIssue_OnDiscoveryRunDetails()
+    {
+        var fakeAdminApiClient = new FakeAdminApiClient
+        {
+            Categories =
+            [
+                new CategoryMetadataDto
+                {
+                    CategoryKey = "tv",
+                    DisplayName = "TVs",
+                    FamilyKey = "display",
+                    FamilyDisplayName = "Display",
+                    IconKey = "tv",
+                    CrawlSupportStatus = "Supported",
+                    SchemaCompletenessScore = 0.95m,
+                    IsEnabled = true
+                }
+            ],
+            Sources = [],
+            CreatedDiscoveryRun = CreateDiscoveryRunDto(runId: "discovery_run_provider_issue"),
+            DiscoveryRun = CreateDiscoveryRunDto(
+                runId: "discovery_run_provider_issue",
+                searchResultCount: 0,
+                collapsedCandidateCount: 0,
+                diagnostics:
+                [
+                    new SourceCandidateDiscoveryDiagnosticDto
+                    {
+                        Code = "search_provider_http_error",
+                        Severity = "error",
+                        Title = "Search provider request failed",
+                        Message = "The search provider returned HTTP 422 while looking up source candidates. Response detail: Missing required header X-Subscription-Token"
+                    },
+                    new SourceCandidateDiscoveryDiagnosticDto
+                    {
+                        Code = "search_provider_summary",
+                        Severity = "info",
+                        Title = "Brave search summary",
+                        Message = "Issued 1 Brave query. Raw results: 0. Eligible mapped hits: 0. Discounted before candidate evaluation: 0. Duplicate host hits merged across queries: 0. Final deduplicated candidates: 0."
+                    }
+                ]),
+            DiscoveryRunCandidates = []
+        };
+
+        await using var factory = new ProductWebApplicationFactory(fakeAdminApiClient);
+        using var client = await factory.CreateOperatorClientAsync();
+
+        var html = await client.GetStringAsync("/Sources/DiscoveryRuns/Details?runId=discovery_run_provider_issue");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(html, Does.Contain("Provider summary"));
+            Assert.That(html, Does.Contain("Issued 1 Brave query. Raw results: 0."));
+            Assert.That(html, Does.Contain("Provider issue"));
+            Assert.That(html, Does.Contain("HTTP 422"));
+            Assert.That(html, Does.Contain("Latest provider issue"));
+        });
+    }
+
     private static DiscoveryRunDto CreateDiscoveryRunDto(
         string runId,
         string status = "running",
         string stage = "decide",
         string llmStatus = "disabled",
         string llmStatusMessage = "LLM validation is disabled.",
+        int searchResultCount = 1,
+        int collapsedCandidateCount = 1,
+        IReadOnlyList<SourceCandidateDiscoveryDiagnosticDto>? diagnostics = null,
         DateTime? createdUtc = null,
         DateTime? updatedUtc = null,
         DateTime? startedUtc = null,
@@ -554,13 +617,14 @@ public sealed class SourceManagementRenderingTests
             StatusMessage = "Discovery run is ready for operator review.",
             LlmStatus = llmStatus,
             LlmStatusMessage = llmStatusMessage,
-            SearchResultCount = 1,
-            CollapsedCandidateCount = 1,
+            SearchResultCount = searchResultCount,
+            CollapsedCandidateCount = collapsedCandidateCount,
             ProbeCompletedCount = 1,
             CreatedUtc = createdUtc ?? DateTime.UtcNow,
             UpdatedUtc = updatedUtc ?? DateTime.UtcNow,
             StartedUtc = startedUtc ?? DateTime.UtcNow.AddMinutes(-1),
-            LastHeartbeatUtc = lastHeartbeatUtc
+            LastHeartbeatUtc = lastHeartbeatUtc,
+            Diagnostics = diagnostics ?? []
         };
     }
 
