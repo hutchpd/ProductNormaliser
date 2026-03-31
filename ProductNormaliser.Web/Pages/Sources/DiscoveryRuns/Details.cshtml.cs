@@ -10,6 +10,9 @@ public sealed class DetailsModel(
     IProductNormaliserAdminApiClient adminApiClient,
     ILogger<DetailsModel> logger) : PageModel
 {
+    private static readonly TimeSpan QueuePickupWarningThreshold = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan MinimumHeartbeatWarningThreshold = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan HeartbeatBudgetSlack = TimeSpan.FromSeconds(15);
     private const string SnapshotTimestampKind = "Snapshot";
     private const string ExactTimestampKind = "Recorded";
     private const string ReviewPrioritySort = "review_priority";
@@ -121,6 +124,14 @@ public sealed class DetailsModel(
     public bool HasArchivedCandidatePages => ArchivedCandidatePage.TotalPages > 1;
 
     public IReadOnlyList<DiscoveryRunActivityEntryModel> ActivityLogEntries => BuildActivityLogEntries();
+
+    public IReadOnlyList<DiscoveryRunActivityEntryModel> SearchLogEntries => BuildSearchLogEntries();
+
+    public string LastHeartbeatDisplay => Run?.LastHeartbeatUtc?.ToString("u") ?? "No worker heartbeat persisted yet";
+
+    public string? WorkerLivenessWarning => Run is null ? null : BuildWorkerLivenessWarning(Run, DateTime.UtcNow);
+
+    public bool HasWorkerLivenessWarning => !string.IsNullOrWhiteSpace(WorkerLivenessWarning);
 
     public string GetAutoAcceptBlockerCoverage(DiscoveryRunCandidateBlockerSummaryDto blocker)
     {
@@ -393,10 +404,15 @@ public sealed class DetailsModel(
 
         foreach (var diagnostic in Run.Diagnostics)
         {
+            if (IsSearchProgressDiagnostic(diagnostic))
+            {
+                continue;
+            }
+
             entries.Add(new DiscoveryRunActivityEntryModel
             {
-                TimestampUtc = Run.UpdatedUtc,
-                TimestampKind = SnapshotTimestampKind,
+                TimestampUtc = diagnostic.RecordedUtc ?? Run.UpdatedUtc,
+                TimestampKind = diagnostic.RecordedUtc is null ? SnapshotTimestampKind : ExactTimestampKind,
                 Tone = diagnostic.Severity,
                 Title = diagnostic.Title,
                 Message = diagnostic.Message,
@@ -422,6 +438,29 @@ public sealed class DetailsModel(
             .ToArray();
     }
 
+    private IReadOnlyList<DiscoveryRunActivityEntryModel> BuildSearchLogEntries()
+    {
+        if (Run is null)
+        {
+            return [];
+        }
+
+        return Run.Diagnostics
+            .Where(IsSearchProgressDiagnostic)
+            .Select(diagnostic => new DiscoveryRunActivityEntryModel
+            {
+                TimestampUtc = diagnostic.RecordedUtc ?? Run.UpdatedUtc,
+                TimestampKind = diagnostic.RecordedUtc is null ? SnapshotTimestampKind : ExactTimestampKind,
+                Tone = diagnostic.Severity,
+                Title = diagnostic.Title,
+                Message = diagnostic.Message,
+                Code = diagnostic.Code
+            })
+            .OrderByDescending(entry => entry.TimestampUtc)
+            .ThenBy(entry => entry.TimestampKind, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     private static bool TryGetSearchCompletedUtc(DiscoveryRunDto run, out DateTime timestampUtc)
     {
         if (run.SearchElapsedMs is not { } searchElapsedMs)
@@ -442,11 +481,93 @@ public sealed class DetailsModel(
             : $"{durationMs}ms";
     }
 
+    private static string? BuildWorkerLivenessWarning(DiscoveryRunDto run, DateTime utcNow)
+    {
+        if (string.Equals(run.Status, "queued", StringComparison.OrdinalIgnoreCase))
+        {
+            var queuedAge = utcNow - Max(run.UpdatedUtc, run.CreatedUtc);
+            if (queuedAge >= QueuePickupWarningThreshold)
+            {
+                return $"This run has remained queued for {FormatAge(queuedAge)} without worker pickup. Worker capacity may be unavailable or the worker process may be offline.";
+            }
+
+            return null;
+        }
+
+        if (!string.Equals(run.Status, "running", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(run.Status, "cancel_requested", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var heartbeatUtc = run.LastHeartbeatUtc ?? run.UpdatedUtc;
+        var heartbeatAge = utcNow - heartbeatUtc;
+        var warningThreshold = GetHeartbeatWarningThreshold(run);
+        if (heartbeatAge < warningThreshold)
+        {
+            return null;
+        }
+
+        return $"The worker has not heartbeated for {FormatAge(heartbeatAge)} while this run remains active. The {DiscoveryRunPresentation.GetStageLabel(run.CurrentStage)} stage may be stalled or the worker may be offline.";
+    }
+
+    private static TimeSpan GetHeartbeatWarningThreshold(DiscoveryRunDto run)
+    {
+        var stageBudgetMs = NormalizeStageBudget(run);
+        if (stageBudgetMs is > 0)
+        {
+            return TimeSpan.FromMilliseconds(stageBudgetMs.Value) + HeartbeatBudgetSlack;
+        }
+
+        return MinimumHeartbeatWarningThreshold;
+    }
+
+    private static long? NormalizeStageBudget(DiscoveryRunDto run)
+    {
+        return run.CurrentStage switch
+        {
+            "search" => run.SearchTimeoutBudgetMs,
+            "probe" => run.ProbeTimeoutBudgetMs,
+            "llm_verify" => Math.Max(run.ProbeTimeoutBudgetMs ?? 0L, run.LlmTimeoutBudgetMs ?? 0L),
+            _ => null
+        };
+    }
+
+    private static DateTime Max(DateTime left, DateTime right)
+    {
+        return left >= right ? left : right;
+    }
+
+    private static string FormatAge(TimeSpan elapsed)
+    {
+        elapsed = elapsed < TimeSpan.Zero ? TimeSpan.Zero : elapsed;
+
+        if (elapsed.TotalHours >= 1)
+        {
+            return $"{(int)elapsed.TotalHours}h {elapsed.Minutes}m";
+        }
+
+        if (elapsed.TotalMinutes >= 1)
+        {
+            return $"{(int)elapsed.TotalMinutes}m {elapsed.Seconds}s";
+        }
+
+        return elapsed.TotalSeconds >= 1
+            ? $"{Math.Max(1, (int)Math.Round(elapsed.TotalSeconds, MidpointRounding.AwayFromZero))}s"
+            : "<1s";
+    }
+
     private static bool IsSearchTimeoutDiagnostic(SourceCandidateDiscoveryDiagnosticDto diagnostic)
     {
         return string.Equals(diagnostic.Code, "search_timeout", StringComparison.OrdinalIgnoreCase)
             || string.Equals(diagnostic.Code, "search_provider_timeout", StringComparison.OrdinalIgnoreCase)
             || string.Equals(diagnostic.Code, "search.provider.timeout", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSearchProgressDiagnostic(SourceCandidateDiscoveryDiagnosticDto diagnostic)
+    {
+        return diagnostic.Code.StartsWith("search_query_started_", StringComparison.OrdinalIgnoreCase)
+            || diagnostic.Code.StartsWith("search_query_results_", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildDiscoveryRequestSummary(DiscoveryRunDto run)

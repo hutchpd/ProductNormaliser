@@ -44,5 +44,6 @@ public sealed class DiscoveryRunDto
     public DateTime? StartedUtc { get; init; }
     public DateTime? CompletedUtc { get; init; }
     public DateTime? CancelRequestedUtc { get; init; }
+    public DateTime? LastHeartbeatUtc { get; init; }
     public IReadOnlyList<SourceCandidateDiscoveryDiagnosticDto> Diagnostics { get; init; } = [];
 }

@@ -16,6 +16,7 @@ public sealed class SourceCandidateDiscoveryResponseDto
 
 public sealed class SourceCandidateDiscoveryDiagnosticDto
 {
+    public DateTime? RecordedUtc { get; init; }
     public string Code { get; init; } = string.Empty;
     public string Severity { get; init; } = string.Empty;
     public string Title { get; init; } = string.Empty;

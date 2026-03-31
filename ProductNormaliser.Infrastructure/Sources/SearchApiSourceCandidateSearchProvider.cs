@@ -8,13 +8,30 @@ namespace ProductNormaliser.Infrastructure.Sources;
 public sealed class SearchApiSourceCandidateSearchProvider(
     HttpClient httpClient,
     IOptions<SourceCandidateDiscoveryOptions> options,
-    IOptions<DiscoveryRunOperationsOptions> operationsOptions) : ISourceCandidateSearchProvider
+    IOptions<DiscoveryRunOperationsOptions> operationsOptions) : IProgressReportingSourceCandidateSearchProvider
 {
     private static readonly Uri DefaultBaseAddress = new("https://api.search.brave.com", UriKind.Absolute);
     private readonly SourceCandidateDiscoveryOptions options = options.Value;
     private readonly DiscoveryRunOperationsOptions operationsOptions = operationsOptions.Value;
 
     public async Task<SourceCandidateSearchResponse> SearchAsync(DiscoverSourceCandidatesRequest request, CancellationToken cancellationToken = default)
+    {
+        return await SearchInternalAsync(request, progressReporter: null, cancellationToken);
+    }
+
+    public async Task<SourceCandidateSearchResponse> SearchAsync(
+        DiscoverSourceCandidatesRequest request,
+        Func<SourceCandidateDiscoveryDiagnostic, CancellationToken, Task> progressReporter,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(progressReporter);
+        return await SearchInternalAsync(request, progressReporter, cancellationToken);
+    }
+
+    private async Task<SourceCandidateSearchResponse> SearchInternalAsync(
+        DiscoverSourceCandidatesRequest request,
+        Func<SourceCandidateDiscoveryDiagnostic, CancellationToken, Task>? progressReporter,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -51,11 +68,27 @@ public sealed class SearchApiSourceCandidateSearchProvider(
             });
         }
 
+        var queries = BuildQueries(request)
+            .Take(Math.Max(1, options.MaxSearchQueries))
+            .ToArray();
+
         try
         {
-            foreach (var query in BuildQueries(request).Take(Math.Max(1, options.MaxSearchQueries)))
+            for (var index = 0; index < queries.Length; index++)
             {
+                var query = queries[index];
+                if (progressReporter is not null)
+                {
+                    await progressReporter(CreateQueryStartedDiagnostic(query, index + 1, queries.Length), cancellationToken);
+                }
+
                 var queryResponse = await SearchQueryAsync(query, request, timeoutCts.Token);
+
+                if (progressReporter is not null)
+                {
+                    await progressReporter(CreateQueryResultDiagnostic(query, index + 1, queries.Length, queryResponse), cancellationToken);
+                }
+
                 MergeDiagnostics(diagnostics, queryResponse.Diagnostics);
 
                 foreach (var candidate in queryResponse.Candidates)
@@ -147,6 +180,68 @@ public sealed class SearchApiSourceCandidateSearchProvider(
                 .ToArray(),
             Diagnostics = diagnostics
         };
+    }
+
+    private static SourceCandidateDiscoveryDiagnostic CreateQueryStartedDiagnostic(string query, int index, int totalQueries)
+    {
+        return new SourceCandidateDiscoveryDiagnostic
+        {
+            RecordedUtc = DateTime.UtcNow,
+            Code = $"search_query_started_{index:D3}",
+            Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
+            Title = $"Brave query {index}/{Math.Max(1, totalQueries)} started",
+            Message = $"Searching Brave for \"{query}\"."
+        };
+    }
+
+    private static SourceCandidateDiscoveryDiagnostic CreateQueryResultDiagnostic(
+        string query,
+        int index,
+        int totalQueries,
+        SourceCandidateSearchResponse response)
+    {
+        var error = response.Diagnostics.FirstOrDefault(IsBlockingDiagnostic);
+        if (error is not null)
+        {
+            return new SourceCandidateDiscoveryDiagnostic
+            {
+                RecordedUtc = DateTime.UtcNow,
+                Code = $"search_query_results_{index:D3}",
+                Severity = SourceCandidateDiscoveryDiagnostic.SeverityWarning,
+                Title = $"Brave query {index}/{Math.Max(1, totalQueries)} failed",
+                Message = $"Query \"{query}\" did not yield usable candidates. {error.Message}"
+            };
+        }
+
+        if (response.Candidates.Count == 0)
+        {
+            return new SourceCandidateDiscoveryDiagnostic
+            {
+                RecordedUtc = DateTime.UtcNow,
+                Code = $"search_query_results_{index:D3}",
+                Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
+                Title = $"Brave query {index}/{Math.Max(1, totalQueries)} returned no candidates",
+                Message = $"Query \"{query}\" completed without any eligible source candidates."
+            };
+        }
+
+        return new SourceCandidateDiscoveryDiagnostic
+        {
+            RecordedUtc = DateTime.UtcNow,
+            Code = $"search_query_results_{index:D3}",
+            Severity = SourceCandidateDiscoveryDiagnostic.SeverityInfo,
+            Title = $"Brave query {index}/{Math.Max(1, totalQueries)} returned {response.Candidates.Count} candidate(s)",
+            Message = $"Query \"{query}\" returned {response.Candidates.Count} candidate(s): {FormatCandidatePreview(response.Candidates)}"
+        };
+    }
+
+    private static string FormatCandidatePreview(IReadOnlyList<SourceCandidateSearchResult> candidates)
+    {
+        return string.Join(", ",
+            candidates
+                .Take(5)
+                .Select(candidate => $"{candidate.DisplayName} <{candidate.Host}>")
+                .DefaultIfEmpty("no eligible hosts"));
     }
 
     private IReadOnlyList<string> BuildQueries(DiscoverSourceCandidatesRequest request)

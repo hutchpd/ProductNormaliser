@@ -238,8 +238,10 @@ public sealed class DiscoveryRunsController(IDiscoveryRunService discoveryRunSer
             StartedUtc = run.StartedUtc,
             CompletedUtc = run.CompletedUtc,
             CancelRequestedUtc = run.CancelRequestedUtc,
+            LastHeartbeatUtc = run.LastHeartbeatUtc,
             Diagnostics = run.Diagnostics.Select(diagnostic => new Contracts.SourceCandidateDiscoveryDiagnosticDto
             {
+                RecordedUtc = diagnostic.RecordedUtc,
                 Code = diagnostic.Code,
                 Severity = diagnostic.Severity,
                 Title = diagnostic.Title,

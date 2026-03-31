@@ -479,12 +479,69 @@ public sealed class SourceManagementRenderingTests
         });
     }
 
+    [Test]
+    public async Task SourcesIndex_RendersQueuedWorkerWarning_WhenDiscoveryRunHasNotBeenPickedUp()
+    {
+        var staleQueuedUtc = DateTime.UtcNow.AddMinutes(-10);
+        var fakeAdminApiClient = new FakeAdminApiClient
+        {
+            Categories =
+            [
+                new CategoryMetadataDto
+                {
+                    CategoryKey = "tv",
+                    DisplayName = "TVs",
+                    FamilyKey = "display",
+                    FamilyDisplayName = "Display",
+                    IconKey = "tv",
+                    CrawlSupportStatus = "Supported",
+                    SchemaCompletenessScore = 0.95m,
+                    IsEnabled = true
+                }
+            ],
+            Sources = [],
+            CreatedDiscoveryRun = CreateDiscoveryRunDto(
+                runId: "discovery_run_stale_queue",
+                status: "queued",
+                stage: "search",
+                createdUtc: staleQueuedUtc,
+                updatedUtc: staleQueuedUtc,
+                startedUtc: null,
+                lastHeartbeatUtc: null),
+            DiscoveryRun = CreateDiscoveryRunDto(
+                runId: "discovery_run_stale_queue",
+                status: "queued",
+                stage: "search",
+                createdUtc: staleQueuedUtc,
+                updatedUtc: staleQueuedUtc,
+                startedUtc: null,
+                lastHeartbeatUtc: null),
+            DiscoveryRunCandidates = []
+        };
+
+        await using var factory = new ProductWebApplicationFactory(fakeAdminApiClient);
+        using var client = await factory.CreateOperatorClientAsync();
+
+        var html = await client.GetStringAsync("/Sources/DiscoveryRuns/Details?runId=discovery_run_stale_queue");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(html, Does.Contain("remained queued"));
+            Assert.That(html, Does.Contain("Last heartbeat"));
+            Assert.That(html, Does.Contain("No worker heartbeat persisted yet"));
+        });
+    }
+
     private static DiscoveryRunDto CreateDiscoveryRunDto(
         string runId,
         string status = "running",
         string stage = "decide",
         string llmStatus = "disabled",
-        string llmStatusMessage = "LLM validation is disabled.")
+        string llmStatusMessage = "LLM validation is disabled.",
+        DateTime? createdUtc = null,
+        DateTime? updatedUtc = null,
+        DateTime? startedUtc = null,
+        DateTime? lastHeartbeatUtc = null)
     {
         return new DiscoveryRunDto
         {
@@ -500,9 +557,10 @@ public sealed class SourceManagementRenderingTests
             SearchResultCount = 1,
             CollapsedCandidateCount = 1,
             ProbeCompletedCount = 1,
-            CreatedUtc = DateTime.UtcNow,
-            UpdatedUtc = DateTime.UtcNow,
-            StartedUtc = DateTime.UtcNow.AddMinutes(-1)
+            CreatedUtc = createdUtc ?? DateTime.UtcNow,
+            UpdatedUtc = updatedUtc ?? DateTime.UtcNow,
+            StartedUtc = startedUtc ?? DateTime.UtcNow.AddMinutes(-1),
+            LastHeartbeatUtc = lastHeartbeatUtc
         };
     }
 

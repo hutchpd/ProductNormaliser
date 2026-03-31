@@ -207,6 +207,121 @@ public sealed class DiscoveryRunDetailsPageTests
     }
 
     [Test]
+    public async Task OnGetAsync_BuildsSearchLiveLogEntries_FromRecordedSearchDiagnostics()
+    {
+        var startedUtc = DateTime.UtcNow.AddSeconds(-8);
+        var completedUtc = startedUtc.AddSeconds(2);
+        var client = new FakeAdminApiClient
+        {
+            DiscoveryRun = CreateRun(
+                status: "running",
+                stage: "search",
+                diagnostics:
+                [
+                    new SourceCandidateDiscoveryDiagnosticDto
+                    {
+                        RecordedUtc = startedUtc,
+                        Code = "search_query_started_001",
+                        Severity = "info",
+                        Title = "Brave query 1/2 started",
+                        Message = "Searching Brave for \"tv retailer UK en-GB\"."
+                    },
+                    new SourceCandidateDiscoveryDiagnosticDto
+                    {
+                        RecordedUtc = completedUtc,
+                        Code = "search_query_results_001",
+                        Severity = "info",
+                        Title = "Brave query 1/2 returned 2 candidate(s)",
+                        Message = "Query \"tv retailer UK en-GB\" returned 2 candidate(s): Panel Store <panel.example>, Vision Direct <vision.example>"
+                    }
+                ])
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel>.Instance)
+        {
+            RunId = "discovery_run_1"
+        };
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.SearchLogEntries.Select(entry => entry.Title), Is.EqualTo(new[]
+            {
+                "Brave query 1/2 returned 2 candidate(s)",
+                "Brave query 1/2 started"
+            }));
+            Assert.That(model.SearchLogEntries[0].TimestampKind, Is.EqualTo("Recorded"));
+            Assert.That(model.ActivityLogEntries.Select(entry => entry.Title), Does.Not.Contain("Brave query 1/2 started"));
+            Assert.That(model.ActivityLogEntries.Select(entry => entry.Title), Does.Not.Contain("Brave query 1/2 returned 2 candidate(s)"));
+        });
+    }
+
+    [Test]
+    public async Task OnGetAsync_ShowsQueuedWorkerWarning_WhenRunHasSatQueuedTooLong()
+    {
+        var queuedUtc = DateTime.UtcNow.AddMinutes(-10);
+        var client = new FakeAdminApiClient
+        {
+            DiscoveryRun = CreateRun(
+                status: "queued",
+                stage: "search",
+                createdUtc: queuedUtc,
+                updatedUtc: queuedUtc,
+                startedUtc: null,
+                lastHeartbeatUtc: null)
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel>.Instance)
+        {
+            RunId = "discovery_run_1"
+        };
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.HasWorkerLivenessWarning, Is.True);
+            Assert.That(model.WorkerLivenessWarning, Does.Contain("remained queued"));
+            Assert.That(model.WorkerLivenessWarning, Does.Contain("worker pickup"));
+            Assert.That(model.LastHeartbeatDisplay, Is.EqualTo("No worker heartbeat persisted yet"));
+        });
+    }
+
+    [Test]
+    public async Task OnGetAsync_ShowsStaleHeartbeatWarning_WhenActiveRunStopsHeartbeating()
+    {
+        var staleHeartbeatUtc = DateTime.UtcNow.AddMinutes(-2);
+        var client = new FakeAdminApiClient
+        {
+            DiscoveryRun = CreateRun(
+                status: "running",
+                stage: "search",
+                searchElapsedMs: 1000,
+                createdUtc: DateTime.UtcNow.AddMinutes(-5),
+                updatedUtc: staleHeartbeatUtc,
+                startedUtc: DateTime.UtcNow.AddMinutes(-4),
+                lastHeartbeatUtc: staleHeartbeatUtc,
+                searchTimeoutBudgetMs: 20000)
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel(client, NullLogger<ProductNormaliser.Web.Pages.Sources.DiscoveryRuns.DetailsModel>.Instance)
+        {
+            RunId = "discovery_run_1"
+        };
+
+        await model.OnGetAsync(CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.HasWorkerLivenessWarning, Is.True);
+            Assert.That(model.WorkerLivenessWarning, Does.Contain("has not heartbeated"));
+            Assert.That(model.WorkerLivenessWarning, Does.Contain("Search"));
+            Assert.That(model.LastHeartbeatDisplay, Is.EqualTo(staleHeartbeatUtc.ToString("u")));
+        });
+    }
+
+    [Test]
     public async Task OnGetAsync_ExposesProcessorOnlyDecisionReasons_ForSuggestedCandidates()
     {
         var client = new FakeAdminApiClient
@@ -372,11 +487,16 @@ public sealed class DiscoveryRunDetailsPageTests
         string status,
         string stage,
         long? searchElapsedMs = null,
+        long? searchTimeoutBudgetMs = null,
         long? llmTimeoutBudgetMs = null,
         int searchResultCount = 4,
         int collapsedCandidateCount = 3,
         int probeCompletedCount = 2,
-        IReadOnlyList<SourceCandidateDiscoveryDiagnosticDto>? diagnostics = null)
+        IReadOnlyList<SourceCandidateDiscoveryDiagnosticDto>? diagnostics = null,
+        DateTime? createdUtc = null,
+        DateTime? updatedUtc = null,
+        DateTime? startedUtc = null,
+        DateTime? lastHeartbeatUtc = null)
     {
         return new DiscoveryRunDto
         {
@@ -398,14 +518,16 @@ public sealed class DiscoveryRunDetailsPageTests
             LlmCompletedCount = 2,
             LlmTotalElapsedMs = 440,
             LlmAverageElapsedMs = 220,
+            SearchTimeoutBudgetMs = searchTimeoutBudgetMs,
             LlmTimeoutBudgetMs = llmTimeoutBudgetMs,
             SearchElapsedMs = searchElapsedMs,
             SuggestedCandidateCount = 1,
             AutoAcceptedCandidateCount = 1,
             PublishedCandidateCount = 1,
-            CreatedUtc = DateTime.UtcNow.AddMinutes(-5),
-            StartedUtc = DateTime.UtcNow.AddMinutes(-4),
-            UpdatedUtc = DateTime.UtcNow.AddSeconds(-5),
+            CreatedUtc = createdUtc ?? DateTime.UtcNow.AddMinutes(-5),
+            StartedUtc = startedUtc ?? DateTime.UtcNow.AddMinutes(-4),
+            UpdatedUtc = updatedUtc ?? DateTime.UtcNow.AddSeconds(-5),
+            LastHeartbeatUtc = lastHeartbeatUtc,
             Diagnostics = diagnostics ?? []
         };
     }

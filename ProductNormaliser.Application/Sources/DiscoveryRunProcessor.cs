@@ -103,7 +103,12 @@ public sealed class DiscoveryRunProcessor(
             var searchStopwatch = Stopwatch.StartNew();
             try
             {
-                searchResponse = await sourceCandidateSearchProvider.SearchAsync(request, cancellationToken);
+                searchResponse = sourceCandidateSearchProvider is IProgressReportingSourceCandidateSearchProvider progressReportingSearchProvider
+                    ? await progressReportingSearchProvider.SearchAsync(
+                        request,
+                        (diagnostic, reporterCancellationToken) => ReportSearchProgressAsync(run, diagnostic, reporterCancellationToken),
+                        cancellationToken)
+                    : await sourceCandidateSearchProvider.SearchAsync(request, cancellationToken);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -125,7 +130,7 @@ public sealed class DiscoveryRunProcessor(
             run.SearchElapsedMs = searchStopwatch.ElapsedMilliseconds;
             ProductNormaliserTelemetry.DiscoverySearchDurationMs.Record(run.SearchElapsedMs.Value, new TagList { { "automation_mode", run.AutomationMode } });
             run.SearchResultCount = searchResponse.Candidates.Count;
-            run.Diagnostics = searchResponse.Diagnostics.Select(MapDiagnostic).ToList();
+            AppendDiagnostics(run.Diagnostics, searchResponse.Diagnostics);
             EnsureBudgetDiagnostics(run);
             await TouchRunAsync(run, cancellationToken);
 
@@ -743,11 +748,21 @@ public sealed class DiscoveryRunProcessor(
     {
         return new DiscoveryRunDiagnostic
         {
+            RecordedUtc = diagnostic.RecordedUtc,
             Code = diagnostic.Code,
             Severity = diagnostic.Severity,
             Title = diagnostic.Title,
             Message = diagnostic.Message
         };
+    }
+
+    private async Task ReportSearchProgressAsync(DiscoveryRun run, SourceCandidateDiscoveryDiagnostic diagnostic, CancellationToken cancellationToken)
+    {
+        AppendUniqueDiagnostic(run.Diagnostics, MapDiagnostic(diagnostic));
+        run.StatusMessage = diagnostic.Message;
+        run.UpdatedUtc = DateTime.UtcNow;
+        run.LastHeartbeatUtc = run.UpdatedUtc;
+        await discoveryRunStore.UpsertAsync(run, cancellationToken);
     }
 
     private static void AppendDiagnostics(List<DiscoveryRunDiagnostic> target, IEnumerable<SourceCandidateDiscoveryDiagnostic> diagnostics)

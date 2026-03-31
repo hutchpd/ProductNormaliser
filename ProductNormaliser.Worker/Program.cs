@@ -40,8 +40,7 @@ builder.Services.AddSingleton<LlamaPageClassificationService>(serviceProvider =>
 builder.Services.AddSingleton<IPageClassificationService>(serviceProvider => serviceProvider.GetRequiredService<LlamaPageClassificationService>());
 builder.Services.AddSingleton<ILlmStatusProvider>(serviceProvider => serviceProvider.GetRequiredService<LlamaPageClassificationService>());
 builder.Services.AddSingleton<ISourceCandidateProbeService, HttpSourceCandidateProbeService>();
-builder.Services.AddSingleton<IDiscoveryRunProcessor, DiscoveryRunProcessor>();
-builder.Services.AddSingleton<DiscoveryRunMaintenanceService>();
+builder.Services.AddWorkerDiscoveryServices();
 builder.Services.AddHttpClient<ISourceCandidateSearchProvider, SearchApiSourceCandidateSearchProvider>((serviceProvider, client) =>
 {
 	var options = serviceProvider.GetRequiredService<IOptions<SourceCandidateDiscoveryOptions>>().Value;

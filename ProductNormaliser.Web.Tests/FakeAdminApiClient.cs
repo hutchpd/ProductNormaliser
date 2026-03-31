@@ -780,6 +780,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             StartedUtc = run.StartedUtc,
             CompletedUtc = status == "cancelled" ? DateTime.UtcNow : run.CompletedUtc,
             CancelRequestedUtc = run.CancelRequestedUtc,
+            LastHeartbeatUtc = run.LastHeartbeatUtc,
             Diagnostics = run.Diagnostics
         };
 

@@ -69,6 +69,11 @@
             <div class="notice success">This discovery run is active. The page refreshes every 5 seconds while worker progress changes.</div>
         }
 
+        @if (Model.HasWorkerLivenessWarning)
+        {
+            <div class="notice warning">@Model.WorkerLivenessWarning Restart the worker if this does not clear soon; maintenance will recover abandoned runs automatically.</div>
+        }
+
         <div class="split-layout">
             <section class="panel">
                 <div class="panel-heading">
@@ -110,6 +115,7 @@
                     <div><dt>LLM status</dt><dd>@Model.Run.LlmStatus</dd></div>
                     <div><dt>Created</dt><dd>@Model.Run.CreatedUtc.ToString("u")</dd></div>
                     <div><dt>Started</dt><dd>@(Model.Run.StartedUtc?.ToString("u") ?? "Not started")</dd></div>
+                    <div><dt>Last heartbeat</dt><dd>@Model.LastHeartbeatDisplay</dd></div>
                     <div><dt>Last updated</dt><dd>@Model.Run.UpdatedUtc.ToString("u")</dd></div>
                 </dl>
 
@@ -199,6 +205,43 @@
                 }
             </aside>
         </div>
+
+        <section class="panel panel-muted">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Search Live Log</p>
+                    <h2>Brave query activity</h2>
+                    <p class="subtle-copy">While the run is in the search stage, the worker persists each Brave query and the candidate hosts it got back so the operator can see what the provider is actually doing.</p>
+                </div>
+            </div>
+
+            @if (Model.SearchLogEntries.Count == 0)
+            {
+                <div class="empty-panel">
+                    <p class="empty-state">No persisted Brave query activity is available for this run yet.</p>
+                </div>
+            }
+            else
+            {
+                <div class="activity-log-shell" role="log" aria-live="polite">
+                @foreach (var entry in Model.SearchLogEntries)
+                {
+                    <article class="@Model.GetActivityEntryClass(entry)">
+                        <div class="activity-log-meta">
+                            <span class="mono">@entry.TimestampUtc.ToString("u")</span>
+                            <span>@entry.TimestampKind</span>
+                        </div>
+                        <strong>@entry.Title</strong>
+                        <p>@entry.Message</p>
+                        @if (!string.IsNullOrWhiteSpace(entry.Code))
+                        {
+                            <span class="chip mono">@entry.Code</span>
+                        }
+                    </article>
+                }
+                </div>
+            }
+        </section>
 
         <section class="panel panel-muted">
             <div class="panel-heading">

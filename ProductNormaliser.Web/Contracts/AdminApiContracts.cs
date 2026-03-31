@@ -422,6 +422,7 @@ public sealed class DiscoveryRunDto
     public DateTime? StartedUtc { get; init; }
     public DateTime? CompletedUtc { get; init; }
     public DateTime? CancelRequestedUtc { get; init; }
+    public DateTime? LastHeartbeatUtc { get; init; }
     public IReadOnlyList<SourceCandidateDiscoveryDiagnosticDto> Diagnostics { get; init; } = [];
 }
 
@@ -537,6 +538,7 @@ public sealed class SourceCandidateDiscoveryResponseDto
 
 public sealed class SourceCandidateDiscoveryDiagnosticDto
 {
+    public DateTime? RecordedUtc { get; init; }
     public string Code { get; init; } = string.Empty;
     public string Severity { get; init; } = string.Empty;
     public string Title { get; init; } = string.Empty;

@@ -38,6 +38,7 @@ public sealed class SourceCandidateDiscoveryController(ISourceCandidateDiscovery
                 GeneratedUtc = result.GeneratedUtc,
                 Diagnostics = result.Diagnostics.Select(diagnostic => new Contracts.SourceCandidateDiscoveryDiagnosticDto
                 {
+                    RecordedUtc = diagnostic.RecordedUtc,
                     Code = diagnostic.Code,
                     Severity = diagnostic.Severity,
                     Title = diagnostic.Title,
