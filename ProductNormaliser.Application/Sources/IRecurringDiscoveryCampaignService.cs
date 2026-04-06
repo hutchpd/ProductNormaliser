@@ -10,7 +10,7 @@ public interface IRecurringDiscoveryCampaignService
 
     Task<RecurringDiscoveryCampaign> CreateAsync(CreateRecurringDiscoveryCampaignRequest request, CancellationToken cancellationToken = default);
 
-    Task<RecurringDiscoveryCampaign?> UpdateScheduleAsync(string campaignId, int intervalMinutes, CancellationToken cancellationToken = default);
+    Task<RecurringDiscoveryCampaign?> UpdateConfigurationAsync(string campaignId, int? intervalMinutes, int? maxCandidatesPerRun, CancellationToken cancellationToken = default);
 
     Task<RecurringDiscoveryCampaign?> PauseAsync(string campaignId, CancellationToken cancellationToken = default);
 

@@ -13,6 +13,8 @@ public sealed class IndexModel(
 {
     private const int MinimumIntervalMinutes = 30;
     private const int MaximumIntervalMinutes = 7 * 24 * 60;
+    private const int MinimumMaxCandidatesPerRun = 1;
+    private const int MaximumMaxCandidatesPerRun = 25;
     private const string OperatorAssistedMode = "operator_assisted";
     private const string SuggestAcceptMode = "suggest_accept";
     private const string AutoAcceptAndSeedMode = "auto_accept_and_seed";
@@ -103,7 +105,7 @@ public sealed class IndexModel(
         }
     }
 
-    public async Task<IActionResult> OnPostUpdateScheduleAsync(string campaignId, int intervalMinutes, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostUpdateConfigurationAsync(string campaignId, int intervalMinutes, int maxCandidatesPerRun, CancellationToken cancellationToken)
     {
         if (intervalMinutes < MinimumIntervalMinutes || intervalMinutes > MaximumIntervalMinutes)
         {
@@ -112,13 +114,21 @@ public sealed class IndexModel(
             return Page();
         }
 
+        if (maxCandidatesPerRun < MinimumMaxCandidatesPerRun || maxCandidatesPerRun > MaximumMaxCandidatesPerRun)
+        {
+            ModelState.AddModelError(string.Empty, $"Max candidates per run must be between {MinimumMaxCandidatesPerRun} and {MaximumMaxCandidatesPerRun}.");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
         return await MutateCampaignAsync(
             campaignId,
-            () => adminApiClient.UpdateRecurringDiscoveryCampaignScheduleAsync(campaignId, new UpdateRecurringDiscoveryCampaignScheduleRequest
+            () => adminApiClient.UpdateRecurringDiscoveryCampaignConfigurationAsync(campaignId, new UpdateRecurringDiscoveryCampaignConfigurationRequest
             {
-                IntervalMinutes = intervalMinutes
+                IntervalMinutes = intervalMinutes,
+                MaxCandidatesPerRun = maxCandidatesPerRun
             }, cancellationToken),
-            campaign => $"Updated recurring discovery campaign '{campaign.Name}' to run every {FormatInterval(campaign.IntervalMinutes)}.");
+            campaign => $"Updated recurring discovery campaign '{campaign.Name}' to run every {FormatInterval(campaign.IntervalMinutes)} with a cap of {campaign.MaxCandidatesPerRun} candidates per run.");
     }
 
     public Task<IActionResult> OnPostPauseAsync(string campaignId, CancellationToken cancellationToken)

@@ -347,9 +347,10 @@ public sealed class CreateRecurringDiscoveryCampaignRequest
     public int? IntervalMinutes { get; init; }
 }
 
-public sealed class UpdateRecurringDiscoveryCampaignScheduleRequest
+public sealed class UpdateRecurringDiscoveryCampaignConfigurationRequest
 {
     public int? IntervalMinutes { get; init; }
+    public int? MaxCandidatesPerRun { get; init; }
 }
 
 public sealed class RecurringDiscoveryCampaignDto

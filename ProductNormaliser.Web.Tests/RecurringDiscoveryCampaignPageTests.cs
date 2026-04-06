@@ -120,7 +120,7 @@ public sealed class RecurringDiscoveryCampaignPageTests
     }
 
     [Test]
-    public async Task OnPostUpdateScheduleAsync_UpdatesCampaignAndRedirects()
+    public async Task OnPostUpdateConfigurationAsync_UpdatesCampaignAndRedirects()
     {
         var client = new FakeAdminApiClient
         {
@@ -132,15 +132,17 @@ public sealed class RecurringDiscoveryCampaignPageTests
             client,
             NullLogger<ProductNormaliser.Web.Pages.Sources.RecurringDiscoveryCampaigns.IndexModel>.Instance);
 
-        var result = await model.OnPostUpdateScheduleAsync("campaign_1", 60, CancellationToken.None);
+        var result = await model.OnPostUpdateConfigurationAsync("campaign_1", 60, 18, CancellationToken.None);
 
         Assert.Multiple(() =>
         {
             Assert.That(result, Is.TypeOf<RedirectToPageResult>());
-            Assert.That(client.LastUpdatedRecurringDiscoveryCampaignScheduleCampaignId, Is.EqualTo("campaign_1"));
-            Assert.That(client.LastUpdateRecurringDiscoveryCampaignScheduleRequest, Is.Not.Null);
-            Assert.That(client.LastUpdateRecurringDiscoveryCampaignScheduleRequest!.IntervalMinutes, Is.EqualTo(60));
+            Assert.That(client.LastUpdatedRecurringDiscoveryCampaignConfigurationCampaignId, Is.EqualTo("campaign_1"));
+            Assert.That(client.LastUpdateRecurringDiscoveryCampaignConfigurationRequest, Is.Not.Null);
+            Assert.That(client.LastUpdateRecurringDiscoveryCampaignConfigurationRequest!.IntervalMinutes, Is.EqualTo(60));
+            Assert.That(client.LastUpdateRecurringDiscoveryCampaignConfigurationRequest.MaxCandidatesPerRun, Is.EqualTo(18));
             Assert.That(model.StatusMessage, Does.Contain("run every 1 hour"));
+            Assert.That(model.StatusMessage, Does.Contain("cap of 18 candidates per run"));
         });
     }
 

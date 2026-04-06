@@ -67,7 +67,7 @@ public sealed class RecurringDiscoveryCampaignServiceTests
     }
 
     [Test]
-    public async Task UpdateScheduleAsync_RecalculatesNextWindowUsingMinutes()
+    public async Task UpdateConfigurationAsync_RecalculatesNextWindowAndUpdatesCandidateCap()
     {
         var existingCampaign = new RecurringDiscoveryCampaign
         {
@@ -90,17 +90,54 @@ public sealed class RecurringDiscoveryCampaignServiceTests
         var service = CreateService(new FakeDiscoveryCampaignStore(existingCampaign));
         var beforeUpdateUtc = DateTime.UtcNow;
 
-        var campaign = await service.UpdateScheduleAsync("campaign_1", 30, CancellationToken.None);
+        var campaign = await service.UpdateConfigurationAsync("campaign_1", 30, 18, CancellationToken.None);
 
         Assert.That(campaign, Is.Not.Null);
         Assert.Multiple(() =>
         {
             Assert.That(campaign!.ResolveIntervalMinutes(), Is.EqualTo(30));
             Assert.That(campaign.IntervalHours, Is.EqualTo(0));
+            Assert.That(campaign.MaxCandidatesPerRun, Is.EqualTo(18));
             Assert.That(campaign.NextScheduledUtc, Is.Not.Null);
             Assert.That(campaign.NextScheduledUtc, Is.GreaterThanOrEqualTo(beforeUpdateUtc.AddMinutes(29)));
             Assert.That(campaign.NextScheduledUtc, Is.LessThanOrEqualTo(DateTime.UtcNow.AddMinutes(31)));
             Assert.That(campaign.StatusMessage, Does.Contain("every 30 minutes"));
+            Assert.That(campaign.StatusMessage, Does.Contain("cap of 18 candidates per run"));
+        });
+    }
+
+    [Test]
+    public async Task UpdateConfigurationAsync_UpdatesCandidateCapWithoutReschedulingWhenCadenceIsUnchanged()
+    {
+        var existingNextScheduledUtc = DateTime.UtcNow.AddMinutes(45);
+        var existingCampaign = new RecurringDiscoveryCampaign
+        {
+            CampaignId = "campaign_1",
+            Name = "TV UK",
+            CategoryKeys = ["tv"],
+            Market = "UK",
+            Locale = "en-GB",
+            AutomationMode = SourceAutomationModes.SuggestAccept,
+            MaxCandidatesPerRun = 12,
+            IntervalMinutes = 30,
+            IntervalHours = 0,
+            Status = RecurringDiscoveryCampaignStatuses.Active,
+            CampaignFingerprint = "market:uk|locale:en-gb|categories:tv|brands:sony",
+            NextScheduledUtc = existingNextScheduledUtc,
+            CreatedUtc = DateTime.UtcNow.AddDays(-2),
+            UpdatedUtc = DateTime.UtcNow.AddHours(-1)
+        };
+
+        var service = CreateService(new FakeDiscoveryCampaignStore(existingCampaign));
+
+        var campaign = await service.UpdateConfigurationAsync("campaign_1", null, 20, CancellationToken.None);
+
+        Assert.That(campaign, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(campaign!.ResolveIntervalMinutes(), Is.EqualTo(30));
+            Assert.That(campaign.MaxCandidatesPerRun, Is.EqualTo(20));
+            Assert.That(campaign.NextScheduledUtc, Is.EqualTo(existingNextScheduledUtc));
         });
     }
 

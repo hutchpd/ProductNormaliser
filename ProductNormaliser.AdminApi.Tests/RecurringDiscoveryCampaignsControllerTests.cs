@@ -56,7 +56,7 @@ public sealed class RecurringDiscoveryCampaignsControllerTests
     }
 
     [Test]
-    public async Task UpdateSchedule_ReturnsUpdatedCampaignContract()
+    public async Task UpdateConfiguration_ReturnsUpdatedCampaignContract()
     {
         var service = new FakeRecurringDiscoveryCampaignService
         {
@@ -64,9 +64,10 @@ public sealed class RecurringDiscoveryCampaignsControllerTests
         };
         var controller = new RecurringDiscoveryCampaignsController(service);
 
-        var result = await controller.UpdateSchedule("campaign_1", new UpdateRecurringDiscoveryCampaignScheduleRequest
+        var result = await controller.UpdateConfiguration("campaign_1", new UpdateRecurringDiscoveryCampaignConfigurationRequest
         {
-            IntervalMinutes = 60
+            IntervalMinutes = 60,
+            MaxCandidatesPerRun = 18
         }, CancellationToken.None);
 
         Assert.That(result, Is.TypeOf<OkObjectResult>());
@@ -75,10 +76,12 @@ public sealed class RecurringDiscoveryCampaignsControllerTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(service.LastUpdatedScheduleCampaignId, Is.EqualTo("campaign_1"));
-            Assert.That(service.LastUpdatedScheduleIntervalMinutes, Is.EqualTo(60));
+            Assert.That(service.LastUpdatedConfigurationCampaignId, Is.EqualTo("campaign_1"));
+            Assert.That(service.LastUpdatedConfigurationIntervalMinutes, Is.EqualTo(60));
+            Assert.That(service.LastUpdatedConfigurationMaxCandidatesPerRun, Is.EqualTo(18));
             Assert.That(dto, Is.Not.Null);
             Assert.That(dto!.IntervalMinutes, Is.EqualTo(60));
+            Assert.That(dto.MaxCandidatesPerRun, Is.EqualTo(18));
         });
     }
 
@@ -141,8 +144,9 @@ public sealed class RecurringDiscoveryCampaignsControllerTests
         public RecurringDiscoveryCampaign? Campaign { get; set; }
         public InvalidOperationException? PauseException { get; set; }
         public string? LastDeletedCampaignId { get; private set; }
-        public string? LastUpdatedScheduleCampaignId { get; private set; }
-        public int? LastUpdatedScheduleIntervalMinutes { get; private set; }
+        public string? LastUpdatedConfigurationCampaignId { get; private set; }
+        public int? LastUpdatedConfigurationIntervalMinutes { get; private set; }
+        public int? LastUpdatedConfigurationMaxCandidatesPerRun { get; private set; }
 
         public Task<IReadOnlyList<RecurringDiscoveryCampaign>> ListAsync(string? status = null, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<RecurringDiscoveryCampaign>>(Campaign is null ? [] : [Campaign]);
@@ -153,18 +157,24 @@ public sealed class RecurringDiscoveryCampaignsControllerTests
         public Task<RecurringDiscoveryCampaign> CreateAsync(ProductNormaliser.Application.Sources.CreateRecurringDiscoveryCampaignRequest request, CancellationToken cancellationToken = default)
             => Task.FromResult(Campaign ?? throw new InvalidOperationException("No campaign configured."));
 
-        public Task<RecurringDiscoveryCampaign?> UpdateScheduleAsync(string campaignId, int intervalMinutes, CancellationToken cancellationToken = default)
+        public Task<RecurringDiscoveryCampaign?> UpdateConfigurationAsync(string campaignId, int? intervalMinutes, int? maxCandidatesPerRun, CancellationToken cancellationToken = default)
         {
-            LastUpdatedScheduleCampaignId = campaignId;
-            LastUpdatedScheduleIntervalMinutes = intervalMinutes;
+            LastUpdatedConfigurationCampaignId = campaignId;
+            LastUpdatedConfigurationIntervalMinutes = intervalMinutes;
+            LastUpdatedConfigurationMaxCandidatesPerRun = maxCandidatesPerRun;
             if (Campaign is null || !string.Equals(Campaign.CampaignId, campaignId, StringComparison.OrdinalIgnoreCase))
             {
                 return Task.FromResult<RecurringDiscoveryCampaign?>(null);
             }
 
-            Campaign.IntervalMinutes = intervalMinutes;
+            Campaign.IntervalMinutes = intervalMinutes ?? Campaign.IntervalMinutes;
+            Campaign.MaxCandidatesPerRun = maxCandidatesPerRun ?? Campaign.MaxCandidatesPerRun;
             Campaign.UpdatedUtc = DateTime.UtcNow;
-            Campaign.NextScheduledUtc = DateTime.UtcNow.AddMinutes(intervalMinutes);
+            if (intervalMinutes.HasValue)
+            {
+                Campaign.NextScheduledUtc = DateTime.UtcNow.AddMinutes(intervalMinutes.Value);
+            }
+
             return Task.FromResult<RecurringDiscoveryCampaign?>(Campaign);
         }
 

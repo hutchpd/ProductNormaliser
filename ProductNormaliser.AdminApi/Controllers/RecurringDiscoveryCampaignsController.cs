@@ -66,19 +66,19 @@ public sealed class RecurringDiscoveryCampaignsController(IRecurringDiscoveryCam
     public Task<IActionResult> Pause(string campaignId, CancellationToken cancellationToken = default)
         => MutateAsync(() => recurringDiscoveryCampaignService.PauseAsync(campaignId, cancellationToken));
 
-    [HttpPost("{campaignId}/schedule")]
+    [HttpPost("{campaignId}/configuration")]
     [ProducesResponseType(typeof(Contracts.RecurringDiscoveryCampaignDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status409Conflict)]
-    public Task<IActionResult> UpdateSchedule(string campaignId, [FromBody] Contracts.UpdateRecurringDiscoveryCampaignScheduleRequest request, CancellationToken cancellationToken = default)
+    public Task<IActionResult> UpdateConfiguration(string campaignId, [FromBody] Contracts.UpdateRecurringDiscoveryCampaignConfigurationRequest request, CancellationToken cancellationToken = default)
     {
-        if (request.IntervalMinutes is null)
+        if (request.IntervalMinutes is null && request.MaxCandidatesPerRun is null)
         {
-            return Task.FromResult<IActionResult>(BadRequest(CreateProblem(new ArgumentException("Provide an interval in minutes.", nameof(request)))));
+            return Task.FromResult<IActionResult>(BadRequest(CreateProblem(new ArgumentException("Provide at least one campaign setting to update.", nameof(request)))));
         }
 
-        return MutateAsync(() => recurringDiscoveryCampaignService.UpdateScheduleAsync(campaignId, request.IntervalMinutes.Value, cancellationToken));
+        return MutateAsync(() => recurringDiscoveryCampaignService.UpdateConfigurationAsync(campaignId, request.IntervalMinutes, request.MaxCandidatesPerRun, cancellationToken));
     }
 
     [HttpPost("{campaignId}/resume")]

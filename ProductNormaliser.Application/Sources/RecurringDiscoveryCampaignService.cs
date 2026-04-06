@@ -107,7 +107,7 @@ public sealed class RecurringDiscoveryCampaignService(
         return campaign;
     }
 
-    public async Task<RecurringDiscoveryCampaign?> UpdateScheduleAsync(string campaignId, int intervalMinutes, CancellationToken cancellationToken = default)
+    public async Task<RecurringDiscoveryCampaign?> UpdateConfigurationAsync(string campaignId, int? intervalMinutes, int? maxCandidatesPerRun, CancellationToken cancellationToken = default)
     {
         var campaign = await discoveryCampaignStore.GetAsync(NormalizeRequired(campaignId, nameof(campaignId)), cancellationToken);
         if (campaign is null)
@@ -115,25 +115,39 @@ public sealed class RecurringDiscoveryCampaignService(
             return null;
         }
 
-        var normalizedIntervalMinutes = NormalizeIntervalMinutes(intervalMinutes);
+        var currentIntervalMinutes = campaign.ResolveIntervalMinutes();
+        var normalizedIntervalMinutes = intervalMinutes.HasValue
+            ? NormalizeIntervalMinutes(intervalMinutes.Value)
+            : currentIntervalMinutes;
+        var normalizedMaxCandidatesPerRun = maxCandidatesPerRun.HasValue
+            ? SourceCandidateDiscoveryEvaluator.NormalizeMaxCandidates(maxCandidatesPerRun.Value)
+            : campaign.MaxCandidatesPerRun;
         var utcNow = DateTime.UtcNow;
 
         campaign.IntervalMinutes = normalizedIntervalMinutes;
         campaign.IntervalHours = 0;
-        campaign.NextScheduledUtc = utcNow.AddMinutes(normalizedIntervalMinutes);
+        campaign.MaxCandidatesPerRun = normalizedMaxCandidatesPerRun;
+        if (normalizedIntervalMinutes != currentIntervalMinutes)
+        {
+            campaign.NextScheduledUtc = utcNow.AddMinutes(normalizedIntervalMinutes);
+        }
+
         campaign.UpdatedUtc = utcNow;
         campaign.StatusMessage = string.Equals(campaign.Status, RecurringDiscoveryCampaignStatuses.Paused, StringComparison.OrdinalIgnoreCase)
-            ? $"Recurring discovery campaign cadence updated to every {DescribeInterval(normalizedIntervalMinutes)}. Runs remain paused until the campaign is resumed."
-            : $"Recurring discovery campaign cadence updated to every {DescribeInterval(normalizedIntervalMinutes)}. The next run will follow the new schedule window.";
+            ? $"Recurring discovery campaign updated to every {DescribeInterval(normalizedIntervalMinutes)} with a cap of {normalizedMaxCandidatesPerRun} candidates per run. Runs remain paused until the campaign is resumed."
+            : normalizedIntervalMinutes != currentIntervalMinutes
+                ? $"Recurring discovery campaign updated to every {DescribeInterval(normalizedIntervalMinutes)} with a cap of {normalizedMaxCandidatesPerRun} candidates per run. The next run will follow the new schedule window."
+                : $"Recurring discovery campaign updated to every {DescribeInterval(normalizedIntervalMinutes)} with a cap of {normalizedMaxCandidatesPerRun} candidates per run.";
 
         await discoveryCampaignStore.UpsertAsync(campaign, cancellationToken);
         await managementAuditService.RecordAsync(
-            "recurring_discovery_campaign_schedule_updated",
+            "recurring_discovery_campaign_configuration_updated",
             "recurring_discovery_campaign",
             campaign.CampaignId,
             new Dictionary<string, string>
             {
                 ["intervalMinutes"] = normalizedIntervalMinutes.ToString(CultureInfo.InvariantCulture),
+                ["maxCandidatesPerRun"] = normalizedMaxCandidatesPerRun.ToString(CultureInfo.InvariantCulture),
                 ["status"] = campaign.Status
             },
             cancellationToken);

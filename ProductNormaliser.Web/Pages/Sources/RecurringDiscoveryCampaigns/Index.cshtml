@@ -195,7 +195,7 @@
                         </div>
                     </div>
 
-                    <form method="post" asp-page-handler="UpdateSchedule" class="source-form mt-3">
+                    <form method="post" asp-page-handler="UpdateConfiguration" class="source-form mt-3">
                         <input type="hidden" name="campaignId" value="@campaign.CampaignId" />
                         <div class="form-grid">
                             <div>
@@ -210,8 +210,20 @@
                                        step="30" />
                                 <span class="subtle-copy">Change this campaign to 30 minutes, hourly, daily, or another supported interval without recreating it.</span>
                             </div>
+                            <div>
+                                <label class="form-label" for="max-candidates-@campaign.CampaignId">Max candidates per run</label>
+                                <input id="max-candidates-@campaign.CampaignId"
+                                       name="maxCandidatesPerRun"
+                                       type="number"
+                                       class="form-control"
+                                       value="@campaign.MaxCandidatesPerRun"
+                                       min="1"
+                                       max="25"
+                                       step="1" />
+                                <span class="subtle-copy">Adjust the per-run discovery cap without recreating the campaign scope.</span>
+                            </div>
                             <div class="align-self-end">
-                                <button type="submit" class="btn btn-outline-dark">Update cadence</button>
+                                <button type="submit" class="btn btn-outline-dark">Update campaign</button>
                             </div>
                         </div>
                     </form>
