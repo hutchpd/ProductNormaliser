@@ -1,6 +1,7 @@
 using ProductNormaliser.Application.Categories;
 using ProductNormaliser.Application.Governance;
 using ProductNormaliser.Core.Models;
+using System.Globalization;
 
 namespace ProductNormaliser.Application.Sources;
 
@@ -59,7 +60,7 @@ public sealed class RecurringDiscoveryCampaignService(
             throw new InvalidOperationException($"A recurring discovery campaign already exists for scope '{existingCampaign.Name}'.");
         }
 
-        var intervalHours = NormalizeIntervalHours(request.IntervalHours);
+        var intervalMinutes = NormalizeIntervalMinutes(request.IntervalMinutes);
         var utcNow = DateTime.UtcNow;
         var campaign = new RecurringDiscoveryCampaign
         {
@@ -71,13 +72,14 @@ public sealed class RecurringDiscoveryCampaignService(
             AutomationMode = SourceAutomationModes.Normalize(request.AutomationMode),
             BrandHints = brandHints,
             MaxCandidatesPerRun = SourceCandidateDiscoveryEvaluator.NormalizeMaxCandidates(request.MaxCandidatesPerRun),
-            IntervalHours = intervalHours,
+            IntervalMinutes = intervalMinutes,
+            IntervalHours = 0,
             Status = RecurringDiscoveryCampaignStatuses.Active,
             CampaignFingerprint = fingerprint,
             StatusMessage = "Recurring discovery campaign is active. Queueing the initial run now.",
             CreatedUtc = utcNow,
             UpdatedUtc = utcNow,
-            NextScheduledUtc = utcNow.AddHours(intervalHours)
+            NextScheduledUtc = utcNow.AddMinutes(intervalMinutes)
         };
 
         await discoveryCampaignStore.UpsertAsync(campaign, cancellationToken);
@@ -98,7 +100,41 @@ public sealed class RecurringDiscoveryCampaignService(
                 ["market"] = campaign.Market ?? string.Empty,
                 ["locale"] = campaign.Locale ?? string.Empty,
                 ["automationMode"] = campaign.AutomationMode,
-                ["intervalHours"] = campaign.IntervalHours.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                ["intervalMinutes"] = campaign.IntervalMinutes.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            },
+            cancellationToken);
+
+        return campaign;
+    }
+
+    public async Task<RecurringDiscoveryCampaign?> UpdateScheduleAsync(string campaignId, int intervalMinutes, CancellationToken cancellationToken = default)
+    {
+        var campaign = await discoveryCampaignStore.GetAsync(NormalizeRequired(campaignId, nameof(campaignId)), cancellationToken);
+        if (campaign is null)
+        {
+            return null;
+        }
+
+        var normalizedIntervalMinutes = NormalizeIntervalMinutes(intervalMinutes);
+        var utcNow = DateTime.UtcNow;
+
+        campaign.IntervalMinutes = normalizedIntervalMinutes;
+        campaign.IntervalHours = 0;
+        campaign.NextScheduledUtc = utcNow.AddMinutes(normalizedIntervalMinutes);
+        campaign.UpdatedUtc = utcNow;
+        campaign.StatusMessage = string.Equals(campaign.Status, RecurringDiscoveryCampaignStatuses.Paused, StringComparison.OrdinalIgnoreCase)
+            ? $"Recurring discovery campaign cadence updated to every {DescribeInterval(normalizedIntervalMinutes)}. Runs remain paused until the campaign is resumed."
+            : $"Recurring discovery campaign cadence updated to every {DescribeInterval(normalizedIntervalMinutes)}. The next run will follow the new schedule window.";
+
+        await discoveryCampaignStore.UpsertAsync(campaign, cancellationToken);
+        await managementAuditService.RecordAsync(
+            "recurring_discovery_campaign_schedule_updated",
+            "recurring_discovery_campaign",
+            campaign.CampaignId,
+            new Dictionary<string, string>
+            {
+                ["intervalMinutes"] = normalizedIntervalMinutes.ToString(CultureInfo.InvariantCulture),
+                ["status"] = campaign.Status
             },
             cancellationToken);
 
@@ -173,10 +209,36 @@ public sealed class RecurringDiscoveryCampaignService(
         return true;
     }
 
-    private int NormalizeIntervalHours(int? intervalHours)
+    private int NormalizeIntervalMinutes(int? intervalMinutes)
     {
-        var value = intervalHours ?? options.RecurringCampaignDefaultIntervalHours;
-        return Math.Clamp(value, options.RecurringCampaignMinIntervalHours, options.RecurringCampaignMaxIntervalHours);
+        var defaultMinutes = options.RecurringCampaignDefaultIntervalMinutes > 0
+            ? options.RecurringCampaignDefaultIntervalMinutes
+            : checked(options.RecurringCampaignDefaultIntervalHours * 60);
+        var minMinutes = options.RecurringCampaignMinIntervalMinutes > 0
+            ? options.RecurringCampaignMinIntervalMinutes
+            : checked(options.RecurringCampaignMinIntervalHours * 60);
+        var maxMinutes = options.RecurringCampaignMaxIntervalMinutes > 0
+            ? options.RecurringCampaignMaxIntervalMinutes
+            : checked(options.RecurringCampaignMaxIntervalHours * 60);
+        var value = intervalMinutes ?? defaultMinutes;
+        return Math.Clamp(value, minMinutes, maxMinutes);
+    }
+
+    private static string DescribeInterval(int intervalMinutes)
+    {
+        if (intervalMinutes < 60)
+        {
+            return $"{intervalMinutes} minute{(intervalMinutes == 1 ? string.Empty : "s")}";
+        }
+
+        var hours = intervalMinutes / 60;
+        var minutes = intervalMinutes % 60;
+        if (minutes == 0)
+        {
+            return $"{hours} hour{(hours == 1 ? string.Empty : "s")}";
+        }
+
+        return $"{hours} hour{(hours == 1 ? string.Empty : "s")} {minutes} minute{(minutes == 1 ? string.Empty : "s")}";
     }
 
     private static string BuildName(string? name, IReadOnlyList<string> categoryKeys, string? market, string? locale, IReadOnlyList<string> brandHints)

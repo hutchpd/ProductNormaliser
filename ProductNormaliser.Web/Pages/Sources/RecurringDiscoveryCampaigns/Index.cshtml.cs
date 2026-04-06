@@ -11,6 +11,8 @@ public sealed class IndexModel(
     IProductNormaliserAdminApiClient adminApiClient,
     ILogger<IndexModel> logger) : PageModel
 {
+    private const int MinimumIntervalMinutes = 30;
+    private const int MaximumIntervalMinutes = 7 * 24 * 60;
     private const string OperatorAssistedMode = "operator_assisted";
     private const string SuggestAcceptMode = "suggest_accept";
     private const string AutoAcceptAndSeedMode = "auto_accept_and_seed";
@@ -71,7 +73,7 @@ public sealed class IndexModel(
                 AutomationMode = Campaign.AutomationMode,
                 BrandHints = ParseDelimitedValues(Campaign.BrandHints),
                 MaxCandidatesPerRun = Campaign.MaxCandidatesPerRun,
-                IntervalHours = Campaign.IntervalHours
+                IntervalMinutes = Campaign.IntervalMinutes
             }, cancellationToken);
 
             StatusMessage = string.IsNullOrWhiteSpace(campaign.LastRunId)
@@ -99,6 +101,24 @@ public sealed class IndexModel(
             await LoadAsync(cancellationToken);
             return Page();
         }
+    }
+
+    public async Task<IActionResult> OnPostUpdateScheduleAsync(string campaignId, int intervalMinutes, CancellationToken cancellationToken)
+    {
+        if (intervalMinutes < MinimumIntervalMinutes || intervalMinutes > MaximumIntervalMinutes)
+        {
+            ModelState.AddModelError(string.Empty, $"Cadence must be between {MinimumIntervalMinutes} and {MaximumIntervalMinutes} minutes.");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        return await MutateCampaignAsync(
+            campaignId,
+            () => adminApiClient.UpdateRecurringDiscoveryCampaignScheduleAsync(campaignId, new UpdateRecurringDiscoveryCampaignScheduleRequest
+            {
+                IntervalMinutes = intervalMinutes
+            }, cancellationToken),
+            campaign => $"Updated recurring discovery campaign '{campaign.Name}' to run every {FormatInterval(campaign.IntervalMinutes)}.");
     }
 
     public Task<IActionResult> OnPostPauseAsync(string campaignId, CancellationToken cancellationToken)
@@ -173,7 +193,7 @@ public sealed class IndexModel(
     {
         var parts = new List<string>
         {
-            $"Every {campaign.IntervalHours} hour{(campaign.IntervalHours == 1 ? string.Empty : "s")}",
+            $"Every {FormatInterval(campaign.IntervalMinutes)}",
             $"max {campaign.MaxCandidatesPerRun} candidates/run"
         };
 
@@ -188,6 +208,23 @@ public sealed class IndexModel(
         }
 
         return string.Join(" | ", parts);
+    }
+
+    private static string FormatInterval(int intervalMinutes)
+    {
+        if (intervalMinutes < 60)
+        {
+            return $"{intervalMinutes} minute{(intervalMinutes == 1 ? string.Empty : "s")}";
+        }
+
+        var hours = intervalMinutes / 60;
+        var minutes = intervalMinutes % 60;
+        if (minutes == 0)
+        {
+            return $"{hours} hour{(hours == 1 ? string.Empty : "s")}";
+        }
+
+        return $"{hours} hour{(hours == 1 ? string.Empty : "s")} {minutes} minute{(minutes == 1 ? string.Empty : "s")}";
     }
 
     public string GetMemorySummary(RecurringDiscoveryCampaignDto campaign)
@@ -312,8 +349,8 @@ public sealed class IndexModel(
         [Range(1, 25)]
         public int MaxCandidatesPerRun { get; set; } = 10;
 
-        [Display(Name = "Interval hours")]
-        [Range(1, 168)]
-        public int? IntervalHours { get; set; } = 24;
+        [Display(Name = "Run every (minutes)")]
+        [Range(MinimumIntervalMinutes, MaximumIntervalMinutes)]
+        public int? IntervalMinutes { get; set; } = 24 * 60;
     }
 }

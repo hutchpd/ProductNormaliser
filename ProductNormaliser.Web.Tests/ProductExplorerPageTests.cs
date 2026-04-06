@@ -451,6 +451,7 @@ public sealed class ProductExplorerPageTests
         public Task<IReadOnlyList<RecurringDiscoveryCampaignDto>> GetRecurringDiscoveryCampaignsAsync(string? status = null, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<RecurringDiscoveryCampaignDto?> GetRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<RecurringDiscoveryCampaignDto> CreateRecurringDiscoveryCampaignAsync(CreateRecurringDiscoveryCampaignRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<RecurringDiscoveryCampaignDto> UpdateRecurringDiscoveryCampaignScheduleAsync(string campaignId, UpdateRecurringDiscoveryCampaignScheduleRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<RecurringDiscoveryCampaignDto> PauseRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<RecurringDiscoveryCampaignDto> ResumeRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task DeleteRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default) => throw new NotImplementedException();

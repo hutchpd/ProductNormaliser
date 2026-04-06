@@ -62,7 +62,7 @@ public sealed class DiscoveryRunMaintenanceService(
             var scheduledRun = await discoveryRunService.CreateScheduledAsync(campaign, cancellationToken);
             campaign.LastRunId = scheduledRun.RunId;
             campaign.LastScheduledUtc = utcNow;
-            campaign.NextScheduledUtc = utcNow.AddHours(Math.Max(1, campaign.IntervalHours));
+            campaign.NextScheduledUtc = utcNow.AddMinutes(Math.Max(1, campaign.ResolveIntervalMinutes()));
             campaign.StatusMessage = BuildCampaignStatusMessage(campaign, hasIncompleteRun: true);
             campaign.UpdatedUtc = utcNow;
             await discoveryCampaignStore.UpsertAsync(campaign, cancellationToken);

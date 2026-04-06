@@ -344,7 +344,12 @@ public sealed class CreateRecurringDiscoveryCampaignRequest
     public string? AutomationMode { get; init; }
     public IReadOnlyList<string> BrandHints { get; init; } = [];
     public int MaxCandidatesPerRun { get; init; } = 10;
-    public int? IntervalHours { get; init; }
+    public int? IntervalMinutes { get; init; }
+}
+
+public sealed class UpdateRecurringDiscoveryCampaignScheduleRequest
+{
+    public int? IntervalMinutes { get; init; }
 }
 
 public sealed class RecurringDiscoveryCampaignDto
@@ -357,7 +362,7 @@ public sealed class RecurringDiscoveryCampaignDto
     public IReadOnlyList<string> BrandHints { get; init; } = [];
     public string AutomationMode { get; init; } = string.Empty;
     public int MaxCandidatesPerRun { get; init; }
-    public int IntervalHours { get; init; }
+    public int IntervalMinutes { get; init; }
     public string Status { get; init; } = string.Empty;
     public string CampaignFingerprint { get; init; } = string.Empty;
     public string? LastRunId { get; init; }

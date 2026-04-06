@@ -592,9 +592,9 @@ internal static class AdminApiContractValidator
             throw new InvalidOperationException($"{path}.maxCandidatesPerRun must be a positive integer.");
         }
 
-        if (payload.IntervalHours <= 0)
+        if (payload.IntervalMinutes <= 0)
         {
-            throw new InvalidOperationException($"{path}.intervalHours must be a positive integer.");
+            throw new InvalidOperationException($"{path}.intervalMinutes must be a positive integer.");
         }
     }
 

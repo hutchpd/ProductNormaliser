@@ -2,6 +2,8 @@ namespace ProductNormaliser.Core.Models;
 
 public sealed class RecurringDiscoveryCampaign
 {
+    private const int DefaultIntervalMinutes = 24 * 60;
+
     public string CampaignId { get; set; } = default!;
     public string Name { get; set; } = string.Empty;
     public IReadOnlyList<string> CategoryKeys { get; set; } = [];
@@ -10,6 +12,7 @@ public sealed class RecurringDiscoveryCampaign
     public IReadOnlyList<string> BrandHints { get; set; } = [];
     public string AutomationMode { get; set; } = SourceAutomationModes.OperatorAssisted;
     public int MaxCandidatesPerRun { get; set; } = 10;
+    public int IntervalMinutes { get; set; } = DefaultIntervalMinutes;
     public int IntervalHours { get; set; } = 24;
     public string Status { get; set; } = RecurringDiscoveryCampaignStatuses.Active;
     public string CampaignFingerprint { get; set; } = string.Empty;
@@ -20,4 +23,19 @@ public sealed class RecurringDiscoveryCampaign
     public DateTime UpdatedUtc { get; set; }
     public DateTime? LastScheduledUtc { get; set; }
     public DateTime? NextScheduledUtc { get; set; }
+
+    public int ResolveIntervalMinutes()
+    {
+        if (IntervalMinutes > 0)
+        {
+            return IntervalMinutes;
+        }
+
+        if (IntervalHours > 0)
+        {
+            return checked(IntervalHours * 60);
+        }
+
+        return DefaultIntervalMinutes;
+    }
 }

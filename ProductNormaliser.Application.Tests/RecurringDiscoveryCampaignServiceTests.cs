@@ -23,7 +23,7 @@ public sealed class RecurringDiscoveryCampaignServiceTests
             Locale = " en-GB ",
             BrandHints = [" Sony ", "sony"],
             AutomationMode = SourceAutomationModes.SuggestAccept,
-            IntervalHours = 12
+            IntervalMinutes = 30
         });
 
         Assert.Multiple(() =>
@@ -32,7 +32,7 @@ public sealed class RecurringDiscoveryCampaignServiceTests
             Assert.That(campaign.BrandHints, Is.EqualTo(new[] { "Sony" }));
             Assert.That(campaign.CampaignFingerprint, Is.EqualTo("market:uk|locale:en-gb|categories:tv|brands:sony"));
             Assert.That(campaign.NextScheduledUtc, Is.Not.Null);
-            Assert.That(campaign.IntervalHours, Is.EqualTo(12));
+            Assert.That(campaign.ResolveIntervalMinutes(), Is.EqualTo(30));
             Assert.That(campaign.LastRunId, Does.StartWith("discovery_run_"));
             Assert.That(campaign.LastScheduledUtc, Is.Not.Null);
             Assert.That(campaign.StatusMessage, Does.Contain($"queued initial run '{campaign.LastRunId}'"));
@@ -64,6 +64,44 @@ public sealed class RecurringDiscoveryCampaignServiceTests
         });
 
         Assert.That(action, Throws.TypeOf<InvalidOperationException>());
+    }
+
+    [Test]
+    public async Task UpdateScheduleAsync_RecalculatesNextWindowUsingMinutes()
+    {
+        var existingCampaign = new RecurringDiscoveryCampaign
+        {
+            CampaignId = "campaign_1",
+            Name = "TV UK",
+            CategoryKeys = ["tv"],
+            Market = "UK",
+            Locale = "en-GB",
+            AutomationMode = SourceAutomationModes.SuggestAccept,
+            MaxCandidatesPerRun = 12,
+            IntervalMinutes = 24 * 60,
+            IntervalHours = 24,
+            Status = RecurringDiscoveryCampaignStatuses.Active,
+            CampaignFingerprint = "market:uk|locale:en-gb|categories:tv|brands:sony",
+            NextScheduledUtc = DateTime.UtcNow.AddHours(24),
+            CreatedUtc = DateTime.UtcNow.AddDays(-2),
+            UpdatedUtc = DateTime.UtcNow.AddHours(-1)
+        };
+
+        var service = CreateService(new FakeDiscoveryCampaignStore(existingCampaign));
+        var beforeUpdateUtc = DateTime.UtcNow;
+
+        var campaign = await service.UpdateScheduleAsync("campaign_1", 30, CancellationToken.None);
+
+        Assert.That(campaign, Is.Not.Null);
+        Assert.Multiple(() =>
+        {
+            Assert.That(campaign!.ResolveIntervalMinutes(), Is.EqualTo(30));
+            Assert.That(campaign.IntervalHours, Is.EqualTo(0));
+            Assert.That(campaign.NextScheduledUtc, Is.Not.Null);
+            Assert.That(campaign.NextScheduledUtc, Is.GreaterThanOrEqualTo(beforeUpdateUtc.AddMinutes(29)));
+            Assert.That(campaign.NextScheduledUtc, Is.LessThanOrEqualTo(DateTime.UtcNow.AddMinutes(31)));
+            Assert.That(campaign.StatusMessage, Does.Contain("every 30 minutes"));
+        });
     }
 
     [Test]

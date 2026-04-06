@@ -167,6 +167,11 @@ public sealed class ProductNormaliserAdminApiClient(HttpClient httpClient) : IPr
         return SendAsync<RecurringDiscoveryCampaignDto>(HttpMethod.Post, "api/sources/recurring-discovery-campaigns", request, AdminApiContractValidator.ValidateRecurringDiscoveryCampaign, cancellationToken);
     }
 
+    public Task<RecurringDiscoveryCampaignDto> UpdateRecurringDiscoveryCampaignScheduleAsync(string campaignId, UpdateRecurringDiscoveryCampaignScheduleRequest request, CancellationToken cancellationToken = default)
+    {
+        return SendAsync<RecurringDiscoveryCampaignDto>(HttpMethod.Post, $"api/sources/recurring-discovery-campaigns/{Uri.EscapeDataString(campaignId)}/schedule", request, AdminApiContractValidator.ValidateRecurringDiscoveryCampaign, cancellationToken);
+    }
+
     public Task<RecurringDiscoveryCampaignDto> PauseRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default)
     {
         return SendAsync<RecurringDiscoveryCampaignDto>(HttpMethod.Post, $"api/sources/recurring-discovery-campaigns/{Uri.EscapeDataString(campaignId)}/pause", body: null, AdminApiContractValidator.ValidateRecurringDiscoveryCampaign, cancellationToken);

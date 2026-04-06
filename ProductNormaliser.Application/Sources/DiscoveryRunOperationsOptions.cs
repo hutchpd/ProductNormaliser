@@ -12,6 +12,9 @@ public sealed class DiscoveryRunOperationsOptions
     public int AbandonedHeartbeatTimeoutMinutes { get; set; } = 10;
     public int MaxRecoveryAttempts { get; set; } = 1;
     public int ExpandedRunCount { get; set; } = 3;
+    public int RecurringCampaignDefaultIntervalMinutes { get; set; } = 24 * 60;
+    public int RecurringCampaignMinIntervalMinutes { get; set; } = 30;
+    public int RecurringCampaignMaxIntervalMinutes { get; set; } = 7 * 24 * 60;
     public int RecurringCampaignDefaultIntervalHours { get; set; } = 24;
     public int RecurringCampaignMinIntervalHours { get; set; } = 6;
     public int RecurringCampaignMaxIntervalHours { get; set; } = 168;

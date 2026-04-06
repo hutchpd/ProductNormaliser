@@ -24,7 +24,7 @@ public sealed class RecurringDiscoveryCampaignsControllerTests
             Locale = "en-GB",
             BrandHints = ["Sony"],
             AutomationMode = SourceAutomationModes.SuggestAccept,
-            IntervalHours = 24,
+            IntervalMinutes = 30,
             MaxCandidatesPerRun = 12
         }, CancellationToken.None);
 
@@ -53,6 +53,33 @@ public sealed class RecurringDiscoveryCampaignsControllerTests
         var result = await controller.Pause("campaign_1", CancellationToken.None);
 
         Assert.That(result, Is.TypeOf<ConflictObjectResult>());
+    }
+
+    [Test]
+    public async Task UpdateSchedule_ReturnsUpdatedCampaignContract()
+    {
+        var service = new FakeRecurringDiscoveryCampaignService
+        {
+            Campaign = CreateCampaign()
+        };
+        var controller = new RecurringDiscoveryCampaignsController(service);
+
+        var result = await controller.UpdateSchedule("campaign_1", new UpdateRecurringDiscoveryCampaignScheduleRequest
+        {
+            IntervalMinutes = 60
+        }, CancellationToken.None);
+
+        Assert.That(result, Is.TypeOf<OkObjectResult>());
+        var ok = (OkObjectResult)result;
+        var dto = ok.Value as RecurringDiscoveryCampaignDto;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(service.LastUpdatedScheduleCampaignId, Is.EqualTo("campaign_1"));
+            Assert.That(service.LastUpdatedScheduleIntervalMinutes, Is.EqualTo(60));
+            Assert.That(dto, Is.Not.Null);
+            Assert.That(dto!.IntervalMinutes, Is.EqualTo(60));
+        });
     }
 
     [Test]
@@ -85,7 +112,7 @@ public sealed class RecurringDiscoveryCampaignsControllerTests
             BrandHints = ["Sony"],
             AutomationMode = SourceAutomationModes.SuggestAccept,
             MaxCandidatesPerRun = 12,
-            IntervalHours = 24,
+            IntervalMinutes = 30,
             Status = RecurringDiscoveryCampaignStatuses.Active,
             CampaignFingerprint = "market:uk|locale:en-gb|categories:tv|brands:sony",
             LastRunId = "discovery_run_42",
@@ -105,7 +132,7 @@ public sealed class RecurringDiscoveryCampaignsControllerTests
             CreatedUtc = DateTime.UtcNow.AddDays(-5),
             UpdatedUtc = DateTime.UtcNow.AddHours(-1),
             LastScheduledUtc = DateTime.UtcNow.AddHours(-6),
-            NextScheduledUtc = DateTime.UtcNow.AddHours(18)
+            NextScheduledUtc = DateTime.UtcNow.AddMinutes(30)
         };
     }
 
@@ -114,6 +141,8 @@ public sealed class RecurringDiscoveryCampaignsControllerTests
         public RecurringDiscoveryCampaign? Campaign { get; set; }
         public InvalidOperationException? PauseException { get; set; }
         public string? LastDeletedCampaignId { get; private set; }
+        public string? LastUpdatedScheduleCampaignId { get; private set; }
+        public int? LastUpdatedScheduleIntervalMinutes { get; private set; }
 
         public Task<IReadOnlyList<RecurringDiscoveryCampaign>> ListAsync(string? status = null, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<RecurringDiscoveryCampaign>>(Campaign is null ? [] : [Campaign]);
@@ -123,6 +152,21 @@ public sealed class RecurringDiscoveryCampaignsControllerTests
 
         public Task<RecurringDiscoveryCampaign> CreateAsync(ProductNormaliser.Application.Sources.CreateRecurringDiscoveryCampaignRequest request, CancellationToken cancellationToken = default)
             => Task.FromResult(Campaign ?? throw new InvalidOperationException("No campaign configured."));
+
+        public Task<RecurringDiscoveryCampaign?> UpdateScheduleAsync(string campaignId, int intervalMinutes, CancellationToken cancellationToken = default)
+        {
+            LastUpdatedScheduleCampaignId = campaignId;
+            LastUpdatedScheduleIntervalMinutes = intervalMinutes;
+            if (Campaign is null || !string.Equals(Campaign.CampaignId, campaignId, StringComparison.OrdinalIgnoreCase))
+            {
+                return Task.FromResult<RecurringDiscoveryCampaign?>(null);
+            }
+
+            Campaign.IntervalMinutes = intervalMinutes;
+            Campaign.UpdatedUtc = DateTime.UtcNow;
+            Campaign.NextScheduledUtc = DateTime.UtcNow.AddMinutes(intervalMinutes);
+            return Task.FromResult<RecurringDiscoveryCampaign?>(Campaign);
+        }
 
         public Task<RecurringDiscoveryCampaign?> PauseAsync(string campaignId, CancellationToken cancellationToken = default)
             => PauseException is null ? Task.FromResult(Campaign) : Task.FromException<RecurringDiscoveryCampaign?>(PauseException);

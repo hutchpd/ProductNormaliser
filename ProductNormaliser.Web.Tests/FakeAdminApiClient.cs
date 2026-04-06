@@ -46,6 +46,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public RegisterSourceRequest? LastRegisteredSourceRequest { get; private set; }
     public DiscoverSourceCandidatesRequest? LastSourceCandidateDiscoveryRequest { get; private set; }
     public CreateRecurringDiscoveryCampaignRequest? LastCreateRecurringDiscoveryCampaignRequest { get; private set; }
+    public UpdateRecurringDiscoveryCampaignScheduleRequest? LastUpdateRecurringDiscoveryCampaignScheduleRequest { get; private set; }
     public CreateDiscoveryRunRequest? LastCreateDiscoveryRunRequest { get; private set; }
     public UpdateSourceRequest? LastUpdatedSourceRequest { get; private set; }
     public string? LastUpdatedSourceId { get; private set; }
@@ -70,6 +71,7 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
     public string? LastRequestedRecurringDiscoveryCampaignStatus { get; private set; }
     public string? LastPausedRecurringDiscoveryCampaignId { get; private set; }
     public string? LastResumedRecurringDiscoveryCampaignId { get; private set; }
+    public string? LastUpdatedRecurringDiscoveryCampaignScheduleCampaignId { get; private set; }
     public string? LastDeletedRecurringDiscoveryCampaignId { get; private set; }
     public string? LastRequestedDiscoveryRunStatus { get; private set; }
     public int? LastRequestedDiscoveryRunPageNumber { get; private set; }
@@ -445,12 +447,12 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             BrandHints = request.BrandHints.ToArray(),
             AutomationMode = request.AutomationMode ?? "operator_assisted",
             MaxCandidatesPerRun = request.MaxCandidatesPerRun,
-            IntervalHours = request.IntervalHours ?? 24,
+            IntervalMinutes = request.IntervalMinutes ?? 24 * 60,
             Status = "active",
             CampaignFingerprint = "market:uk|locale:en-gb|categories:tv|brands:",
             CreatedUtc = DateTime.UtcNow,
             UpdatedUtc = DateTime.UtcNow,
-            NextScheduledUtc = DateTime.UtcNow.AddHours(request.IntervalHours ?? 24)
+            NextScheduledUtc = DateTime.UtcNow.AddMinutes(request.IntervalMinutes ?? 24 * 60)
         };
 
         RecurringDiscoveryCampaign = campaign;
@@ -459,6 +461,17 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             .Append(campaign)
             .ToArray();
         return Task.FromResult(campaign);
+    }
+
+    public Task<RecurringDiscoveryCampaignDto> UpdateRecurringDiscoveryCampaignScheduleAsync(string campaignId, UpdateRecurringDiscoveryCampaignScheduleRequest request, CancellationToken cancellationToken = default)
+    {
+        LastUpdatedRecurringDiscoveryCampaignScheduleCampaignId = campaignId;
+        LastUpdateRecurringDiscoveryCampaignScheduleRequest = request;
+        return MutateRecurringDiscoveryCampaignAsync(
+            campaignId,
+            status: null,
+            statusMessage: $"Recurring discovery campaign cadence updated to every {request.IntervalMinutes ?? 0} minutes.",
+            intervalMinutes: request.IntervalMinutes);
     }
 
     public Task<RecurringDiscoveryCampaignDto> PauseRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default)
@@ -787,12 +800,15 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
         return Task.FromResult(DiscoveryRun);
     }
 
-    private Task<RecurringDiscoveryCampaignDto> MutateRecurringDiscoveryCampaignAsync(string campaignId, string status, string statusMessage)
+    private Task<RecurringDiscoveryCampaignDto> MutateRecurringDiscoveryCampaignAsync(string campaignId, string? status, string statusMessage, int? intervalMinutes = null)
     {
         var campaign = RecurringDiscoveryCampaign is not null && string.Equals(RecurringDiscoveryCampaign.CampaignId, campaignId, StringComparison.OrdinalIgnoreCase)
             ? RecurringDiscoveryCampaign
             : RecurringDiscoveryCampaigns.FirstOrDefault(item => string.Equals(item.CampaignId, campaignId, StringComparison.OrdinalIgnoreCase))
                 ?? throw new KeyNotFoundException(campaignId);
+
+        var updatedIntervalMinutes = intervalMinutes ?? campaign.IntervalMinutes;
+        var updatedStatus = status ?? campaign.Status;
 
         var updated = new RecurringDiscoveryCampaignDto
         {
@@ -804,8 +820,8 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             BrandHints = campaign.BrandHints,
             AutomationMode = campaign.AutomationMode,
             MaxCandidatesPerRun = campaign.MaxCandidatesPerRun,
-            IntervalHours = campaign.IntervalHours,
-            Status = status,
+            IntervalMinutes = updatedIntervalMinutes,
+            Status = updatedStatus,
             CampaignFingerprint = campaign.CampaignFingerprint,
             LastRunId = campaign.LastRunId,
             StatusMessage = statusMessage,
@@ -822,8 +838,8 @@ internal sealed class FakeAdminApiClient : IProductNormaliserAdminApiClient
             CreatedUtc = campaign.CreatedUtc,
             UpdatedUtc = DateTime.UtcNow,
             LastScheduledUtc = campaign.LastScheduledUtc,
-            NextScheduledUtc = status == "active"
-                ? DateTime.UtcNow.AddHours(Math.Max(1, campaign.IntervalHours))
+            NextScheduledUtc = updatedStatus == "active"
+                ? DateTime.UtcNow.AddMinutes(Math.Max(1, updatedIntervalMinutes))
                 : campaign.NextScheduledUtc
         };
 

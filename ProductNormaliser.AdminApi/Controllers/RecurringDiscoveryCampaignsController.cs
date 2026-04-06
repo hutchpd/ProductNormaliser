@@ -43,7 +43,7 @@ public sealed class RecurringDiscoveryCampaignsController(IRecurringDiscoveryCam
                 AutomationMode = request.AutomationMode,
                 BrandHints = request.BrandHints,
                 MaxCandidatesPerRun = request.MaxCandidatesPerRun,
-                IntervalHours = request.IntervalHours
+                IntervalMinutes = request.IntervalMinutes
             }, cancellationToken);
 
             return CreatedAtAction(nameof(Get), new { campaignId = campaign.CampaignId }, Map(campaign));
@@ -60,13 +60,30 @@ public sealed class RecurringDiscoveryCampaignsController(IRecurringDiscoveryCam
 
     [HttpPost("{campaignId}/pause")]
     [ProducesResponseType(typeof(Contracts.RecurringDiscoveryCampaignDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status409Conflict)]
     public Task<IActionResult> Pause(string campaignId, CancellationToken cancellationToken = default)
         => MutateAsync(() => recurringDiscoveryCampaignService.PauseAsync(campaignId, cancellationToken));
 
+    [HttpPost("{campaignId}/schedule")]
+    [ProducesResponseType(typeof(Contracts.RecurringDiscoveryCampaignDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status409Conflict)]
+    public Task<IActionResult> UpdateSchedule(string campaignId, [FromBody] Contracts.UpdateRecurringDiscoveryCampaignScheduleRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request.IntervalMinutes is null)
+        {
+            return Task.FromResult<IActionResult>(BadRequest(CreateProblem(new ArgumentException("Provide an interval in minutes.", nameof(request)))));
+        }
+
+        return MutateAsync(() => recurringDiscoveryCampaignService.UpdateScheduleAsync(campaignId, request.IntervalMinutes.Value, cancellationToken));
+    }
+
     [HttpPost("{campaignId}/resume")]
     [ProducesResponseType(typeof(Contracts.RecurringDiscoveryCampaignDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status409Conflict)]
     public Task<IActionResult> Resume(string campaignId, CancellationToken cancellationToken = default)
@@ -89,6 +106,10 @@ public sealed class RecurringDiscoveryCampaignsController(IRecurringDiscoveryCam
             var campaign = await action();
             return campaign is null ? NotFound() : Ok(Map(campaign));
         }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(CreateProblem(exception));
+        }
         catch (InvalidOperationException exception)
         {
             return Conflict(CreateProblem(exception));
@@ -107,7 +128,7 @@ public sealed class RecurringDiscoveryCampaignsController(IRecurringDiscoveryCam
             BrandHints = campaign.BrandHints,
             AutomationMode = campaign.AutomationMode,
             MaxCandidatesPerRun = campaign.MaxCandidatesPerRun,
-            IntervalHours = campaign.IntervalHours,
+            IntervalMinutes = campaign.ResolveIntervalMinutes(),
             Status = campaign.Status,
             CampaignFingerprint = campaign.CampaignFingerprint,
             LastRunId = campaign.LastRunId,

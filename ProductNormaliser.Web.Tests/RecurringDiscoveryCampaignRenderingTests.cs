@@ -35,7 +35,7 @@ public sealed class RecurringDiscoveryCampaignRenderingTests
                     BrandHints = ["Sony"],
                     AutomationMode = "suggest_accept",
                     MaxCandidatesPerRun = 12,
-                    IntervalHours = 24,
+                    IntervalMinutes = 30,
                     Status = "active",
                     CampaignFingerprint = "market:uk|locale:en-gb|categories:tv|brands:sony",
                     LastRunId = "discovery_run_42",
@@ -71,6 +71,7 @@ public sealed class RecurringDiscoveryCampaignRenderingTests
             Assert.That(html, Does.Contain("Delete schedule"));
             Assert.That(html, Does.Contain("Open last run"));
             Assert.That(html, Does.Contain("Fresh runs, not infinite loops"));
+            Assert.That(html, Does.Contain("Every 30 minutes"));
         });
     }
 }

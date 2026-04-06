@@ -53,7 +53,7 @@ public sealed class RecurringDiscoveryCampaignPageTests
                 BrandHints = "Sony",
                 AutomationMode = "suggest_accept",
                 MaxCandidatesPerRun = 12,
-                IntervalHours = 24
+                IntervalMinutes = 30
             }
         };
 
@@ -83,6 +83,7 @@ public sealed class RecurringDiscoveryCampaignPageTests
             Name = "TV UK",
             CategoryKeys = ["tv"],
             AutomationMode = "suggest_accept",
+            IntervalMinutes = 30,
             Status = "active",
             CampaignFingerprint = "market:uk|locale:en-gb|categories:tv|brands:",
             LastRunId = "discovery_run_1",
@@ -92,6 +93,55 @@ public sealed class RecurringDiscoveryCampaignPageTests
         });
 
         Assert.That(summary, Is.EqualTo("No historical runs yet. Initial run 'discovery_run_1' is queued or in progress."));
+    }
+
+    [Test]
+    public void GetScheduleSummary_FormatsSubHourlyIntervals()
+    {
+        var model = new ProductNormaliser.Web.Pages.Sources.RecurringDiscoveryCampaigns.IndexModel(
+            new FakeAdminApiClient(),
+            NullLogger<ProductNormaliser.Web.Pages.Sources.RecurringDiscoveryCampaigns.IndexModel>.Instance);
+
+        var summary = model.GetScheduleSummary(new RecurringDiscoveryCampaignDto
+        {
+            CampaignId = "campaign_1",
+            Name = "TV UK",
+            CategoryKeys = ["tv"],
+            AutomationMode = "suggest_accept",
+            IntervalMinutes = 30,
+            MaxCandidatesPerRun = 10,
+            Status = "active",
+            CampaignFingerprint = "market:uk|locale:en-gb|categories:tv|brands:",
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow
+        });
+
+        Assert.That(summary, Does.StartWith("Every 30 minutes | max 10 candidates/run"));
+    }
+
+    [Test]
+    public async Task OnPostUpdateScheduleAsync_UpdatesCampaignAndRedirects()
+    {
+        var client = new FakeAdminApiClient
+        {
+            Categories = CreateCategories(),
+            RecurringDiscoveryCampaigns = [CreateCampaign("campaign_1", "active")]
+        };
+
+        var model = new ProductNormaliser.Web.Pages.Sources.RecurringDiscoveryCampaigns.IndexModel(
+            client,
+            NullLogger<ProductNormaliser.Web.Pages.Sources.RecurringDiscoveryCampaigns.IndexModel>.Instance);
+
+        var result = await model.OnPostUpdateScheduleAsync("campaign_1", 60, CancellationToken.None);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.TypeOf<RedirectToPageResult>());
+            Assert.That(client.LastUpdatedRecurringDiscoveryCampaignScheduleCampaignId, Is.EqualTo("campaign_1"));
+            Assert.That(client.LastUpdateRecurringDiscoveryCampaignScheduleRequest, Is.Not.Null);
+            Assert.That(client.LastUpdateRecurringDiscoveryCampaignScheduleRequest!.IntervalMinutes, Is.EqualTo(60));
+            Assert.That(model.StatusMessage, Does.Contain("run every 1 hour"));
+        });
     }
 
     [Test]
@@ -181,7 +231,7 @@ public sealed class RecurringDiscoveryCampaignPageTests
             BrandHints = ["Sony"],
             AutomationMode = "suggest_accept",
             MaxCandidatesPerRun = 12,
-            IntervalHours = 24,
+            IntervalMinutes = 30,
             Status = status,
             CampaignFingerprint = "market:uk|locale:en-gb|categories:tv|brands:sony",
             LastRunId = "discovery_run_1",
@@ -199,7 +249,7 @@ public sealed class RecurringDiscoveryCampaignPageTests
             CreatedUtc = DateTime.UtcNow.AddDays(-5),
             UpdatedUtc = DateTime.UtcNow.AddMinutes(-20),
             LastScheduledUtc = DateTime.UtcNow.AddHours(-12),
-            NextScheduledUtc = DateTime.UtcNow.AddHours(12)
+            NextScheduledUtc = DateTime.UtcNow.AddMinutes(30)
         };
     }
 }

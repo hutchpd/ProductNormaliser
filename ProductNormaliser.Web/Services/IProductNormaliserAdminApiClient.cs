@@ -56,6 +56,8 @@ public interface IProductNormaliserAdminApiClient
 
     Task<RecurringDiscoveryCampaignDto> CreateRecurringDiscoveryCampaignAsync(CreateRecurringDiscoveryCampaignRequest request, CancellationToken cancellationToken = default);
 
+    Task<RecurringDiscoveryCampaignDto> UpdateRecurringDiscoveryCampaignScheduleAsync(string campaignId, UpdateRecurringDiscoveryCampaignScheduleRequest request, CancellationToken cancellationToken = default);
+
     Task<RecurringDiscoveryCampaignDto> PauseRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default);
 
     Task<RecurringDiscoveryCampaignDto> ResumeRecurringDiscoveryCampaignAsync(string campaignId, CancellationToken cancellationToken = default);

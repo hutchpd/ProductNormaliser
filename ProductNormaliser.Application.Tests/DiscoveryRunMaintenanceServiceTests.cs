@@ -223,7 +223,8 @@ public sealed class DiscoveryRunMaintenanceServiceTests
             AutomationMode = SourceAutomationModes.SuggestAccept,
             Status = RecurringDiscoveryCampaignStatuses.Active,
             CampaignFingerprint = "market:uk|locale:en-gb|categories:tv|brands:",
-            IntervalHours = 24,
+            IntervalMinutes = 30,
+            IntervalHours = 0,
             CreatedUtc = DateTime.UtcNow.AddDays(-3),
             UpdatedUtc = DateTime.UtcNow.AddDays(-3),
             NextScheduledUtc = DateTime.UtcNow.AddMinutes(-10)
@@ -244,7 +245,7 @@ public sealed class DiscoveryRunMaintenanceServiceTests
             Assert.That(campaign!.Memory.AcceptedCandidateCount, Is.EqualTo(1));
             Assert.That(campaign.Memory.HistoricalRunCount, Is.EqualTo(1));
             Assert.That(campaign.LastRunId, Is.EqualTo(runService.ScheduledRuns[0].RunId));
-            Assert.That(campaign.NextScheduledUtc, Is.GreaterThan(DateTime.UtcNow.AddHours(23)));
+            Assert.That(campaign.NextScheduledUtc, Is.GreaterThan(DateTime.UtcNow.AddMinutes(25)));
         });
     }
 
