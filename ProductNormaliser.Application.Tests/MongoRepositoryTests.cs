@@ -153,6 +153,51 @@ public sealed class MongoRepositoryTests
     }
 
     [Test]
+    public async Task DiscoveryRunRepository_ListByStatusesAsync_IgnoresUnknownDiagnosticFields()
+    {
+        var context = MongoIntegrationTestFixture.Context;
+        var rawRuns = context.Database.GetCollection<BsonDocument>(MongoCollectionNames.DiscoveryRuns);
+        var recordedUtc = new DateTime(2026, 04, 08, 12, 00, 00, DateTimeKind.Utc);
+
+        await rawRuns.InsertOneAsync(new BsonDocument
+        {
+            ["_id"] = "run-compat",
+            [nameof(DiscoveryRun.RequestedCategoryKeys)] = new BsonArray { "tv" },
+            [nameof(DiscoveryRun.AutomationMode)] = SourceAutomationModes.OperatorAssisted,
+            [nameof(DiscoveryRun.Status)] = DiscoveryRunStatuses.Completed,
+            [nameof(DiscoveryRun.CurrentStage)] = DiscoveryRunStageNames.Publish,
+            [nameof(DiscoveryRun.LlmStatus)] = "disabled",
+            [nameof(DiscoveryRun.LlmStatusMessage)] = "Disabled.",
+            [nameof(DiscoveryRun.CreatedUtc)] = recordedUtc,
+            [nameof(DiscoveryRun.UpdatedUtc)] = recordedUtc,
+            [nameof(DiscoveryRun.CompletedUtc)] = recordedUtc,
+            [nameof(DiscoveryRun.Diagnostics)] = new BsonArray
+            {
+                new BsonDocument
+                {
+                    [nameof(DiscoveryRunDiagnostic.RecordedUtc)] = recordedUtc,
+                    [nameof(DiscoveryRunDiagnostic.Code)] = "seeded",
+                    [nameof(DiscoveryRunDiagnostic.Severity)] = "info",
+                    [nameof(DiscoveryRunDiagnostic.Title)] = "Seeded discovery",
+                    [nameof(DiscoveryRunDiagnostic.Message)] = "Compatibility payload.",
+                    ["FutureField"] = "ignore-me"
+                }
+            }
+        });
+
+        var runs = await discoveryRunRepository.ListByStatusesAsync([DiscoveryRunStatuses.Completed]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(runs, Has.Count.EqualTo(1));
+            Assert.That(runs[0].RunId, Is.EqualTo("run-compat"));
+            Assert.That(runs[0].Diagnostics, Has.Count.EqualTo(1));
+            Assert.That(runs[0].Diagnostics[0].RecordedUtc, Is.EqualTo(recordedUtc));
+            Assert.That(runs[0].Diagnostics[0].Code, Is.EqualTo("seeded"));
+        });
+    }
+
+    [Test]
     public async Task DiscoveryRunCollections_CreateExpectedIndexesAndEnforceCandidateUniqueness()
     {
         var context = MongoIntegrationTestFixture.Context;

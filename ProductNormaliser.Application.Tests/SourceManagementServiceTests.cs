@@ -156,6 +156,38 @@ public sealed class SourceManagementServiceTests
     }
 
     [Test]
+    public async Task RegisterAsync_AppliesStartupDiscoveryDefaultsUnderBasePath()
+    {
+        var store = new FakeCrawlSourceStore();
+        var service = CreateService(store, new FakeCategoryMetadataService(CreateCategory("tv")));
+
+        var result = await service.RegisterAsync(new CrawlSourceRegistration
+        {
+            SourceId = "lg_uk",
+            DisplayName = "LG UK",
+            BaseUrl = "https://www.lg.com/uk",
+            SupportedCategoryKeys = ["tv"]
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.DiscoveryProfile.CategoryEntryPages["tv"], Is.EqualTo(new[]
+            {
+                "https://www.lg.com/uk/tv",
+                "https://www.lg.com/uk/tvs",
+                "https://www.lg.com/uk/television",
+                "https://www.lg.com/uk/televisions"
+            }));
+            Assert.That(result.DiscoveryProfile.SitemapHints, Is.EqualTo(new[]
+            {
+                "https://www.lg.com/uk/sitemap.xml",
+                "https://www.lg.com/uk/sitemap_index.xml",
+                "https://www.lg.com/uk/sitemap-products.xml"
+            }));
+        });
+    }
+
+    [Test]
     public void RegisterAsync_RejectsNonPositiveSeedReseedInterval()
     {
         var service = CreateService(new FakeCrawlSourceStore(), new FakeCategoryMetadataService(CreateCategory("tv")));

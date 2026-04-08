@@ -313,7 +313,7 @@ public sealed class SourceManagementService(
         {
             AllowedMarkets = NormalizeAllowedMarkets(allowedMarkets),
             PreferredLocale = NormalizePreferredLocale(preferredLocale),
-            SitemapHints = ["/sitemap.xml", "/sitemap_index.xml", "/sitemap-products.xml"],
+            SitemapHints = ["sitemap.xml", "sitemap_index.xml", "sitemap-products.xml"],
             ExcludedPathPrefixes = ["/support", "/help", "/blog", "/news", "/contact", "/account", "/cart", "/checkout"],
             ProductUrlPatterns = ["/product/", "/products/", "/p/"],
             ListingUrlPatterns = ["/category/", "/collections/", "/c/", "/department/"]
@@ -379,7 +379,7 @@ public sealed class SourceManagementService(
 
         return slugs
             .Where(slug => !string.IsNullOrWhiteSpace(slug))
-            .Select(slug => $"/{slug}")
+            .Select(slug => slug)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
